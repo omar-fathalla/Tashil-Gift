@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'claim_callable_fallback.dart';
 import 'firebase_emulator_config.dart';
 import 'firebase_service.dart';
 import 'distributed_counter_service.dart';
@@ -1574,35 +1579,130 @@ class CompanyGiftsService {
 
   /// Sends the claim to `decrementCampaignPrize`. Returns true when the function
   /// accepted the call. Staff may fall back to a direct write only when the
-  /// function is not deployed yet. Anonymous callers never write stock locally.
+  /// function cannot be reached. Security and business rejections are not
+  /// treated as a missing function. Anonymous callers never write stock locally.
   Future<bool> _claimViaCallable({
     required String eventId,
     String? receiptId,
     Map<String, dynamic>? receiptPatch,
     required List<Map<String, dynamic>> decrements,
   }) async {
+    final body = {
+      'eventId': eventId,
+      if (receiptId != null && receiptId.isNotEmpty) 'receiptId': receiptId,
+      if (receiptPatch != null && receiptPatch.isNotEmpty) 'receiptPatch': receiptPatch,
+      'decrements': decrements,
+    };
     try {
-      final callable = scopedFunctions().httpsCallable('decrementCampaignPrize');
-      await callable.call({
-        'eventId': eventId,
-        if (receiptId != null && receiptId.isNotEmpty) 'receiptId': receiptId,
-        if (receiptPatch != null && receiptPatch.isNotEmpty) 'receiptPatch': receiptPatch,
-        'decrements': decrements,
-      });
+      if (kFirebaseEmulator) {
+        await _callDecrementOnLoopback(body);
+      } else {
+        final callable = scopedFunctions().httpsCallable('decrementCampaignPrize');
+        await callable.call(body);
+      }
       return true;
     } on FirebaseFunctionsException catch (e) {
-      final missing = e.code == 'not-found' || e.code == 'unavailable' || e.code == 'unimplemented';
-      // A demo build pins Functions to 127.0.0.1:5001. Connection refused
-      // arrives as `internal` and must stay on the Firestore emulator.
-      // A production internal error is not a missing function.
-      final localRefusal = kFirebaseEmulator && !_isAnonymousCaller();
-      if ((missing || localRefusal) && !_isAnonymousCaller()) return false;
+      if (!_isAnonymousCaller() &&
+          staffCallableMayUseLocalStock(
+            code: e.code,
+            message: e.message ?? '',
+            emulator: kFirebaseEmulator,
+          )) {
+        return false;
+      }
       rethrow;
     } catch (e) {
-      if (_isAnonymousCaller()) rethrow;
-      debugPrint('⚠️ decrementCampaignPrize callable unavailable, staff fallback: $e');
-      return false;
+      if (!_isAnonymousCaller() &&
+          kFirebaseEmulator &&
+          staffCallableMayUseLocalStock(
+            code: 'unknown',
+            message: e.toString(),
+            emulator: true,
+          )) {
+        return false;
+      }
+      rethrow;
     }
+  }
+
+  /// Calls the functions emulator on the loopback host with a local App Check
+  /// header. Production builds never take this path. The deployed function
+  /// still requires a real App Check token.
+  Future<void> _callDecrementOnLoopback(Map<String, dynamic> body) async {
+    final host = kFirebaseEmulatorHost;
+    if (host != '127.0.0.1' && host != 'localhost' && host != '::1') {
+      throw ClaimCallableException(
+        code: 'failed-precondition',
+        message: 'Emulator claim host is not loopback.',
+      );
+    }
+    final user = scopedAuth().currentUser;
+    final token = await user?.getIdToken();
+    if (token == null || token.isEmpty) {
+      throw ClaimCallableException(code: 'unauthenticated', message: 'Sign-in is required.');
+    }
+    final projectId = FirebaseScope.app.options.projectId;
+    final uri = Uri.parse('http://$host:5001/$projectId/us-central1/decrementCampaignPrize');
+    http.Response response;
+    try {
+      response = await http
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              'authorization': 'Bearer $token',
+              'x-firebase-appcheck': 'local.emulator.token',
+            },
+            body: jsonEncode({'data': body}),
+          )
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException catch (e) {
+      throw ClaimCallableException(code: 'deadline-exceeded', message: e.toString());
+    } catch (e) {
+      throw ClaimCallableException(code: 'unavailable', message: e.toString());
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+    final error = decoded is Map ? decoded['error'] : null;
+    final status = error is Map ? (error['status'] ?? '').toString() : '';
+    final message = error is Map ? (error['message'] ?? response.body).toString() : response.body;
+    throw ClaimCallableException(
+      code: _callableStatusCode(status, response.statusCode),
+      message: message,
+      details: error is Map ? error['details'] : null,
+    );
+  }
+
+  String _callableStatusCode(String status, int httpStatus) {
+    const codes = {
+      'CANCELLED': 'cancelled',
+      'UNKNOWN': 'unknown',
+      'INVALID_ARGUMENT': 'invalid-argument',
+      'DEADLINE_EXCEEDED': 'deadline-exceeded',
+      'NOT_FOUND': 'not-found',
+      'ALREADY_EXISTS': 'already-exists',
+      'PERMISSION_DENIED': 'permission-denied',
+      'RESOURCE_EXHAUSTED': 'resource-exhausted',
+      'FAILED_PRECONDITION': 'failed-precondition',
+      'ABORTED': 'aborted',
+      'OUT_OF_RANGE': 'out-of-range',
+      'UNIMPLEMENTED': 'unimplemented',
+      'INTERNAL': 'internal',
+      'UNAVAILABLE': 'unavailable',
+      'DATA_LOSS': 'data-loss',
+      'UNAUTHENTICATED': 'unauthenticated',
+    };
+    final mapped = codes[status];
+    if (mapped != null) return mapped;
+    if (httpStatus == 401) return 'unauthenticated';
+    if (httpStatus == 403) return 'permission-denied';
+    if (httpStatus == 404) return 'not-found';
+    return 'internal';
   }
 
   Future<void> _decrementCampaignPrizeLocal(
@@ -1658,6 +1758,23 @@ class CompanyGiftsService {
     }
   }
 
+  /// A consuming ladder is only correct inside the callable transaction.
+  /// If the campaign cannot be read, local stock is also refused: an unknown
+  /// campaign must not be treated as an exclusive one.
+  Future<bool> _localStockWouldBypassConsumingLedger(String eventId) async {
+    try {
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return true;
+      final data = doc.data() ?? const <String, dynamic>{};
+      final mode = (data['spendLadderMode'] ?? data['spend_ladder_mode'] ?? 'exclusive')
+          .toString()
+          .trim();
+      return mode == 'consuming';
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Records a gift claim and decrements campaign stock on the server.
   ///
   /// Anonymous field reps cannot update the receipt or the prize counters
@@ -1684,6 +1801,12 @@ class CompanyGiftsService {
         decrements: cleanDecrements,
       );
       if (handled) return;
+      if (await _localStockWouldBypassConsumingLedger(eventId)) {
+        throw ClaimCallableException(
+          code: 'unavailable',
+          message: 'لم يصل رد الخادم. لم يُخصم رصيد من هذا الجهاز.',
+        );
+      }
     }
 
     if (receiptId != null && receiptId.isNotEmpty && patch.isNotEmpty) {
@@ -1716,6 +1839,7 @@ class CompanyGiftsService {
     String gameType = 'claim',
     String? receiptId,
     Map<String, dynamic>? receiptPatch,
+    int? claimSlot,
   }) {
     return claimCampaignPrizes(
       eventId: eventId,
@@ -1729,6 +1853,7 @@ class CompanyGiftsService {
           'unitValue': unitValue,
           'isVoucher': isVoucher,
           'gameType': gameType,
+          if (claimSlot != null) 'claimSlot': claimSlot,
         },
       ],
     );

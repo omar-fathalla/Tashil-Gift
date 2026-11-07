@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/services/firebase_service.dart';
 import '../../../../core/services/company_gifts_service.dart';
 import '../../../../core/services/game_audio_service.dart';
+import '../../../../core/services/ai_receipt_service.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../../core/services/receipt_deduplication_helper.dart';
 import '../../../../core/utils/error_handler.dart';
@@ -220,6 +221,7 @@ class _UnifiedMultiCampaignClaimScreenState
       }
 
       final List<String> allAwardedPrizeSummaries = [];
+      final List<String> pendingConsumingCampaigns = [];
 
       // Save a linked transaction for EACH qualified campaign
       for (final q in widget.qualifiedCampaigns) {
@@ -260,7 +262,19 @@ class _UnifiedMultiCampaignClaimScreenState
                 }
               ];
 
-        allAwardedPrizeSummaries.add('${campaign.eventName}: ${q.designatedPrize}');
+        final consuming = campaign.spendLadderMode == 'consuming';
+        final extractedRaw = widget.initialAiMetadata?['extracted_products'];
+        final extractedProducts = <ExtractedProductItem>[
+          if (extractedRaw is List)
+            for (final item in extractedRaw)
+              if (item is Map)
+                ExtractedProductItem.fromJson(Map<String, dynamic>.from(item)),
+        ];
+        final spend = PromotionalRuleMatcher.spendTotals(
+          products: extractedProducts,
+          rules: campaign.promotionalRules,
+          spendLadderMode: campaign.spendLadderMode,
+        );
 
         final deterministicDocId = ReceiptDeduplicationHelper.getDeterministicDocId(
           campaignId: campaign.id,
@@ -281,34 +295,44 @@ class _UnifiedMultiCampaignClaimScreenState
           'retail_chain_name': campaign.retailChainName,
           'customerPhone': widget.customerPhone,
           'customerName': widget.customerName,
-          'prize_won': q.designatedPrize,
           'unit_value': q.resolvedUnitValue,
           'is_voucher': q.resolvedIsVoucher,
-          'claimed_gifts': claimedGiftsList,
+          if (!consuming) 'claimed_gifts': claimedGiftsList,
           'linked_gifts': q.resolvedLinkedGifts.map((g) => g.toMap()).toList(),
           if (campaignSerials.isNotEmpty) 'voucher_serials': campaignSerials,
           if (campaignSerials.isNotEmpty) 'voucher_serial': campaignSerials.first,
-          'game_played': true,
-          'game_type': 'directGift',
           'is_valid': true,
           'status': 'accepted',
-          'claim_status': 'handed_over',
-          'claimed_at': DateTime.now().toIso8601String(),
+          if (!consuming) 'claim_status': 'handed_over',
+          if (!consuming) 'claimed_at': DateTime.now().toIso8601String(),
           'is_multi_campaign_bundle': true,
           'bundle_campaign_count': widget.qualifiedCampaigns.length,
           'timestamp': FieldValue.serverTimestamp(),
-          'total_value': q.qualifyingSpend,
           'extracted_products': extractedProds ?? const [],
           if (widget.imageUrls.isNotEmpty) 'image_url': widget.imageUrls.first,
           if (widget.imageUrls.length > 1) 'image_urls': widget.imageUrls,
           if (widget.initialAiMetadata != null) ...widget.initialAiMetadata!,
-          // After AI metadata so a short sibling name cannot overwrite the id.
+          // After AI metadata so a short sibling name cannot overwrite the id
+          // or replace the consuming totals with the analysis gross.
           'branch_detected': q.resolvedBranchName ?? '',
           'canonical_branch': q.resolvedBranchName ?? '',
           'branch_id': q.resolvedBranchId ?? '',
+          'prize_won': consuming ? '' : q.designatedPrize,
+          'game_played': !consuming,
+          'game_type': consuming ? 'chooseGift' : 'directGift',
+          'total_value': consuming ? spend.invoiceNet : q.qualifyingSpend,
+          if (consuming) 'target_company_total': spend.eligibleNet,
+          if (consuming) 'remaining_chances': q.totalChances > 0 ? q.totalChances : 1,
         });
 
-        // Decrement branch inventory
+        if (consuming) {
+          pendingConsumingCampaigns.add(campaign.eventName);
+          continue;
+        }
+        allAwardedPrizeSummaries.add('${campaign.eventName}: ${q.designatedPrize}');
+
+        // Decrement branch inventory. A consuming campaign is claimed later
+        // from its receipt, one server round at a time.
         if (q.resolvedLinkedGifts.isNotEmpty) {
           for (final giftAlloc in q.resolvedLinkedGifts) {
             await giftsService.decrementCampaignPrize(
@@ -335,7 +359,9 @@ class _UnifiedMultiCampaignClaimScreenState
       // Dispatch automated celebratory WhatsApp winner message
       final isAnyCampaignWhatsAppEnabled = widget.qualifiedCampaigns.any((q) => q.campaign.enableWhatsAppWinnerNotification);
       Future<WhatsAppGatewayResult?>? whatsappFuture;
-      if (isAnyCampaignWhatsAppEnabled && widget.customerPhone.isNotEmpty && widget.qualifiedCampaigns.isNotEmpty) {
+      if (isAnyCampaignWhatsAppEnabled &&
+          widget.customerPhone.isNotEmpty &&
+          allAwardedPrizeSummaries.isNotEmpty) {
         final firstCampaign = widget.qualifiedCampaigns.first;
         final combinedPrizeName = allAwardedPrizeSummaries.join(' + ');
         whatsappFuture = ref.read(whatsappWinnerNotificationServiceProvider).sendWinnerNotification(
@@ -359,9 +385,17 @@ class _UnifiedMultiCampaignClaimScreenState
       });
 
       // Show celebratory completion
+      final pendingNote = pendingConsumingCampaigns.isEmpty
+          ? ''
+          : (Localizations.localeOf(context).languageCode == 'ar'
+              ? 'محفوظة للمطالبة من الفاتورة: ${pendingConsumingCampaigns.join('، ')}'
+              : 'Saved for claiming from the receipt: ${pendingConsumingCampaigns.join(', ')}');
       await showWinnerCelebrationDialog(
         context: context,
-        prizeName: allAwardedPrizeSummaries.join('\n• '),
+        prizeName: [
+          if (allAwardedPrizeSummaries.isNotEmpty) allAwardedPrizeSummaries.join('\n• '),
+          if (pendingNote.isNotEmpty) pendingNote,
+        ].join('\n'),
         isVoucher: widget.qualifiedCampaigns.any((q) => q.resolvedIsVoucher),
         recipientPhone: isAnyCampaignWhatsAppEnabled ? widget.customerPhone : null,
         whatsappDispatchFuture: whatsappFuture,

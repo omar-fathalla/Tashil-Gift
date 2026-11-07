@@ -683,6 +683,17 @@ class EventModel {
   /// Maximum draw chances / gifts allowed per single receipt (0 = unlimited / no cap).
   final int maxChancesPerReceipt;
 
+  /// `exclusive` keeps today's ladder: only the highest tier, multiplied.
+  /// `consuming` spends that tier's threshold and gives the remainder to the
+  /// next tier. Missing or unknown values stay `exclusive`.
+  final String spendLadderMode;
+
+  static String normalizeSpendLadderMode(dynamic raw) {
+    final value = raw?.toString().trim().toLowerCase();
+    if (value == 'consuming') return 'consuming';
+    return 'exclusive';
+  }
+
   /// Whether entering voucher card serial numbers is strictly mandatory for promoters upon gift claim (false = optional by default).
   final bool requireVoucherSerials;
 
@@ -741,6 +752,7 @@ class EventModel {
     this.allowMultipleChances = false,
     this.multiplierBasis = 'both',
     this.maxChancesPerReceipt = 0,
+    this.spendLadderMode = 'exclusive',
     this.requireVoucherSerials = false,
     this.voucherSerialMode = 'optional',
     this.allowComplementaryReceipts = false,
@@ -1069,6 +1081,7 @@ class EventModel {
       allowMultipleChances: data['allowMultipleChances'] == true,
       multiplierBasis: (data['multiplierBasis'] ?? 'both').toString(),
       maxChancesPerReceipt: (data['maxChancesPerReceipt'] as num?)?.toInt() ?? 0,
+      spendLadderMode: EventModel.normalizeSpendLadderMode(data['spendLadderMode'] ?? data['spend_ladder_mode']),
       requireVoucherSerials: EventModel.resolveVoucherSerialMode(data) == 'required',
       voucherSerialMode: EventModel.resolveVoucherSerialMode(data),
       allowComplementaryReceipts: data['allowComplementaryReceipts'] == true || data['allow_complementary_receipts'] == true,
@@ -1138,6 +1151,7 @@ class EventModel {
       'allowMultipleChances': allowMultipleChances,
       'multiplierBasis': multiplierBasis,
       'maxChancesPerReceipt': maxChancesPerReceipt,
+      'spendLadderMode': spendLadderMode,
       'requireVoucherSerials': voucherSerialMode == 'required',
       'voucherSerialMode': voucherSerialMode,
       'allowComplementaryReceipts': allowComplementaryReceipts,
@@ -1181,6 +1195,7 @@ class EventModel {
     bool? allowMultipleChances,
     String? multiplierBasis,
     int? maxChancesPerReceipt,
+    String? spendLadderMode,
     bool? requireVoucherSerials,
     String? voucherSerialMode,
     bool? allowComplementaryReceipts,
@@ -1222,6 +1237,7 @@ class EventModel {
       allowMultipleChances: allowMultipleChances ?? this.allowMultipleChances,
       multiplierBasis: multiplierBasis ?? this.multiplierBasis,
       maxChancesPerReceipt: maxChancesPerReceipt ?? this.maxChancesPerReceipt,
+      spendLadderMode: spendLadderMode ?? this.spendLadderMode,
       requireVoucherSerials: requireVoucherSerials ?? this.requireVoucherSerials,
       voucherSerialMode: voucherSerialMode ?? (requireVoucherSerials == null ? this.voucherSerialMode : (requireVoucherSerials ? 'required' : 'optional')),
       allowComplementaryReceipts: allowComplementaryReceipts ?? this.allowComplementaryReceipts,

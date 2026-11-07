@@ -1,10 +1,14 @@
 import 'package:al_mraay/core/utils/claim_retry.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/services/claim_callable_fallback.dart';
+import '../../../core/services/claim_ledger_resume.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/game_audio_service.dart';
@@ -25,6 +29,12 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
   final String eventId;
   final String? companySlug;
   final List<String> prizes;
+  /// One gift list per round. Empty keeps the shared [prizes] list.
+  final List<List<String>> roundPrizeNames;
+  final List<List<String>> roundGiftIds;
+  final List<List<double>> roundUnitValues;
+  final List<String> roundRuleIds;
+  final List<double> roundTierMinSpends;
   final int totalChances;
   final bool isDemo;
   final String? branchId;
@@ -39,6 +49,11 @@ class ChooseGiftScreen extends ConsumerStatefulWidget {
     this.eventId = '',
     this.companySlug,
     this.prizes = const [],
+    this.roundPrizeNames = const [],
+    this.roundGiftIds = const [],
+    this.roundUnitValues = const [],
+    this.roundRuleIds = const [],
+    this.roundTierMinSpends = const [],
     this.totalChances = 1,
     this.isDemo = false,
     this.branchId,
@@ -56,12 +71,32 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     with TickerProviderStateMixin {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
-  late final List<String> _items;
+  late final List<String> _flatItems;
+
+  List<String> get _items {
+    if (widget.roundPrizeNames.isNotEmpty) {
+      final index = (_currentRound - 1).clamp(0, widget.roundPrizeNames.length - 1);
+      final round = widget.roundPrizeNames[index]
+          .map((name) => name.trim())
+          .where((name) => name.isNotEmpty)
+          .toList();
+      if (round.isNotEmpty) return round;
+    }
+    return _flatItems;
+  }
   int? _selectedGiftIndex;
   bool _isConfirming = false;
   late int _remainingChances;
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
+  int _claimedUnits = 0;
+  bool _ledgerReady = true;
+  bool _ledgerFailed = false;
+  bool _ledgerMissing = false;
+  bool _ledgerUncertain = false;
+  int _ledgerRequest = 0;
+  int _claimAttempt = 0;
+  static const Duration _authoritativeReadBound = Duration(seconds: 8);
   Map<String, String> _prizeImages = {};
   bool _whatsappSent = false;
   bool? _enableWhatsAppWinnerNotification;
@@ -84,6 +119,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
     _loadEventPrizeImages();
     _preloadMetadataForWhatsApp();
     _remainingChances = widget.totalChances > 0 ? widget.totalChances : 1;
+    if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+      _ledgerReady = false;
+      _resumeFromAuthoritativeLedger();
+    }
     final rawPrizes = widget.prizes.isNotEmpty
         ? widget.prizes
         : [
@@ -95,7 +134,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             'طقم أواني فاخر 🍳',
           ];
     final seen = <String>{};
-    _items = rawPrizes.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
+    _flatItems = rawPrizes.where((p) => p.trim().isNotEmpty && seen.add(p.trim())).toList();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -111,6 +150,94 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  int get _roundCount => widget.roundPrizeNames.isNotEmpty
+      ? widget.roundPrizeNames.length
+      : (widget.totalChances > 0 ? widget.totalChances : 1);
+
+  void _applyResume(GiftResume resume) {
+    _currentRound = resume.currentRound;
+    _remainingChances = resume.remaining;
+    _claimedUnits = resume.claimedUnits;
+    _wonPrizes
+      ..clear()
+      ..addAll(resume.wonNames);
+    _ledgerReady = true;
+    _ledgerFailed = false;
+    _ledgerMissing = false;
+    _ledgerUncertain = false;
+  }
+
+  /// Server read only. A cached copy is not the authoritative ledger.
+  Future<GiftResume> _readAuthoritativeResume() async {
+    final snap = await ref
+        .read(firestoreProvider)
+        .collection('receipts_transactions')
+        .doc(widget.transactionId)
+        .get(const GetOptions(source: Source.server))
+        .timeout(_authoritativeReadBound);
+    if (!snap.exists) {
+      throw StateError('receipt-ledger-missing');
+    }
+    return resumeFromLedger(
+      claimedGifts: snap.data()?['claimed_gifts'],
+      totalRounds: _roundCount,
+    );
+  }
+
+  void _markLedgerUnread({required bool missing, required bool uncertain}) {
+    _ledgerReady = false;
+    _ledgerFailed = true;
+    _ledgerMissing = missing;
+    _ledgerUncertain = uncertain;
+  }
+
+  Future<void> _resumeFromAuthoritativeLedger() async {
+    final request = ++_ledgerRequest;
+    try {
+      final resume = await _readAuthoritativeResume();
+      if (!mounted || request != _ledgerRequest) return;
+      setState(() => _applyResume(resume));
+    } catch (error) {
+      if (!mounted || request != _ledgerRequest) return;
+      setState(() {
+        _markLedgerUnread(
+          missing: error is StateError && error.message == 'receipt-ledger-missing',
+          uncertain: false,
+        );
+      });
+    }
+  }
+
+  void _retryAuthoritativeLedger() {
+    setState(() {
+      _ledgerReady = false;
+      _ledgerFailed = false;
+      _ledgerMissing = false;
+      _ledgerUncertain = false;
+      _isConfirming = false;
+    });
+    _resumeFromAuthoritativeLedger();
+  }
+
+  bool _claimMayHaveCommitted(Object error) {
+    if (error is FirebaseFunctionsException) {
+      const uncertain = {
+        'deadline-exceeded',
+        'unavailable',
+        'aborted',
+        'cancelled',
+        'unknown',
+        'internal',
+      };
+      return uncertain.contains(error.code);
+    }
+    final text = error.toString().toLowerCase();
+    return text.contains('timeout') ||
+        text.contains('socket') ||
+        text.contains('xmlhttprequest') ||
+        text.contains('failed host');
   }
 
   Future<void> _preloadMetadataForWhatsApp() async {
@@ -167,6 +294,49 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
         });
       }
     } catch (_) {}
+  }
+
+  String _currentTierSuffix(bool arabic) {
+    final index = _currentRound - 1;
+    if (index < 0 || index >= widget.roundTierMinSpends.length) return '';
+    final tier = widget.roundTierMinSpends[index];
+    if (tier <= 0) return '';
+    final label = tier.toStringAsFixed(0);
+    return arabic ? ' — شريحة $label' : ' — tier $label';
+  }
+
+  String _roundChipLabel({
+    required int roundNum,
+    required bool arabic,
+    required bool completed,
+    required bool current,
+    required String? wonGift,
+  }) {
+    final index = roundNum - 1;
+    final names = index >= 0 && index < widget.roundPrizeNames.length
+        ? widget.roundPrizeNames[index].map((name) => name.trim()).where((name) => name.isNotEmpty).join(' / ')
+        : '';
+    if (names.isEmpty) {
+      if (completed) {
+        return wonGift != null
+            ? (arabic ? 'الهدية $roundNum: $wonGift ✓' : 'Gift $roundNum: $wonGift ✓')
+            : (arabic ? 'الهدية $roundNum: تم الاختيار ✓' : 'Gift $roundNum: Picked ✓');
+      }
+      if (current) return arabic ? 'الهدية $roundNum: اختر الآن 👈' : 'Gift $roundNum: Pick now 👈';
+      return arabic ? 'الهدية $roundNum: في الانتظار ⏳' : 'Gift $roundNum: Waiting ⏳';
+    }
+    final tier = index < widget.roundTierMinSpends.length && widget.roundTierMinSpends[index] > 0
+        ? widget.roundTierMinSpends[index].toStringAsFixed(0)
+        : '';
+    final tierLabel = tier.isEmpty ? '' : (arabic ? 'شريحة $tier: ' : 'tier $tier: ');
+    if (completed) {
+      final picked = wonGift != null && wonGift.isNotEmpty ? wonGift : names;
+      return arabic ? 'الجولة $roundNum — $tierLabel$picked ✓' : 'Round $roundNum — $tierLabel$picked ✓';
+    }
+    if (current) {
+      return arabic ? 'الجولة $roundNum — $tierLabel$names — اختر الآن' : 'Round $roundNum — $tierLabel$names — pick now';
+    }
+    return arabic ? 'الجولة $roundNum — $tierLabel$names' : 'Round $roundNum — $tierLabel$names';
   }
 
   String? _resolvePrizeImage(String prizeName) {
@@ -236,34 +406,95 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   }
 
   Future<void> _handleConfirmSelection() async {
-    if (_selectedGiftIndex == null || _isConfirming) return;
+    if (_selectedGiftIndex == null || _isConfirming || !_ledgerReady || _ledgerFailed || _remainingChances <= 0) return;
 
-    final selectedPrize = _items[_selectedGiftIndex!];
+    final selectedPrize = _items[_selectedGiftIndex!.clamp(0, _items.length - 1)];
+    final roundIndex = _currentRound - 1;
+    final roundGiftId = roundIndex >= 0 &&
+            roundIndex < widget.roundGiftIds.length &&
+            _selectedGiftIndex! < widget.roundGiftIds[roundIndex].length
+        ? widget.roundGiftIds[roundIndex][_selectedGiftIndex!]
+        : '';
+    final roundUnit = roundIndex >= 0 &&
+            roundIndex < widget.roundUnitValues.length &&
+            _selectedGiftIndex! < widget.roundUnitValues[roundIndex].length
+        ? widget.roundUnitValues[roundIndex][_selectedGiftIndex!]
+        : 0.0;
+    final roundRuleId = roundIndex >= 0 && roundIndex < widget.roundRuleIds.length
+        ? widget.roundRuleIds[roundIndex]
+        : '';
     final audioService = ref.read(gameAudioServiceProvider);
 
     setState(() {
       _isConfirming = true;
     });
 
+    if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+      final request = ++_ledgerRequest;
+      try {
+        final fresh = await _readAuthoritativeResume();
+        if (!mounted || request != _ledgerRequest) return;
+        final stale = fresh.claimedUnits != _claimedUnits ||
+            fresh.currentRound != _currentRound ||
+            fresh.remaining != _remainingChances;
+        if (stale) {
+          final isAr = ref.read(localeProvider).languageCode == 'ar';
+          setState(() {
+            _applyResume(fresh);
+            _selectedGiftIndex = null;
+            _isConfirming = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isAr
+                    ? 'تغير سجل الهدايا المحفوظ. تم تحديث الجولة ولم يُرسل طلب جديد.'
+                    : 'The saved gift ledger changed. The round was refreshed and no new claim was sent.',
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (error) {
+        if (!mounted || request != _ledgerRequest) return;
+        setState(() {
+          _markLedgerUnread(
+            missing: error is StateError && error.message == 'receipt-ledger-missing',
+            uncertain: false,
+          );
+          _isConfirming = false;
+        });
+        return;
+      }
+    }
+
     bool claimApplied = false;
     bool claimSaved = false;
+    var resumedCommit = false;
+    final int? claimSlot = widget.roundPrizeNames.isNotEmpty ? _claimedUnits : null;
     try {
       audioService.playWinFanfare();
 
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
+      _claimedUnits += 1;
       _wonPrizes.add(selectedPrize);
       claimApplied = true;
       Future<WhatsAppGatewayResult?>? whatsappFuture;
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final giftsService = ref.read(companyGiftsServiceProvider);
-        await runGameClaim(
-          () => giftsService.decrementCampaignPrize(
+        Future<void> sendClaim() {
+          return giftsService.decrementCampaignPrize(
           widget.eventId,
-          selectedPrize,
+          roundGiftId.isNotEmpty ? roundGiftId : selectedPrize,
           branchId: widget.branchId,
+          unitValue: roundUnit > 0 ? roundUnit : null,
+          isVoucher: selectedPrize.contains('فواتشر') ||
+              selectedPrize.contains('قسيمة') ||
+              selectedPrize.toLowerCase().contains('voucher'),
           gameType: 'chooseGift',
           receiptId: widget.transactionId,
+          claimSlot: claimSlot,
           receiptPatch: {
             'game_played': true,
             'game_type': 'chooseGift',
@@ -271,17 +502,60 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
             'prizes_won': _wonPrizes,
             'remaining_chances': _remainingChances,
             'event_id': widget.eventId,
-            'claimed_gifts': _wonPrizes.map((p) => {
-              'giftId': '',
-              'giftName': p,
-              'quantity': 1,
-              'unitValue': 0.0,
-              'isVoucher': p.contains('فواتشر') || p.contains('قسيمة') || p.toLowerCase().contains('voucher'),
+            'claimed_gifts': _wonPrizes.asMap().entries.map((entry) {
+              final index = entry.key;
+              final name = entry.value;
+              final giftId = index == roundIndex ? roundGiftId : '';
+              final unit = index == roundIndex ? roundUnit : 0.0;
+              return {
+                'giftId': giftId,
+                'giftName': name,
+                'quantity': 1,
+                'unitValue': unit,
+                if (roundRuleId.isNotEmpty && index == roundIndex) 'ruleId': roundRuleId,
+                'isVoucher': name.contains('فواتشر') || name.contains('قسيمة') || name.toLowerCase().contains('voucher'),
+              };
             }).toList(),
           },
-        ),
-          isFinalChance: _remainingChances <= 0,
         );
+        }
+        final attempt = ++_claimAttempt;
+        if (claimSlot != null) {
+          try {
+            await sendClaim();
+          } catch (error) {
+            if (!mounted || attempt != _claimAttempt) return;
+            if (!_claimMayHaveCommitted(error)) rethrow;
+            final request = ++_ledgerRequest;
+            try {
+              final resume = await _readAuthoritativeResume();
+              if (!mounted || attempt != _claimAttempt || request != _ledgerRequest) return;
+              if (resume.claimedUnits > claimSlot) {
+                resumedCommit = true;
+                setState(() => _applyResume(resume));
+              } else {
+                throw ClaimCallableException(
+                  code: 'failed-precondition',
+                  message: 'لم يُحفظ صرف هذه الجولة على السجل. يمكنك تأكيد الهدية نفسها مرة أخرى.',
+                );
+              }
+            } catch (readError) {
+              if (readError is ClaimCallableException) rethrow;
+              if (!mounted || attempt != _claimAttempt || request != _ledgerRequest) return;
+              setState(() {
+                _markLedgerUnread(missing: false, uncertain: true);
+                _isConfirming = false;
+              });
+              return;
+            }
+          }
+          if (!mounted || attempt != _claimAttempt) return;
+        } else {
+          await runGameClaim(
+            sendClaim,
+            isFinalChance: _remainingChances <= 0,
+          );
+        }
         claimSaved = true;
 
         if (_remainingChances == 0 && !_whatsappSent) {
@@ -313,7 +587,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
           setState(() {
             _selectedGiftIndex = null;
             _isConfirming = false;
-            _currentRound++;
+            if (!resumedCommit) _currentRound++;
           });
         },
         onNextCustomer: () {
@@ -336,8 +610,17 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       if (claimApplied && !claimSaved) {
         if (_wonPrizes.isNotEmpty) _wonPrizes.removeLast();
         _remainingChances = (_remainingChances + 1).clamp(0, 999);
+        _claimedUnits = (_claimedUnits - 1).clamp(0, 999);
       }
       if (!mounted) return;
+      if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+        await _resumeFromAuthoritativeLedger();
+        if (!mounted) return;
+        if (!_ledgerReady) {
+          setState(() => _isConfirming = false);
+          return;
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppErrorHandler.claimFailureMessage(e)),
@@ -622,14 +905,51 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                           padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: _isConfirming ? null : _handleConfirmSelection,
+                        onPressed: (_isConfirming || !_ledgerReady || _ledgerFailed || _remainingChances <= 0)
+                            ? null
+                            : _handleConfirmSelection,
                       ),
                     ],
                   ),
                 ),
               )
             : null,
-        body: SafeArea(
+        body: !_ledgerReady
+            ? Center(
+                child: _ledgerFailed
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off_rounded, color: colorScheme.error, size: 36),
+                            const SizedBox(height: 12),
+                            Text(
+                              isAr
+                                  ? (_ledgerMissing
+                                      ? 'سجل هذه الفاتورة غير موجود على الخادم. لن يبدأ الاختيار قبل ظهوره.'
+                                      : _ledgerUncertain
+                                          ? 'لم يصل رد الخادم. قد تكون الهدية سُجّلت. لن يُرسل طلب جديد قبل إعادة قراءة السجل.'
+                                          : 'تعذر قراءة سجل الهدايا المحفوظ. لن يبدأ الاختيار ولن يُسمح بالصرف قبل نجاح القراءة.')
+                                  : (_ledgerMissing
+                                      ? 'This receipt ledger is not on the server. Selection stays closed until it is.'
+                                      : _ledgerUncertain
+                                          ? 'The server did not answer. The gift may already be saved. No new claim is sent until the ledger is read again.'
+                                          : 'The saved gift ledger could not be read. Selection stays closed until a fresh read succeeds.'),
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: _retryAuthoritativeLedger,
+                              child: Text(isAr ? 'إعادة قراءة السجل' : 'Read the ledger again'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const CircularProgressIndicator(),
+              )
+            : SafeArea(
           child: Column(
             children: [
               if (widget.isDemo)
@@ -836,8 +1156,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                           Text(
                                             totalChances > 1
                                                 ? (isAr
-                                                    ? 'الفرصة الحالية: اختيار الهدية رقم ($_currentRound) من إجمالي ($totalChances) هدايا'
-                                                    : 'Current Round: Choosing gift #$_currentRound of $totalChances')
+                                                    ? 'الفرصة الحالية: اختيار الهدية رقم ($_currentRound) من إجمالي ($totalChances) هدايا${_currentTierSuffix(true)}'
+                                                    : 'Current Round: Choosing gift #$_currentRound of $totalChances${_currentTierSuffix(false)}')
                                                 : (isAr
                                                     ? 'انقر على هديتك المفضلة للاختيار'
                                                     : strings.chooseYourGiftPrompt),
@@ -875,8 +1195,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                     runSpacing: 6,
                                     children: List.generate(totalChances, (i) {
                                       final roundNum = i + 1;
-                                      final isCompleted = roundNum < _currentRound;
-                                      final isCurrent = roundNum == _currentRound;
+                                      final isCompleted = _remainingChances == 0 || roundNum < _currentRound;
+                                      final isCurrent = _remainingChances > 0 && roundNum == _currentRound;
                                       final wonGift = isCompleted && i < _wonPrizes.length ? _wonPrizes[i] : null;
 
                                       return Container(
@@ -913,13 +1233,13 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                                             ),
                                             const SizedBox(width: 5),
                                             Text(
-                                              isCompleted
-                                                  ? (wonGift != null
-                                                      ? (isAr ? 'الهدية $roundNum: $wonGift ✓' : 'Gift $roundNum: $wonGift ✓')
-                                                      : (isAr ? 'الهدية $roundNum: تم الاختيار ✓' : 'Gift $roundNum: Picked ✓'))
-                                                  : isCurrent
-                                                      ? (isAr ? 'الهدية $roundNum: اختر الآن 👈' : 'Gift $roundNum: Pick now 👈')
-                                                      : (isAr ? 'الهدية $roundNum: في الانتظار ⏳' : 'Gift $roundNum: Waiting ⏳'),
+                                              _roundChipLabel(
+                                                roundNum: roundNum,
+                                                arabic: isAr,
+                                                completed: isCompleted,
+                                                current: isCurrent,
+                                                wonGift: wonGift,
+                                              ),
                                               style: GoogleFonts.cairo(
                                                 fontSize: isMobile ? 10 : 11.5,
                                                 fontWeight: FontWeight.bold,

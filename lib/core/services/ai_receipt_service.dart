@@ -16,6 +16,7 @@ import '../utils/store_code_branch_resolver.dart';
 import 'campaign_ai_assistant_service.dart';
 import 'company_gifts_service.dart';
 import 'ai_model_config_service.dart';
+import 'synthetic_receipt_fixture.dart';
 
 final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
   final config = ref.watch(aiModelConfigStreamProvider).valueOrNull;
@@ -49,6 +50,29 @@ class ExtractedProductItem {
 
   double get totalPrice => price * quantity;
 
+  /// Line figures for a saved product map. [primary] is the net. [grossNote]
+  /// is set only when the printed gross is different, so the two are not
+  /// shown as the same number.
+  static ({String primary, String? grossNote}) lineTotalLabel(
+    Map<String, dynamic> json, {
+    required bool arabic,
+  }) {
+    final item = ExtractedProductItem.fromJson(json);
+    final gross = item.actualLineSpend;
+    final net = item.netEligibleLineSpend;
+    String money(double value) =>
+        value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2);
+    if ((gross - net).abs() <= 0.49) {
+      return (primary: money(net), grossNote: null);
+    }
+    return (
+      primary: money(net),
+      grossNote: arabic
+          ? 'قبل الخصم ${money(gross)}'
+          : 'gross ${money(gross)}',
+    );
+  }
+
   /// The actual monetary spend paid on this receipt line item.
   /// Strictly prevents artificial spend inflation from physical bundle piece counts (AIR-37).
   double get actualLineSpend {
@@ -56,6 +80,27 @@ class ExtractedProductItem {
     final q = quantity > 0 ? quantity : 1;
     final p = price > 0 ? price : (originalPrice ?? 0.0);
     return p * q;
+  }
+
+  /// Net line for a consuming ladder. A price that already equals
+  /// original minus discount is left alone so a net unit is not reduced twice.
+  double get netEligibleLineSpend {
+    final qty = quantity > 0 ? quantity : 1;
+    final line = actualLineSpend;
+    if (discountAmount <= 0) return line;
+    final original = originalPrice;
+    if (original != null &&
+        original > price &&
+        (price + discountAmount - original).abs() < 1.5) {
+      return line;
+    }
+    if (discountAmount >= price && discountAmount < line) {
+      return (line - discountAmount).clamp(0.0, double.infinity);
+    }
+    if (discountAmount < price) {
+      return ((price - discountAmount) * qty).clamp(0.0, double.infinity);
+    }
+    return line;
   }
 
   bool get hasDiscount =>
@@ -696,14 +741,23 @@ class AiReceiptService {
   static const String branchSourceRule =
       '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
 
-  late final CloudGenerativeModel _model;
-  late final CloudGenerativeModel _fastModel;
-  late final CloudGenerativeModel _deepAuditModel;
-  late final CloudGenerativeModel _fallbackModel1;
-  late final CloudGenerativeModel _fallbackModel2;
+  CloudGenerativeModel? _modelCache;
+  CloudGenerativeModel? _fastModelCache;
+  CloudGenerativeModel? _deepAuditModelCache;
+  CloudGenerativeModel? _fallbackModel1Cache;
+  CloudGenerativeModel? _fallbackModel2Cache;
   final String modelName;
   final String fastTierModelName;
   final String deepAuditModelName;
+
+  CloudGenerativeModel get _model => _modelCache ??= _createModel(modelName);
+  CloudGenerativeModel get _fastModel => _fastModelCache ??= _createFastTierModel(fastTierModelName);
+  CloudGenerativeModel get _deepAuditModel =>
+      _deepAuditModelCache ??= _createDeepAuditModel(deepAuditModelName);
+  CloudGenerativeModel get _fallbackModel1 =>
+      _fallbackModel1Cache ??= _createFastTierModel(AiConfig.fallbackModel);
+  CloudGenerativeModel get _fallbackModel2 =>
+      _fallbackModel2Cache ??= _createFastTierModel(AiModels.defaultFallback);
 
   AiReceiptService({
     String? modelName,
@@ -711,13 +765,7 @@ class AiReceiptService {
     String? deepAuditModelName,
   })  : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel,
         fastTierModelName = (fastTierModelName != null && fastTierModelName.isNotEmpty) ? fastTierModelName : AiConfig.fastTierModel,
-        deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel {
-    _model = _createModel(this.modelName);
-    _fastModel = _createFastTierModel(this.fastTierModelName);
-    _deepAuditModel = _createDeepAuditModel(this.deepAuditModelName);
-    _fallbackModel1 = _createFastTierModel(AiConfig.fallbackModel);
-    _fallbackModel2 = _createFastTierModel(AiModels.defaultFallback);
-  }
+        deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel;
 
   static CloudGenerativeModel _createModel(String name) {
     return CloudGenerativeModel(
@@ -1375,6 +1423,7 @@ class AiReceiptService {
     String multiplierBasis = 'both',
     int maxChancesPerReceipt = 0,
     List<PromotionalRuleItem> promotionalRules = const [],
+    String spendLadderMode = 'exclusive',
     bool allowComplementaryReceipts = false,
     bool forceDeepAudit = false,
     bool forceRefresh = false,
@@ -1412,6 +1461,12 @@ class AiReceiptService {
       }
       final resolvedRequiredProducts = effectiveRequiredProducts.toList();
 
+      // Emulator fixture only. Production builds take the model path below.
+      final syntheticModelText = SyntheticReceiptFixture.modelTextFor(imageBytes);
+      CloudGenerateContentResponse? remoteResponse;
+      var aiDurationMs = 0;
+      var pipelineTier = 'synthetic_fixture';
+      if (syntheticModelText == null) {
       final List<Part> allImageParts = [
         DataPart(mimeType, imageBytes),
       ];
@@ -1822,7 +1877,6 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
-      CloudGenerateContentResponse response;
       final targetModel = forceDeepAudit ? _deepAuditModel : _fastModel;
       final primaryFallback = forceDeepAudit ? _model : _fallbackModel1;
       final contentParts = [
@@ -1837,7 +1891,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           ? null
           : _scanCacheKey(targetModel.model, finalPromptText, allImageParts);
       final firstDeadline = DateTime.now().add(firstCheckBudget);
-      response = await _dedupedGenerate(scanKey, () async {
+      remoteResponse = await _dedupedGenerate(scanKey, () async {
         CloudGenerateContentResponse r;
         try {
           r = await _executeWithExponentialBackoff(targetModel, contentParts,
@@ -1860,12 +1914,14 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         return r;
       });
       aiStopwatch.stop();
-      int aiDurationMs = aiStopwatch.elapsedMilliseconds;
-      String pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
+      aiDurationMs = aiStopwatch.elapsedMilliseconds;
+      pipelineTier = forceDeepAudit ? 'deep_reasoning_tier' : 'fast_tier';
+      }
 
-      if (response.text != null && response.text!.trim().isNotEmpty) {
+      final String? modelText = syntheticModelText ?? remoteResponse?.text;
+      if (modelText != null && modelText.trim().isNotEmpty) {
         final dartStopwatch = Stopwatch()..start();
-        final Map<String, dynamic> jsonMap = _cleanAndParseJson(response.text!);
+        final Map<String, dynamic> jsonMap = _cleanAndParseJson(modelText);
         var result = AiReceiptAnalysisResult.fromJson(
           jsonMap,
           durationMs: stopwatch.elapsedMilliseconds,
@@ -2127,14 +2183,50 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
           }
         }
 
-        // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58)
+        if (spendLadderMode == 'consuming') {
+          final hasSpendRules = promotionalRules.any(PromotionalRuleMatcher.isConsumingSpendRule);
+          if (!hasSpendRules) {
+            result = result.copyWith(
+              extractedProducts: [
+                for (final product in result.extractedProducts)
+                  if (product.isTargetCompany) product.copyWith(isTargetCompany: false) else product,
+              ],
+              targetCompanyTotal: 0,
+              chancesEarned: 0,
+              isValid: false,
+              unfulfilledConditions: [
+                ...result.unfulfilledConditions,
+                PromotionalRuleMatcher.missingSpendRulesMessage,
+              ],
+            );
+          } else {
+            final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
+              products: result.extractedProducts,
+              rules: promotionalRules,
+            );
+            final totals = PromotionalRuleMatcher.spendTotals(
+              products: cleared,
+              rules: promotionalRules,
+              spendLadderMode: spendLadderMode,
+            );
+            result = result.copyWith(
+              extractedProducts: cleared,
+              targetCompanyTotal: totals.eligibleNet,
+            );
+          }
+        }
+
+        // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58).
+        // A consuming ladder already stored the net of explicit members. This gross
+        // sum stays on the exclusive path.
         final double sumOfExtractedTarget = result.extractedProducts
             .where((p) => p.isTargetCompany)
             .fold<double>(0.0, (sum, p) => sum + (p.price * p.quantity));
-        if (sumOfExtractedTarget > result.targetCompanyTotal ||
+        if (spendLadderMode != 'consuming' &&
+            (sumOfExtractedTarget > result.targetCompanyTotal ||
             (isMondelezTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
             (isAdcoTenant && sumOfExtractedTarget != result.targetCompanyTotal) ||
-            ((isShomanTenant || isDorraTenant) && sumOfExtractedTarget != result.targetCompanyTotal)) {
+            ((isShomanTenant || isDorraTenant) && sumOfExtractedTarget != result.targetCompanyTotal))) {
           result = result.copyWith(targetCompanyTotal: sumOfExtractedTarget);
         }
 
@@ -2148,6 +2240,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
                   promotionalRules: promotionalRules,
                   allowCampaignMultipliers: allowMultipleChances,
                   maxUnitsPerReceipt: maxChancesPerReceipt,
+                  spendLadderMode: spendLadderMode,
                 )
               : <MatchedPromotionalRuleResult>[];
 
@@ -2546,6 +2639,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             promotionalRules: promotionalRules,
             allowCampaignMultipliers: allowMultipleChances,
             capSpendToAiTotal: false,
+            spendLadderMode: spendLadderMode,
           );
           if (dartMatches.isNotEmpty) {
             // Trust the deterministic matcher over the AI's own total: when a
@@ -3365,6 +3459,106 @@ class PromotionalRuleMatcher {
   /// grouping by unique trigger product family so higher tiers beat lower tiers,
   /// and different products purchased together in the same receipt ALL produce rewards!
   ///
+  static ({List<MatchedPromotionalRuleResult> results, Set<int> indices})
+      _matchConsumingSpendGroup({
+    required List<PromotionalRuleItem> group,
+    required List<ExtractedProductItem> products,
+    required Map<int, int> remainingItemQuantities,
+    required Set<String> campaignBrands,
+    required List<PromotionalRuleItem> promotionalRules,
+    required bool allowCampaignMultipliers,
+  }) {
+    final tiers = group.where((rule) => rule.isSpendBased).toList()
+      ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
+    final indices = <int>{};
+    final names = <String>[];
+    final remainingSpendByIndex = <int, double>{};
+    for (var i = 0; i < products.length; i++) {
+      final remaining = remainingItemQuantities[i] ?? 0;
+      if (remaining <= 0) continue;
+      final product = products[i];
+      final included = tiers.any((rule) =>
+          hasExplicitSpendMembership(product, rule) &&
+          _matchesProduct(
+            product,
+            rule.triggerProduct,
+            rule,
+            campaignBrands,
+            promotionalRules,
+            false,
+          ));
+      if (!included) continue;
+      final totalQty = getEffectiveProductQuantity(product);
+      final full = product.netEligibleLineSpend;
+      remainingSpendByIndex[i] = totalQty > 0 ? full * (remaining / totalQty) : full;
+      indices.add(i);
+      names.add(product.name);
+    }
+
+    final results = <MatchedPromotionalRuleResult>[];
+    final pool = remainingSpendByIndex.values.fold<double>(0, (sum, value) => sum + value);
+    for (final rule in tiers) {
+      final minimum = rule.minSpend > 0 ? rule.minSpend : rule.effectiveMinSpend;
+      if (minimum <= 0) continue;
+      final eligibleIndexes = <int>[];
+      var eligible = 0.0;
+      for (final entry in remainingSpendByIndex.entries) {
+        if (entry.value <= 0) continue;
+        final product = products[entry.key];
+        final matchesTier = hasExplicitSpendMembership(product, rule) &&
+            _matchesProduct(
+              product,
+              rule.triggerProduct,
+              rule,
+              campaignBrands,
+              promotionalRules,
+              false,
+            );
+        if (!matchesTier) continue;
+        eligible += entry.value;
+        eligibleIndexes.add(entry.key);
+      }
+      var count = allowCampaignMultipliers ? eligible ~/ minimum : 0;
+      if (!allowCampaignMultipliers &&
+          eligible + rule.discountTolerance >= minimum) {
+        count = 1;
+      } else if (allowCampaignMultipliers &&
+          count < 1 &&
+          rule.discountTolerance > 0 &&
+          eligible + rule.discountTolerance >= minimum) {
+        count = 1;
+      }
+      if (count < 1) continue;
+      var toConsume = minimum * count;
+      for (final index in eligibleIndexes) {
+        if (toConsume <= 0) break;
+        final left = remainingSpendByIndex[index] ?? 0;
+        if (left <= 0) continue;
+        final take = math.min(left, toConsume);
+        remainingSpendByIndex[index] = left - take;
+        toConsume -= take;
+      }
+      final baseAmount = rule.totalVoucherValue > 0
+          ? rule.totalVoucherValue
+          : (rule.rewardAmount > 0 ? rule.rewardAmount : 0.0);
+      final gifts = rule.linkedGifts
+          .map((gift) => gift.copyWith(quantity: gift.quantity * count))
+          .toList();
+      results.add(MatchedPromotionalRuleResult(
+        rule: rule,
+        multiplier: count,
+        totalTriggerQuantity: count,
+        totalRewardAmount: baseAmount * count,
+        formattedPrizeSummary: _prizeSummary(rule, count, baseAmount),
+        multipliedLinkedGifts: gifts,
+        qualifyingProductNames: names,
+        qualifyingSpend: pool,
+      ));
+      if (!allowCampaignMultipliers) break;
+    }
+    return (results: results, indices: indices);
+  }
+
   /// [maxUnitsPerReceipt]: when non-null the campaign's per-receipt unit cap
   /// is enforced on the result (see [capMatchedRuleUnits]): ON => at most
   /// [maxUnitsPerReceipt] gift units (0 = no cap), OFF => exactly 1 unit.
@@ -3375,6 +3569,7 @@ class PromotionalRuleMatcher {
     bool allowCampaignMultipliers = true,
     bool capSpendToAiTotal = true,
     int? maxUnitsPerReceipt,
+    String spendLadderMode = 'exclusive',
   }) {
     final raw = _matchAllUncapped(
       result: result,
@@ -3382,6 +3577,7 @@ class PromotionalRuleMatcher {
       promotionalRules: promotionalRules,
       allowCampaignMultipliers: allowCampaignMultipliers,
       capSpendToAiTotal: capSpendToAiTotal,
+      spendLadderMode: spendLadderMode,
     );
     if (maxUnitsPerReceipt == null) return raw;
     return capMatchedRuleUnits(
@@ -3404,9 +3600,96 @@ class PromotionalRuleMatcher {
     for (final g in r.rule.linkedGifts) {
       if (g.unitValue > best) best = g.unitValue;
     }
+    for (final option in r.rule.rewardOptions) {
+      if (option.monetaryValue > best) best = option.monetaryValue;
+    }
     if (best > 0) return best;
     if (r.rule.rewardAmount > 0) return r.rule.rewardAmount;
     return r.rule.totalVoucherValue > 0 ? r.rule.totalVoucherValue : 0.0;
+  }
+
+  /// Barcode, catalog name, or an explicit brand token. A company flag alone
+  /// is not membership, so an ambiguous OCR line cannot enter a consuming ladder.
+  static bool hasExplicitSpendMembership(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    final barcode = product.barcode.trim();
+    if (barcode.isNotEmpty && rule.selectedBarcodes.isNotEmpty) {
+      if (rule.selectedBarcodes.any((b) => b.trim() == barcode)) return true;
+      if (barcode.length >= 10 &&
+          rule.selectedBarcodes.any(
+            (b) => b.startsWith(barcode) || barcode.startsWith(b.trim()),
+          )) {
+        return true;
+      }
+    }
+    final name = _normalize(product.name);
+    if (name.isEmpty) return false;
+    if (rule.selectedProductNames.any((sel) {
+      final normalized = _normalize(sel);
+      return normalized.isNotEmpty && normalized == name;
+    })) {
+      return true;
+    }
+    final brands = <String>[
+      ...rule.requiredBrands,
+      if (rule.triggerProduct.trim().isNotEmpty &&
+          rule.triggerProduct.trim().split(RegExp(r'\s+')).length <= 3)
+        rule.triggerProduct.trim(),
+    ];
+    for (final brand in brands) {
+      final normalized = _normalize(brand);
+      if (normalized.length >= 3 && name.contains(normalized)) return true;
+    }
+    return false;
+  }
+
+  /// Shown when a consuming campaign has no spend rule. A company flag is not
+  /// a substitute, and no gift is awarded.
+  static const String missingSpendRulesMessage =
+      'تعذر احتساب الهدايا: حملة شرائح الإنفاق لا تحتوي على قاعدة إنفاق، ولا تُحتسب إشارة الشركة بديلاً عن ذلك.';
+
+  /// Same predicate the server uses before it will open a consuming round.
+  static bool isConsumingSpendRule(PromotionalRuleItem rule) =>
+      rule.conditionType != 'by_quantity' && rule.minSpend > 0;
+
+  /// Eligible net counts only explicit members. Invoice net counts every line
+  /// after that line's own discount. Exclusive mode still uses the company flag.
+  /// A consuming campaign with no spend rule has no eligible spend.
+  static ({double eligibleNet, double invoiceNet}) spendTotals({
+    required List<ExtractedProductItem> products,
+    required List<PromotionalRuleItem> rules,
+    required String spendLadderMode,
+  }) {
+    final invoiceNet = products.fold<double>(0, (sum, product) => sum + product.netEligibleLineSpend);
+    final spendRules = rules.where(isConsumingSpendRule).toList();
+    if (spendLadderMode == 'consuming' && spendRules.isEmpty) {
+      return (eligibleNet: 0, invoiceNet: invoiceNet);
+    }
+    var eligible = 0.0;
+    for (final product in products) {
+      final member = spendLadderMode == 'consuming'
+          ? spendRules.any((rule) => hasExplicitSpendMembership(product, rule))
+          : product.isTargetCompany;
+      if (member) eligible += product.netEligibleLineSpend;
+    }
+    return (eligibleNet: eligible, invoiceNet: invoiceNet);
+  }
+
+  static List<ExtractedProductItem> clearUnprovenCompanyFlags({
+    required List<ExtractedProductItem> products,
+    required List<PromotionalRuleItem> rules,
+  }) {
+    final spendRules = rules.where((rule) => rule.isSpendBased).toList();
+    if (spendRules.isEmpty) return products;
+    return [
+      for (final product in products)
+        if (product.isTargetCompany && !spendRules.any((rule) => hasExplicitSpendMembership(product, rule)))
+          product.copyWith(isTargetCompany: false)
+        else
+          product,
+    ];
   }
 
   static String _prizeSummary(PromotionalRuleItem rule, int count, double baseAmount) {
@@ -3476,6 +3759,7 @@ class PromotionalRuleMatcher {
     required List<PromotionalRuleItem> promotionalRules,
     bool allowCampaignMultipliers = true,
     bool capSpendToAiTotal = true,
+    String spendLadderMode = 'exclusive',
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3543,6 +3827,22 @@ class PromotionalRuleMatcher {
 
     for (final group in rulesByProductGroup.values) {
       final isSpendGroup = group.any((r) => r.isSpendBased);
+
+      if (isSpendGroup && EventModel.normalizeSpendLadderMode(spendLadderMode) == 'consuming') {
+        final consumed = _matchConsumingSpendGroup(
+          group: group,
+          products: effectiveProducts,
+          remainingItemQuantities: remainingItemQuantities,
+          campaignBrands: campaignBrands,
+          promotionalRules: promotionalRules,
+          allowCampaignMultipliers: allowCampaignMultipliers,
+        );
+        allMatchedResults.addAll(consumed.results);
+        for (final idx in consumed.indices) {
+          remainingItemQuantities[idx] = 0;
+        }
+        continue;
+      }
 
       if (isSpendGroup) {
         // Highest-value gift wins: rules on the same products are ranked by
@@ -3830,6 +4130,7 @@ class PromotionalRuleMatcher {
     AiReceiptAnalysisResult? result,
     List<ExtractedProductItem>? extractedProducts,
     required List<PromotionalRuleItem> promotionalRules,
+    String spendLadderMode = 'exclusive',
   }) {
     if (promotionalRules.isEmpty) return [];
 
@@ -3842,6 +4143,7 @@ class PromotionalRuleMatcher {
     final matches = matchAllWithMultipliers(
       result: result,
       extractedProducts: products,
+      spendLadderMode: spendLadderMode,
       promotionalRules: promotionalRules,
     );
     if (matches.isNotEmpty) return const [];
@@ -5383,6 +5685,77 @@ List<LinkedGiftAllocation> consolidateLinkedGifts(Iterable<LinkedGiftAllocation>
 }
 
 /// Represents a composite multi-offer prize bundle synthesized from all matched rules in a single receipt
+/// One gift round after a consuming or exclusive ladder. The gifts belong to
+/// this tier only, so a later round cannot offer the previous tier's voucher.
+class SpendAwardRound {
+  final String ruleId;
+  final String ruleTitle;
+  final double tierMinSpend;
+  final List<String> prizeNames;
+  final List<String> giftIds;
+  final List<double> unitValues;
+
+  const SpendAwardRound({
+    required this.ruleId,
+    required this.ruleTitle,
+    required this.tierMinSpend,
+    required this.prizeNames,
+    required this.giftIds,
+    required this.unitValues,
+  });
+
+  /// Visible label for one round. The gifts are this tier's gifts only.
+  String roundLine(int index, int total, {required bool arabic}) {
+    final gifts = prizeNames.map((name) => name.trim()).where((name) => name.isNotEmpty).join(' / ');
+    final tier = tierMinSpend.toStringAsFixed(0);
+    final number = index + 1;
+    if (arabic) return 'الجولة $number من $total — شريحة $tier: $gifts';
+    return 'Round $number of $total — tier $tier: $gifts';
+  }
+
+  static List<SpendAwardRound> expand(List<MatchedPromotionalRuleResult> rules) {
+    final ordered = List<MatchedPromotionalRuleResult>.from(rules)
+      ..sort((a, b) => b.rule.effectiveMinSpend.compareTo(a.rule.effectiveMinSpend));
+    final rounds = <SpendAwardRound>[];
+    for (final match in ordered) {
+      final names = <String>[];
+      final ids = <String>[];
+      final values = <double>[];
+      if (match.rule.rewardOptions.isNotEmpty) {
+        for (final option in match.rule.rewardOptions) {
+          final name = option.displayLabel.trim();
+          if (name.isEmpty) continue;
+          names.add(name);
+          ids.add(option.giftId);
+          values.add(option.monetaryValue);
+        }
+      } else if (match.rule.linkedGifts.isNotEmpty) {
+        for (final gift in match.rule.linkedGifts) {
+          names.add(gift.giftName);
+          ids.add(gift.giftId);
+          values.add(gift.unitValue);
+        }
+      } else if (match.rule.rewardValue.trim().isNotEmpty) {
+        names.add(match.rule.rewardValue.trim());
+        ids.add(match.rule.linkedGiftId ?? '');
+        values.add(match.rule.rewardAmount);
+      }
+      final copies = match.multiplier > 0 ? match.multiplier : 1;
+      for (var i = 0; i < copies; i++) {
+        rounds.add(SpendAwardRound(
+          ruleId: match.rule.id,
+          ruleTitle: match.rule.ruleTitle,
+          tierMinSpend: match.rule.minSpend,
+          prizeNames: names,
+          giftIds: ids,
+          unitValues: values,
+        ));
+      }
+    }
+    return rounds;
+  }
+}
+
 /// Applies the campaign-level Smart Multipliers switch to a chance count.
 /// OFF => at most 1; ON => capped by [maxChancesPerReceipt] when > 0.
 /// Values <= 0 are returned unchanged (0 means "no chance / rejected").
@@ -5423,6 +5796,8 @@ class CompositePromotionalBundle {
   });
 
   bool get requiresRewardChoice => rewardChoiceGroups.isNotEmpty;
+
+  List<SpendAwardRound> get awardRounds => SpendAwardRound.expand(matchedRules);
 
   /// Gift names for "choose your gift" games: base gifts plus every reward option.
   List<String> get candidateGiftNames {
