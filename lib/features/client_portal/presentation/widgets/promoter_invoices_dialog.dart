@@ -2244,11 +2244,11 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   ),
                   const SizedBox(height: 6),
                   ...extractedProducts.map((p) {
-                    final pMap = p is Map ? Map<String, dynamic>.from(p) : {};
+                    final pMap = p is Map ? Map<String, dynamic>.from(p) : <String, dynamic>{};
                     final name = (pMap['name'] ?? pMap['product_name'] ?? 'منتج').toString();
                     final qty = (pMap['quantity'] as num?)?.toInt() ?? 1;
                     final price = (pMap['price'] as num?)?.toDouble() ?? 0.0;
-                    final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: true);
+                    final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: isAr);
                     final isTarget = pMap['is_target_company'] != false;
 
                     return Container(

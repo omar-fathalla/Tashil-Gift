@@ -540,7 +540,7 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           final pBarcode = pMap['barcode'] ?? 'N/A';
           final pQty = pMap['quantity'] ?? 1;
           final pPrice = pMap['price'] ?? 0;
-          final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: true);
+          final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: strings.isAr);
           final pTotal = lineLabel.grossNote == null
               ? lineLabel.primary
               : '${lineLabel.primary} (${lineLabel.grossNote})';
@@ -7837,6 +7837,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
               activeCountry: activeCountry,
               strings: strings,
               targetCompany: targetCompany,
+              isAr: isAr,
             ),
           ],
         ],
@@ -8229,6 +8230,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     required CountryCurrency activeCountry,
     required AppStrings strings,
     required String targetCompany,
+    required bool isAr,
   }) {
     if (products.isEmpty) {
       return Padding(
