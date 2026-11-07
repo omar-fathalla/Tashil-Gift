@@ -41,7 +41,7 @@ void main() {
   });
 
   test('an empty barcode without a brand token is not eligible spend', () {
-    const rule = PromotionalRuleItem(
+    final rule = PromotionalRuleItem(
       id: 'tier-500',
       ruleTitle: '500',
       triggerProduct: 'كادبري',
@@ -70,14 +70,14 @@ void main() {
     );
     final totals = PromotionalRuleMatcher.spendTotals(
       products: [member, unknown],
-      rules: const [rule],
+      rules: [rule],
       spendLadderMode: 'consuming',
     );
     expect(totals.eligibleNet, 492);
     expect(totals.invoiceNet, 492 + ((64 - 22) * 3));
     final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
       products: [member, unknown],
-      rules: const [rule],
+      rules: [rule],
     );
     expect(cleared.last.isTargetCompany, isFalse);
   });

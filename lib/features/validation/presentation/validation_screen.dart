@@ -898,8 +898,10 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
           ? compositeBundle.resolvedGameType!.trim()
           : null;
       final gameType = ruleLevelGame ?? activeEvent.gameType;
+      // Wheel, scratch, and direct gift do not name a consuming round.
+      final bool consumingLadder = activeEvent.spendLadderMode == 'consuming';
 
-      if (gameType == 'directGift' || gameType == 'direct_gift') {
+      if (!consumingLadder && (gameType == 'directGift' || gameType == 'direct_gift')) {
         final designatedPrizeObj = activeEvent.availablePrizes.isNotEmpty
             ? activeEvent.availablePrizes.first
             : (activeEvent.allocatedPrizes.isNotEmpty ? activeEvent.allocatedPrizes.first : null);
@@ -996,12 +998,18 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else if (gameType == 'chooseGift') {
+      } else if (consumingLadder || gameType == 'chooseGift') {
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
         final awardRounds = compositeBundle.awardRounds;
-        await Navigator.of(context).push(
+        if (consumingLadder && awardRounds.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(PromotionalRuleMatcher.missingSpendRulesMessage)),
+            );
+          }
+        } else await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
@@ -1026,7 +1034,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else if (gameType == 'scratch') {
+      } else if (!consumingLadder && gameType == 'scratch') {
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames
             : prizeNames;
@@ -1046,7 +1054,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
             _selectedPreviewIndex = 0;
           });
         }
-      } else {
+      } else if (!consumingLadder) {
         // Default: wheel (AIR-85: filter prizes strictly by detected branch stock)
         final candidateGifts = compositeBundle.candidateGiftNames.isNotEmpty
             ? compositeBundle.candidateGiftNames

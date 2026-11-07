@@ -50,6 +50,29 @@ class ExtractedProductItem {
 
   double get totalPrice => price * quantity;
 
+  /// Line figures for a saved product map. [primary] is the net. [grossNote]
+  /// is set only when the printed gross is different, so the two are not
+  /// shown as the same number.
+  static ({String primary, String? grossNote}) lineTotalLabel(
+    Map<String, dynamic> json, {
+    required bool arabic,
+  }) {
+    final item = ExtractedProductItem.fromJson(json);
+    final gross = item.actualLineSpend;
+    final net = item.netEligibleLineSpend;
+    String money(double value) =>
+        value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2);
+    if ((gross - net).abs() <= 0.49) {
+      return (primary: money(net), grossNote: null);
+    }
+    return (
+      primary: money(net),
+      grossNote: arabic
+          ? 'قبل الخصم ${money(gross)}'
+          : 'gross ${money(gross)}',
+    );
+  }
+
   /// The actual monetary spend paid on this receipt line item.
   /// Strictly prevents artificial spend inflation from physical bundle piece counts (AIR-37).
   double get actualLineSpend {

@@ -2029,8 +2029,11 @@ class _ClientReceiptUploadScreenState
           ruleLevelGame ??
           currentEvent?.gameType ??
           (totalValue >= 500 ? 'scratchCard' : 'spinTheWheel');
+      // Wheel, scratch, and direct gift do not name a consuming round.
+      // A consuming campaign is sent to the round gift screen instead.
+      final bool consumingLadder = (currentEvent?.spendLadderMode ?? 'exclusive') == 'consuming';
 
-      if (gameType == 'directGift' || gameType == 'direct_gift') {
+      if (!consumingLadder && (gameType == 'directGift' || gameType == 'direct_gift')) {
         final designatedPrizeObj =
             (currentEvent?.availablePrizes.isNotEmpty ?? false)
             ? currentEvent!.availablePrizes.first
@@ -2158,7 +2161,7 @@ class _ClientReceiptUploadScreenState
           ),
         );
         _resetFormForNextCustomer();
-      } else if (gameType == 'chooseGift') {
+      } else if (consumingLadder || gameType == 'chooseGift') {
         final enteredPhone = _customerPhoneController.text
             .toEnglishDigits()
             .trim();
@@ -2169,7 +2172,14 @@ class _ClientReceiptUploadScreenState
             ? compositeBundle.candidateGiftNames
             : prizeNames;
         final awardRounds = compositeBundle.awardRounds;
-        await Navigator.of(context).push(
+        if (consumingLadder && awardRounds.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(PromotionalRuleMatcher.missingSpendRulesMessage)),
+            );
+          }
+          _resetFormForNextCustomer();
+        } else await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => ChooseGiftScreen(
               transactionId: transactionRef.id,
@@ -2192,9 +2202,9 @@ class _ClientReceiptUploadScreenState
           ),
         );
         _resetFormForNextCustomer();
-      } else if (gameType == 'scratch' ||
+      } else if (!consumingLadder && (gameType == 'scratch' ||
           gameType == 'scratchCard' ||
-          (gameType.isEmpty && totalValue >= 500)) {
+          (gameType.isEmpty && totalValue >= 500))) {
         final enteredPhone = _customerPhoneController.text
             .toEnglishDigits()
             .trim();
@@ -2219,7 +2229,7 @@ class _ClientReceiptUploadScreenState
           ),
         );
         _resetFormForNextCustomer();
-      } else {
+      } else if (!consumingLadder) {
         final enteredPhone = _customerPhoneController.text
             .toEnglishDigits()
             .trim();

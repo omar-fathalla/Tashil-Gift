@@ -540,7 +540,10 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
           final pBarcode = pMap['barcode'] ?? 'N/A';
           final pQty = pMap['quantity'] ?? 1;
           final pPrice = pMap['price'] ?? 0;
-          final pTotal = pMap['totalPrice'] ?? ((pPrice is num ? pPrice : 0) * (pQty is num ? pQty : 1));
+          final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: true);
+          final pTotal = lineLabel.grossNote == null
+              ? lineLabel.primary
+              : '${lineLabel.primary} (${lineLabel.grossNote})';
           final isPromo = pMap['isTargetCompany'] == true;
 
           rows.add([
@@ -2309,7 +2312,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         actions: [
           // Primary Action Button (Game / Choice / Direct Claim)
           if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
-            if (isChooseGift && (!consumingLadder || effectiveRounds.isNotEmpty))
+            if ((consumingLadder && effectiveRounds.isNotEmpty) || (isChooseGift && !consumingLadder))
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2344,7 +2347,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isWheel)
+            else if (!consumingLadder && isWheel)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2372,7 +2375,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isScratch)
+            else if (!consumingLadder && isScratch)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -2398,7 +2401,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isDirect)
+            else if (!consumingLadder && isDirect)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -8278,7 +8281,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                   horizontalMargin: 12,
                   headingRowHeight: 38,
                   dataRowMinHeight: 40,
-                  dataRowMaxHeight: 46,
+                  dataRowMaxHeight: 64,
                   columns: [
                     DataColumn(label: Text('#', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                     DataColumn(label: Text(strings.productNameCol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -8295,7 +8298,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                     final barcode = itemMap['barcode']?.toString().trim() ?? '';
                     final qty = itemMap['quantity'] is num ? (itemMap['quantity'] as num).toInt() : 1;
                     final price = itemMap['price'] is num ? (itemMap['price'] as num).toDouble() : 0.0;
-                    final total = itemMap['totalPrice'] is num ? (itemMap['totalPrice'] as num).toDouble() : (price * qty);
+                    final lineLabel = ExtractedProductItem.lineTotalLabel(itemMap, arabic: isAr);
                     final isPromo = itemMap['isTargetCompany'] == true;
 
                     return DataRow(
@@ -8352,7 +8355,16 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
                         ),
                         DataCell(Text('$qty', style: const TextStyle(fontSize: 12))),
                         DataCell(Text(price.toStringAsFixed(2), style: const TextStyle(fontSize: 12))),
-                        DataCell(Text(total.toStringAsFixed(2), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                        DataCell(Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(lineLabel.primary, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            if (lineLabel.grossNote != null)
+                              Text(lineLabel.grossNote!, style: TextStyle(fontSize: 9, color: colorScheme.outline)),
+                          ],
+                        )),
                         DataCell(
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

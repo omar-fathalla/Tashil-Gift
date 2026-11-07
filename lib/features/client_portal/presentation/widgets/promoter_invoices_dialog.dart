@@ -2248,6 +2248,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                     final name = (pMap['name'] ?? pMap['product_name'] ?? 'منتج').toString();
                     final qty = (pMap['quantity'] as num?)?.toInt() ?? 1;
                     final price = (pMap['price'] as num?)?.toDouble() ?? 0.0;
+                    final lineLabel = ExtractedProductItem.lineTotalLabel(pMap, arabic: true);
                     final isTarget = pMap['is_target_company'] != false;
 
                     return Container(
@@ -2276,7 +2277,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                             ),
                           ),
                           Text(
-                            'الكمية: $qty | السعر: ${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} $currencySymbol',
+                            'الكمية: $qty | السعر: ${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} | السطر ${lineLabel.primary}${lineLabel.grossNote == null ? '' : ' (${lineLabel.grossNote})'} $currencySymbol',
                             style: GoogleFonts.cairo(
                               fontSize: 11.5,
                               color: colorScheme.onSurfaceVariant,
@@ -3573,7 +3574,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         actions: [
           // Primary Action Button (Game / Choice / Direct Claim)
           if (docId != null && docId.isNotEmpty && winningCampaign != null) ...[
-            if (isChooseGift && (!consumingLadder || effectiveRounds.isNotEmpty))
+            if ((consumingLadder && effectiveRounds.isNotEmpty) || (isChooseGift && !consumingLadder))
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3608,7 +3609,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isWheel)
+            else if (!consumingLadder && isWheel)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3636,7 +3637,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isScratch)
+            else if (!consumingLadder && isScratch)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -3662,7 +3663,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                 ),
               )
-            else if (isDirect)
+            else if (!consumingLadder && isDirect)
               FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(ctx);
