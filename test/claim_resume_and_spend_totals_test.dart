@@ -8,7 +8,11 @@ void main() {
     expect(claimedLedgerUnits([
       {'giftId': 'a'},
       {'giftId': 'a', 'quantity': null},
-    ]), 2);
+      {'giftId': 'a', 'quantity': ''},
+      {'giftId': 'a', 'quantity': '  '},
+      {'giftId': 'a', 'quantity': 1.9},
+      {'giftId': 'a', 'quantity': 0},
+    ]), 6);
     final resume = resumeFromLedger(
       claimedGifts: [
         {'giftName': '150', 'quantity': 1},

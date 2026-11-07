@@ -12,10 +12,12 @@ int claimedLedgerUnits(Object? raw) {
 int claimedEntryUnits(Object? gift) {
   if (gift is! Map) return 1;
   final quantity = gift['quantity'];
-  if (quantity == null || quantity == '') return 1;
-  final parsed = quantity is num ? quantity.toDouble() : double.tryParse('$quantity');
+  if (quantity == null) return 1;
+  if (quantity is String && quantity.trim().isEmpty) return 1;
+  final parsed = quantity is num ? quantity.toDouble() : double.tryParse('$quantity'.trim());
   if (parsed == null || parsed <= 0) return 1;
-  return parsed.floor();
+  final units = parsed.floor();
+  return units > 0 ? units : 1;
 }
 
 class GiftResume {

@@ -1758,6 +1758,23 @@ class CompanyGiftsService {
     }
   }
 
+  /// A consuming ladder is only correct inside the callable transaction.
+  /// If the campaign cannot be read, local stock is also refused: an unknown
+  /// campaign must not be treated as an exclusive one.
+  Future<bool> _localStockWouldBypassConsumingLedger(String eventId) async {
+    try {
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return true;
+      final data = doc.data() ?? const <String, dynamic>{};
+      final mode = (data['spendLadderMode'] ?? data['spend_ladder_mode'] ?? 'exclusive')
+          .toString()
+          .trim();
+      return mode == 'consuming';
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Records a gift claim and decrements campaign stock on the server.
   ///
   /// Anonymous field reps cannot update the receipt or the prize counters
@@ -1784,6 +1801,12 @@ class CompanyGiftsService {
         decrements: cleanDecrements,
       );
       if (handled) return;
+      if (await _localStockWouldBypassConsumingLedger(eventId)) {
+        throw ClaimCallableException(
+          code: 'unavailable',
+          message: 'تعذر اعتماد الجولة لأن الخادم غير متاح. لم يُكتب سجل الهدايا ولم يُخصم الرصيد.',
+        );
+      }
     }
 
     if (receiptId != null && receiptId.isNotEmpty && patch.isNotEmpty) {

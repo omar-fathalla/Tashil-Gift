@@ -86,7 +86,10 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   late int _remainingChances;
   int _currentRound = 1;
   final List<String> _wonPrizes = [];
+  int _claimedUnits = 0;
   bool _ledgerReady = true;
+  bool _ledgerFailed = false;
+  int _ledgerRequest = 0;
   Map<String, String> _prizeImages = {};
   bool _whatsappSent = false;
   bool? _enableWhatsAppWinnerNotification;
@@ -146,29 +149,53 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       ? widget.roundPrizeNames.length
       : (widget.totalChances > 0 ? widget.totalChances : 1);
 
-  Future<void> _resumeFromAuthoritativeLedger() async {
-    try {
-      final snap = await ref
-          .read(firestoreProvider)
-          .collection('receipts_transactions')
-          .doc(widget.transactionId)
-          .get();
-      final resume = resumeFromLedger(
-        claimedGifts: snap.data()?['claimed_gifts'],
-        totalRounds: _roundCount,
-      );
-      if (!mounted) return;
-      setState(() {
-        _currentRound = resume.currentRound;
-        _remainingChances = resume.remaining;
-        _wonPrizes
-          ..clear()
-          ..addAll(resume.wonNames);
-        _ledgerReady = true;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _ledgerReady = true);
+  void _applyResume(GiftResume resume) {
+    _currentRound = resume.currentRound;
+    _remainingChances = resume.remaining;
+    _claimedUnits = resume.claimedUnits;
+    _wonPrizes
+      ..clear()
+      ..addAll(resume.wonNames);
+    _ledgerReady = true;
+    _ledgerFailed = false;
+  }
+
+  Future<GiftResume> _readAuthoritativeResume() async {
+    final snap = await ref
+        .read(firestoreProvider)
+        .collection('receipts_transactions')
+        .doc(widget.transactionId)
+        .get();
+    if (!snap.exists) {
+      throw StateError('receipt-ledger-missing');
     }
+    return resumeFromLedger(
+      claimedGifts: snap.data()?['claimed_gifts'],
+      totalRounds: _roundCount,
+    );
+  }
+
+  Future<void> _resumeFromAuthoritativeLedger() async {
+    final request = ++_ledgerRequest;
+    try {
+      final resume = await _readAuthoritativeResume();
+      if (!mounted || request != _ledgerRequest) return;
+      setState(() => _applyResume(resume));
+    } catch (_) {
+      if (!mounted || request != _ledgerRequest) return;
+      setState(() {
+        _ledgerReady = false;
+        _ledgerFailed = true;
+      });
+    }
+  }
+
+  void _retryAuthoritativeLedger() {
+    setState(() {
+      _ledgerReady = false;
+      _ledgerFailed = false;
+    });
+    _resumeFromAuthoritativeLedger();
   }
 
   Future<void> _preloadMetadataForWhatsApp() async {
@@ -337,7 +364,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
   }
 
   Future<void> _handleConfirmSelection() async {
-    if (_selectedGiftIndex == null || _isConfirming || !_ledgerReady || _remainingChances <= 0) return;
+    if (_selectedGiftIndex == null || _isConfirming || !_ledgerReady || _ledgerFailed || _remainingChances <= 0) return;
 
     final selectedPrize = _items[_selectedGiftIndex!.clamp(0, _items.length - 1)];
     final roundIndex = _currentRound - 1;
@@ -360,12 +387,49 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       _isConfirming = true;
     });
 
+    if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+      try {
+        final fresh = await _readAuthoritativeResume();
+        if (!mounted) return;
+        final stale = fresh.claimedUnits != _claimedUnits ||
+            fresh.currentRound != _currentRound ||
+            fresh.remaining != _remainingChances;
+        if (stale) {
+          final isAr = ref.read(localeProvider).languageCode == 'ar';
+          setState(() {
+            _applyResume(fresh);
+            _selectedGiftIndex = null;
+            _isConfirming = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isAr
+                    ? 'تغير سجل الهدايا المحفوظ. تم تحديث الجولة ولم يُرسل طلب جديد.'
+                    : 'The saved gift ledger changed. The round was refreshed and no new claim was sent.',
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _ledgerReady = false;
+          _ledgerFailed = true;
+          _isConfirming = false;
+        });
+        return;
+      }
+    }
+
     bool claimApplied = false;
     bool claimSaved = false;
     try {
       audioService.playWinFanfare();
 
       _remainingChances = (_remainingChances - 1).clamp(0, 999);
+      _claimedUnits += 1;
       _wonPrizes.add(selectedPrize);
       claimApplied = true;
       Future<WhatsAppGatewayResult?>? whatsappFuture;
@@ -462,8 +526,17 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
       if (claimApplied && !claimSaved) {
         if (_wonPrizes.isNotEmpty) _wonPrizes.removeLast();
         _remainingChances = (_remainingChances + 1).clamp(0, 999);
+        _claimedUnits = (_claimedUnits - 1).clamp(0, 999);
       }
       if (!mounted) return;
+      if (!widget.isDemo && widget.transactionId.trim().isNotEmpty) {
+        await _resumeFromAuthoritativeLedger();
+        if (!mounted) return;
+        if (!_ledgerReady) {
+          setState(() => _isConfirming = false);
+          return;
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppErrorHandler.claimFailureMessage(e)),
@@ -748,7 +821,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
                           padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: isMobile ? 10 : 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: (_isConfirming || !_ledgerReady || _remainingChances <= 0)
+                        onPressed: (_isConfirming || !_ledgerReady || _ledgerFailed || _remainingChances <= 0)
                             ? null
                             : _handleConfirmSelection,
                       ),
@@ -758,7 +831,32 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
               )
             : null,
         body: !_ledgerReady
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: _ledgerFailed
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_off_rounded, color: colorScheme.error, size: 36),
+                            const SizedBox(height: 12),
+                            Text(
+                              isAr
+                                  ? 'تعذر قراءة سجل الهدايا المحفوظ. لن يبدأ الاختيار ولن يُسمح بالصرف قبل نجاح القراءة.'
+                                  : 'The saved gift ledger could not be read. Selection stays closed until a fresh read succeeds.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: _retryAuthoritativeLedger,
+                              child: Text(isAr ? 'إعادة قراءة السجل' : 'Read the ledger again'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const CircularProgressIndicator(),
+              )
             : SafeArea(
           child: Column(
             children: [

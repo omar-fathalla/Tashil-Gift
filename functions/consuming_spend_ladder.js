@@ -188,9 +188,14 @@ function roundAllows(round, claim) {
 }
 
 function claimedEntryUnits(gift) {
-  if (!gift || gift.quantity == null || gift.quantity === "") return 1;
-  const count = Number(gift.quantity);
-  return Number.isFinite(count) && count > 0 ? count : 1;
+  if (!gift || typeof gift !== "object") return 1;
+  const raw = gift.quantity;
+  if (raw == null) return 1;
+  if (typeof raw === "string" && raw.trim() === "") return 1;
+  const count = Number(raw);
+  if (!Number.isFinite(count) || count <= 0) return 1;
+  const units = Math.floor(count);
+  return units > 0 ? units : 1;
 }
 
 function keptLedgerEntry(gift) {

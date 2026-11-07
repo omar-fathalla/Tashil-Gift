@@ -2079,6 +2079,17 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
 
       final String primaryImageUrl = uploadedImageUrls.isNotEmpty ? uploadedImageUrls.first : '';
       final String primaryStoragePath = uploadedStoragePaths.isNotEmpty ? uploadedStoragePaths.first : '';
+      final rejectedSpend = PromotionalRuleMatcher.spendTotals(
+        products: result.extractedProducts,
+        rules: activeEvent.promotionalRules,
+        spendLadderMode: activeEvent.spendLadderMode,
+      );
+      final double eligibleSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.eligibleNet
+          : totalValue;
+      final double invoiceSpend = activeEvent.spendLadderMode == 'consuming'
+          ? rejectedSpend.invoiceNet
+          : totalValue;
 
       DocumentSnapshot<Map<String, dynamic>>? existingDoc;
       if (receiptNumber.isNotEmpty) {
@@ -2102,8 +2113,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         'status': 'rejected',
         'rejection_reason': rejectionReason,
         'unfulfilled_conditions': unfulfilledConditions,
-        'total_value': totalValue,
-        'target_company_total': totalValue,
+        'total_value': invoiceSpend,
+        'target_company_total': eligibleSpend,
         'receipt_date': result.receiptDate,
         'extracted_products': result.extractedProducts.map((p) => p.toJson()).toList(),
         'store_chain_detected': result.storeChainDetected,
