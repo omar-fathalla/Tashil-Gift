@@ -185,17 +185,32 @@ async function enableSemantics(page) {
   await page.evaluate(() => document.querySelector('flt-semantics-placeholder')?.click());
 }
 
-async function fillFlutterField(page, ariaLabel, value) {
+async function fillFlutterField(page, ariaLabel, value, { tabInto = false } = {}) {
   const field = page.locator(`input[aria-label="${ariaLabel}"]`);
   await field.waitFor({ timeout: 15000 });
-  await field.click();
-  await page.keyboard.press('Control+A');
-  await page.keyboard.press('Backspace');
+  if (tabInto) {
+    await page.keyboard.press('Tab');
+    const focused = await page.evaluate((label) => {
+      const el = document.activeElement;
+      return !!(el && el.getAttribute('aria-label') === label);
+    }, ariaLabel);
+    if (!focused) {
+      throw new Error(`Tab did not move Flutter focus to "${ariaLabel}". Stopped before submit.`);
+    }
+  } else {
+    await field.click();
+    if ((await field.inputValue()).length > 0) await page.keyboard.press('Control+A');
+  }
   await page.keyboard.insertText(value);
   const actual = await field.inputValue();
-  if (actual !== value) {
+  const focusedLength = await page.evaluate((label) => {
+    const el = document.activeElement;
+    if (!el || el.getAttribute('aria-label') !== label) return -1;
+    return (el.value || '').length;
+  }, ariaLabel);
+  if (actual !== value || focusedLength !== value.length) {
     throw new Error(
-      `Login field "${ariaLabel}" length ${actual.length} after entry, expected ${value.length}. Stopped before submit.`,
+      `Login field "${ariaLabel}" length ${actual.length}, focused length ${focusedLength}, expected ${value.length}. Stopped before submit.`,
     );
   }
 }
@@ -234,7 +249,7 @@ async function main() {
     await page.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' });
     await enableSemantics(page);
     await fillFlutterField(page, 'البريد الإلكتروني', adminEmail);
-    await fillFlutterField(page, 'كلمة المرور', adminPassword);
+    await fillFlutterField(page, 'كلمة المرور', adminPassword, { tabInto: true });
     await shot(page, '04-login-values');
     await page.getByRole('button', { name: 'دخول الحساب' }).click();
     await page.getByRole('button', { name: /^الفواتير/ }).waitFor({ timeout: 60000 });
