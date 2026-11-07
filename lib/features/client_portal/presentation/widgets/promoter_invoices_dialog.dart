@@ -18,6 +18,7 @@ import '../../../../core/services/retail_chains_service.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/constants/country_currency_config.dart';
 import '../../../../core/utils/arabic_numbers_utils.dart';
+import '../../../../core/utils/canonical_branch_resolver.dart';
 import '../../../../core/utils/error_handler.dart';
 import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
@@ -334,16 +335,9 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
       }
     }
 
-    // 5. Containment match
-    for (final canonical in canonicalBranches) {
-      final canonComp = _cleanBranchForComparison(canonical);
-      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
-        return canonical;
-      }
-    }
-
-    // Default to first canonical branch
-    return canonicalBranches.first;
+    // Exact, then one longest contained name. Never the first shorter sibling
+    // and never the first campaign branch when the text is still uncertain.
+    return CanonicalBranchResolver.pickCampaignName(clean, canonicalBranches) ?? clean;
   }
 
   Future<void> _loadPinnedBranch() async {
@@ -602,7 +596,16 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
                   final bool isValid = isExplicitlyValid || (!isExplicitlyRejected && ((data['unfulfilled_conditions'] as List?)?.isEmpty ?? true));
 
                   final rawBranch = (data['branch_detected'] ?? data['branch_name'] ?? data['branch'] ?? '').toString().trim();
-                  final canonicalBranch = _normalizeBranchName(rawBranch, canonicalBranches, isAr);
+                  final identity = CanonicalBranchResolver.resolve(
+                    branchIds: widget.event.branchIds,
+                    branchNames: canonicalBranches,
+                    branchId: (data['branch_id'] ?? '').toString(),
+                    detectedName: rawBranch,
+                    receiptNumber: (data['receipt_number'] ?? '').toString(),
+                  );
+                  final canonicalBranch = identity.certain && identity.name.trim().isNotEmpty
+                      ? identity.name.trim()
+                      : rawBranch;
 
                   parsedInvoices.add({
                     'docId': doc.id,

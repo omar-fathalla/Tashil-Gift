@@ -13,6 +13,7 @@ import 'package:csv/csv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../../../core/utils/canonical_branch_resolver.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
@@ -419,15 +420,9 @@ class _InvoicesLogScreenState extends ConsumerState<InvoicesLogScreen> {
       }
     }
 
-    // 5. Fallback containment matching
-    for (final canonical in canonicalBranches) {
-      final canonComp = _cleanBranchForComparison(canonical);
-      if (canonComp.isNotEmpty && (cleanComp.contains(canonComp) || canonComp.contains(cleanComp))) {
-        return canonical;
-      }
-    }
-
-    return clean;
+    // 5. Exact, then the one longest name fully contained in the detected
+    // text. A shorter sibling is not selected just because it is listed first.
+    return CanonicalBranchResolver.pickCampaignName(clean, canonicalBranches) ?? clean;
   }
 
   /// Server-side window for the current date filter (null = no bound).
@@ -1902,7 +1897,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
-        if (result.branchDetected.isNotEmpty) 'branch_detected': result.branchDetected,
+        if (canonical.trim().isNotEmpty) 'branch_detected': canonical,
         'canonical_branch': canonical,
         'analysis_duration_seconds': result.durationSeconds,
         'ai_kpi_rating': result.kpiRating,
@@ -2718,7 +2713,20 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             : canonicalBranches;
 
         final rawBranch = (data['branch_detected'] ?? data['branch'] ?? '').toString().trim();
-        final canonicalBranch = _normalizeBranchName(rawBranch, eventBranches, isAr);
+        final storedBranchId = (data['branch_id'] ?? '').toString().trim();
+        final receiptNo = (data['receipt_number'] ?? '').toString();
+        final identity = CanonicalBranchResolver.resolve(
+          branchIds: event?.branchIds ?? const [],
+          branchNames: eventBranches,
+          branchId: storedBranchId,
+          detectedName: rawBranch,
+          receiptNumber: receiptNo,
+        );
+        // A known id or a unique store code corrects a stored short sibling.
+        // An uncertain row keeps the text it already has.
+        final canonicalBranch = identity.certain && identity.name.trim().isNotEmpty
+            ? identity.name.trim()
+            : (rawBranch.isNotEmpty ? rawBranch : _normalizeBranchName(rawBranch, eventBranches, isAr));
 
         DateTime? date;
         if (data['timestamp'] is Timestamp) {

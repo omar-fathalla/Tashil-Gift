@@ -12,6 +12,7 @@ import '../../../core/services/game_audio_service.dart';
 import '../../../core/widgets/game_sound_controls.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
+import '../../../core/utils/canonical_branch_resolver.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -449,34 +450,30 @@ class _DirectGiftClaimScreenState extends ConsumerState<DirectGiftClaimScreen>
         final branchNamesList = (data['branchNames'] as List?)?.map((e) => e.toString()).toList() ?? [];
         final branchIdsList = (data['branchIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
         final explicitWidgetBranch = (widget.branchName ?? '').trim();
+        final storedBranchId = (widget.branchId ?? '').trim();
 
-        if (explicitWidgetBranch.isNotEmpty) {
-          // Try to find exact canonical branch name matching explicitWidgetBranch
-          for (final bn in branchNamesList) {
-            if (CompanyGiftsService.matchesBranchName(bn, explicitWidgetBranch)) {
-              branchNameFound = bn;
-              break;
-            }
-          }
-          branchNameFound ??= explicitWidgetBranch;
-        } else if (widget.branchId != null && widget.branchId!.isNotEmpty) {
-          final idx = branchIdsList.indexOf(widget.branchId!);
+        // The id already chosen at save wins. Do not remap it through a
+        // shorter name that shares a token.
+        if (storedBranchId.isNotEmpty) {
+          final idx = branchIdsList.indexOf(storedBranchId);
           if (idx != -1 && idx < branchNamesList.length) {
             branchNameFound = branchNamesList[idx];
-          } else {
-            for (final bn in branchNamesList) {
-              if (bn == widget.branchId || CompanyGiftsService.matchesBranchName(bn, widget.branchId!)) {
-                branchNameFound = bn;
-                break;
-              }
-            }
           }
+        }
+        if (branchNameFound == null && explicitWidgetBranch.isNotEmpty) {
+          branchNameFound = CanonicalBranchResolver.pickCampaignName(
+                explicitWidgetBranch,
+                branchNamesList,
+              ) ??
+              explicitWidgetBranch;
         }
 
         final targetPrizeName = (discoveredName != null && discoveredName.isNotEmpty)
             ? discoveredName
             : widget.prizeName;
-        final targetBranch = _resolvedBranchName ?? branchNameFound ?? widget.branchId;
+        final targetBranch = storedBranchId.isNotEmpty
+            ? storedBranchId
+            : (_resolvedBranchName ?? branchNameFound ?? widget.branchId);
 
         final matchIdx = CompanyGiftsService.findBestPrizeMatchIndex(
           prizes,

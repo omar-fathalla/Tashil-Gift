@@ -1496,17 +1496,14 @@ class _ClientReceiptUploadScreenState
                     : previewUrls(),
                 initialAiMetadata: {
                   'store_chain_detected': result.storeChainDetected,
-                  'branch_detected': result.branchDetected,
+                  ...ReceiptBranchResolver.firestoreFields(
+                    _activeEvent ?? widget.event,
+                    detectedName: result.branchDetected,
+                    receiptNumber: result.receiptNumber,
+                  ),
                   if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
         if (_lastNearMiss.isNotEmpty) 'near_miss': _lastNearMiss,
-                  'branch_id':
-                      ReceiptBranchResolver.resolve(
-                        _activeEvent ?? widget.event,
-                        result.branchDetected,
-                        receiptNumber: result.receiptNumber,
-                      ).id ??
-                      '',
                   'receipt_date': result.receiptDate,
                   'analysis_duration_seconds': result.durationSeconds,
                   'analysis_duration_ms': result.durationMs,
@@ -1875,14 +1872,11 @@ class _ClientReceiptUploadScreenState
             .map((p) => p.toJson())
             .toList(),
         'store_chain_detected': result.storeChainDetected,
-        'branch_detected': result.branchDetected,
-        'branch_id':
-            ReceiptBranchResolver.resolve(
-              _activeEvent ?? widget.event,
-              result.branchDetected,
-              receiptNumber: result.receiptNumber,
-            ).id ??
-            '',
+        ...ReceiptBranchResolver.firestoreFields(
+          _activeEvent ?? widget.event,
+          detectedName: result.branchDetected,
+          receiptNumber: result.receiptNumber,
+        ),
         'is_branch_matched': result.isBranchMatched,
         if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,
@@ -4179,14 +4173,11 @@ class _ClientReceiptUploadScreenState
             .map((p) => p.toJson())
             .toList(),
         'store_chain_detected': result.storeChainDetected,
-        'branch_detected': result.branchDetected,
-        'branch_id':
-            ReceiptBranchResolver.resolve(
-              _activeEvent ?? widget.event,
-              result.branchDetected,
-              receiptNumber: result.receiptNumber,
-            ).id ??
-            '',
+        ...ReceiptBranchResolver.firestoreFields(
+          _activeEvent ?? widget.event,
+          detectedName: result.branchDetected,
+          receiptNumber: result.receiptNumber,
+        ),
         'is_branch_matched': result.isBranchMatched,
         if (_lastBranchLoad.isNotEmpty) 'branch_load': _lastBranchLoad,
         if (_lastPriceCheck.isNotEmpty) 'price_check': _lastPriceCheck,

@@ -279,9 +279,6 @@ class _UnifiedMultiCampaignClaimScreenState
           'companySlug': campaign.companySlug,
           'targetCompany': campaign.targetCompany,
           'retail_chain_name': campaign.retailChainName,
-          'branch_detected': q.resolvedBranchName ?? '',
-          'canonical_branch': q.resolvedBranchName ?? '',
-          'branch_id': q.resolvedBranchId ?? '',
           'customerPhone': widget.customerPhone,
           'customerName': widget.customerName,
           'prize_won': q.designatedPrize,
@@ -305,6 +302,10 @@ class _UnifiedMultiCampaignClaimScreenState
           if (widget.imageUrls.isNotEmpty) 'image_url': widget.imageUrls.first,
           if (widget.imageUrls.length > 1) 'image_urls': widget.imageUrls,
           if (widget.initialAiMetadata != null) ...widget.initialAiMetadata!,
+          // After AI metadata so a short sibling name cannot overwrite the id.
+          'branch_detected': q.resolvedBranchName ?? '',
+          'canonical_branch': q.resolvedBranchName ?? '',
+          'branch_id': q.resolvedBranchId ?? '',
         });
 
         // Decrement branch inventory

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../features/admin/domain/event_model.dart';
 import 'ai_receipt_service.dart';
+import '../utils/canonical_branch_resolver.dart';
 import '../utils/receipt_date_window.dart';
 
 /// Result of evaluating a receipt against a single campaign.
@@ -180,8 +181,8 @@ class MultiCampaignReceiptEvaluator {
     // 3. Resolve canonical branch
     final branchResolution = _resolveBranch(
       detectedBranch: result.branchDetected,
-      detectedChain: result.storeChainDetected,
       campaign: campaign,
+      receiptNumber: result.receiptNumber,
     );
 
     if (!campaign.isAllBranches && campaign.branchNames.isNotEmpty && !branchResolution.isMatched) {
@@ -349,86 +350,39 @@ class MultiCampaignReceiptEvaluator {
   /// Helper to resolve canonical branch and check eligibility
   static _BranchResolution _resolveBranch({
     required String detectedBranch,
-    required String detectedChain,
     required EventModel campaign,
+    String receiptNumber = '',
   }) {
     if (campaign.isAllBranches || campaign.branchNames.isEmpty) {
+      final onlyId = campaign.branchIds.length == 1 ? campaign.branchIds.first : null;
       return _BranchResolution(
         isMatched: true,
-        branchId: campaign.branchIds.isNotEmpty ? campaign.branchIds.first : null,
-        branchName: detectedBranch.isNotEmpty ? detectedBranch : (campaign.branchNames.isNotEmpty ? campaign.branchNames.first : null),
+        branchId: onlyId,
+        branchName: detectedBranch.isNotEmpty
+            ? detectedBranch
+            : (campaign.branchNames.isNotEmpty ? campaign.branchNames.first : null),
       );
     }
 
-    final cleanDetected = _cleanBranchForComparison(detectedBranch);
-    if (cleanDetected.isEmpty) {
+    final match = CanonicalBranchResolver.resolve(
+      branchIds: campaign.branchIds,
+      branchNames: campaign.branchNames,
+      detectedName: detectedBranch,
+      receiptNumber: receiptNumber,
+    );
+    if (match.certain) {
       return _BranchResolution(
-        isMatched: false,
-        branchId: campaign.branchIds.isNotEmpty ? campaign.branchIds.first : null,
-        branchName: null,
+        isMatched: true,
+        branchId: match.id,
+        branchName: match.name,
       );
     }
-
-    // 1. Direct or fuzzy match with campaign canonical branches
-    for (int i = 0; i < campaign.branchNames.length; i++) {
-      final canonName = campaign.branchNames[i];
-      final cleanCanon = _cleanBranchForComparison(canonName);
-      if (cleanCanon == cleanDetected || cleanCanon.contains(cleanDetected) || cleanDetected.contains(cleanCanon)) {
-        final bId = i < campaign.branchIds.length ? campaign.branchIds[i] : null;
-        return _BranchResolution(
-          isMatched: true,
-          branchId: bId,
-          branchName: canonName,
-        );
-      }
-    }
-
-    // 2. Specific landmark matching
-    for (int i = 0; i < campaign.branchNames.length; i++) {
-      final canonName = campaign.branchNames[i];
-      final cleanCanon = _cleanBranchForComparison(canonName);
-
-      if ((cleanDetected.contains('سموح') && cleanCanon.contains('سموح')) ||
-          (cleanDetected.contains('عجمي') && cleanCanon.contains('عجمي')) ||
-          (cleanDetected.contains('جاردينيا') && cleanCanon.contains('جاردينيا')) ||
-          (cleanDetected.contains('رحاب') && cleanCanon.contains('رحاب')) ||
-          (cleanDetected.contains('محله') && cleanCanon.contains('محله')) ||
-          (cleanDetected.contains('منصور') && cleanCanon.contains('منصور')) ||
-          (cleanDetected.contains('تجمع') && cleanCanon.contains('تجمع')) ||
-          (cleanDetected.contains('اكتوبر') && cleanCanon.contains('اكتوبر')) ||
-          (cleanDetected.contains('منتزه') && cleanCanon.contains('منتزه')) ||
-          (cleanDetected.contains('ميامي') && cleanCanon.contains('ميامي')) ||
-          (cleanDetected.contains('جناكليس') && cleanCanon.contains('جناكليس')) ||
-          (cleanDetected.contains('عبور') && cleanCanon.contains('عبور'))) {
-        final bId = i < campaign.branchIds.length ? campaign.branchIds[i] : null;
-        return _BranchResolution(
-          isMatched: true,
-          branchId: bId,
-          branchName: canonName,
-        );
-      }
-    }
-
+    // Unknown or two possible branches: do not keep the first id.
     return _BranchResolution(
       isMatched: false,
-      branchId: campaign.branchIds.isNotEmpty ? campaign.branchIds.first : null,
+      branchId: null,
       branchName: detectedBranch,
     );
-  }
-
-  static String _cleanBranchForComparison(String input) {
-    return input
-        .toLowerCase()
-        .replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '') // remove governorates like (الإسكندرية)
-        .replaceAll(RegExp(r'[^\w\s\u0600-\u06FF]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll('أ', 'ا')
-        .replaceAll('إ', 'ا')
-        .replaceAll('آ', 'ا')
-        .replaceAll('ة', 'ه')
-        .replaceAll('ى', 'ي')
-        .replaceAll('فرع', '')
-        .trim();
   }
 }
 
