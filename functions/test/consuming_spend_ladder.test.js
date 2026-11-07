@@ -55,20 +55,20 @@ test("forged 150 on the 350 round and extra quantity are rejected", () => {
     { giftId: gift500, giftName: "قسيمة شراء 150 جنيه", quantity: 1, unitValue: 150 },
   ], game_played: true, remaining_chances: 1 };
   assert.equal(verifyConsumingDecrements(event(), receipt, [
-    { prizeIdentifier: gift500, count: 1, unitValue: 150, giftName: "قسيمة شراء 150 جنيه" },
+    { prizeIdentifier: gift500, count: 1, claimSlot: 2, unitValue: 150, giftName: "قسيمة شراء 150 جنيه" },
   ]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), {
     extracted_products: products,
     claimed_gifts: [],
     game_played: false,
     remaining_chances: 3,
-  }, [{ prizeIdentifier: gift500, count: 4, unitValue: 150 }]), "tier_mismatch");
+  }, [{ prizeIdentifier: gift500, count: 4, claimSlot: 0, unitValue: 150 }]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), {
     extracted_products: products,
     claimed_gifts: [{ quantity: 1 }, { quantity: 1 }, { quantity: 1 }],
     game_played: true,
     remaining_chances: 1,
-  }, [{ prizeIdentifier: gift350, count: 1, unitValue: 100 }]), "extra_quantity");
+  }, [{ prizeIdentifier: gift350, count: 1, claimSlot: 3, unitValue: 100 }]), "extra_quantity");
 });
 
 test("canonical gift id is the only authorization", () => {
@@ -86,30 +86,35 @@ test("canonical gift id is the only authorization", () => {
     giftId: gift500,
     prizeIdentifier: gift500,
     count: 1,
+    claimSlot: 2,
     unitValue: 100,
     giftName: "قسيمة شراء 100 جنيه",
   }]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), base, [{
     giftId: "unknown-gift",
     count: 1,
+    claimSlot: 2,
     unitValue: 100,
     giftName: "قسيمة شراء 100 جنيه",
   }]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), base, [{
     prizeIdentifier: "قسيمة شراء 100 جنيه",
     count: 1,
+    claimSlot: 2,
     unitValue: 100,
     giftName: "قسيمة شراء 100 جنيه",
   }]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), base, [{
     prizeIdentifier: gift350,
     count: 1,
+    claimSlot: 2,
     unitValue: 150,
     giftName: "قسيمة شراء 150 جنيه",
   }]), null);
   const stored = planConsumingClaim(event(), base, [{
     prizeIdentifier: gift350,
     count: 1,
+    claimSlot: 2,
     unitValue: 150,
     giftName: "قسيمة شراء 150 جنيه",
   }]);
@@ -124,6 +129,7 @@ test("canonical gift id is the only authorization", () => {
   const wiped = planConsumingClaim(event(), base, [{
     prizeIdentifier: gift350,
     count: 1,
+    claimSlot: 2,
     unitValue: 100,
   }]);
   assert.deepEqual(wiped.claimed_gifts.slice(0, 2).map((gift) => gift.giftId), [gift500, gift500]);
@@ -136,20 +142,26 @@ test("partial retry uses persisted gifts, and a missing quantity still counts as
     claimed_gifts: [{ giftId: gift500, giftName: "قسيمة شراء 150 جنيه" }],
     remaining_chances: 2,
   };
-  assert.equal(verifyConsumingDecrements(event(), once, [{ prizeIdentifier: gift350, count: 1, unitValue: 100 }]), "tier_mismatch");
-  assert.equal(verifyConsumingDecrements(event(), once, [{ prizeIdentifier: gift500, count: 1, unitValue: 150 }]), null);
+  assert.equal(verifyConsumingDecrements(event(), once, [{ prizeIdentifier: gift350, count: 1, claimSlot: 1, unitValue: 100 }]), "tier_mismatch");
+  assert.equal(verifyConsumingDecrements(event(), once, [{ prizeIdentifier: gift500, count: 1, claimSlot: 1, unitValue: 150 }]), null);
+  assert.equal(verifyConsumingDecrements(event(), once, [{ prizeIdentifier: gift500, count: 1, unitValue: 150 }]), "round_unbound");
+  const replay = planConsumingClaim(event(), once, [{ prizeIdentifier: gift500, count: 1, claimSlot: 0, unitValue: 150 }]);
+  assert.equal(replay.reason, null);
+  assert.equal(replay.idempotent, true);
+  assert.deepEqual(replay.decrements, []);
+  assert.equal(replay.claimed_gifts.length, 1);
   const afterTwo = {
     extracted_products: products,
     claimed_gifts: [{ giftId: gift500 }, { giftId: gift500, quantity: null }],
     remaining_chances: 1,
   };
-  assert.equal(verifyConsumingDecrements(event(), afterTwo, [{ prizeIdentifier: gift500, count: 1, unitValue: 150 }]), "tier_mismatch");
+  assert.equal(verifyConsumingDecrements(event(), afterTwo, [{ prizeIdentifier: gift500, count: 1, claimSlot: 2, unitValue: 150 }]), "tier_mismatch");
   assert.equal(verifyConsumingDecrements(event(), {
     extracted_products: products,
     claimed_gifts: [{ quantity: 3 }],
     game_played: true,
     remaining_chances: 0,
-  }, [{ prizeIdentifier: gift500, count: 1, unitValue: 150 }]), "already_claimed");
+  }, [{ prizeIdentifier: gift500, count: 1, claimSlot: 3, unitValue: 150 }]), "already_claimed");
 });
 
 test("a 350-only product does not fund the 500 tier", () => {

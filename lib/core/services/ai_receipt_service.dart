@@ -2161,19 +2161,36 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         }
 
         if (spendLadderMode == 'consuming') {
-          final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
-            products: result.extractedProducts,
-            rules: promotionalRules,
-          );
-          final totals = PromotionalRuleMatcher.spendTotals(
-            products: cleared,
-            rules: promotionalRules,
-            spendLadderMode: spendLadderMode,
-          );
-          result = result.copyWith(
-            extractedProducts: cleared,
-            targetCompanyTotal: totals.eligibleNet,
-          );
+          final hasSpendRules = promotionalRules.any(PromotionalRuleMatcher.isConsumingSpendRule);
+          if (!hasSpendRules) {
+            result = result.copyWith(
+              extractedProducts: [
+                for (final product in result.extractedProducts)
+                  if (product.isTargetCompany) product.copyWith(isTargetCompany: false) else product,
+              ],
+              targetCompanyTotal: 0,
+              chancesEarned: 0,
+              isValid: false,
+              unfulfilledConditions: [
+                ...result.unfulfilledConditions,
+                PromotionalRuleMatcher.missingSpendRulesMessage,
+              ],
+            );
+          } else {
+            final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
+              products: result.extractedProducts,
+              rules: promotionalRules,
+            );
+            final totals = PromotionalRuleMatcher.spendTotals(
+              products: cleared,
+              rules: promotionalRules,
+              spendLadderMode: spendLadderMode,
+            );
+            result = result.copyWith(
+              extractedProducts: cleared,
+              targetCompanyTotal: totals.eligibleNet,
+            );
+          }
         }
 
         // Auto-heal targetCompanyTotal if sum of extracted target products exceeds it (AIR-58).
@@ -3605,18 +3622,31 @@ class PromotionalRuleMatcher {
     return false;
   }
 
+  /// Shown when a consuming campaign has no spend rule. A company flag is not
+  /// a substitute, and no gift is awarded.
+  static const String missingSpendRulesMessage =
+      'تعذر احتساب الهدايا: حملة شرائح الإنفاق لا تحتوي على قاعدة إنفاق، ولا تُحتسب إشارة الشركة بديلاً عن ذلك.';
+
+  /// Same predicate the server uses before it will open a consuming round.
+  static bool isConsumingSpendRule(PromotionalRuleItem rule) =>
+      rule.conditionType != 'by_quantity' && rule.minSpend > 0;
+
   /// Eligible net counts only explicit members. Invoice net counts every line
   /// after that line's own discount. Exclusive mode still uses the company flag.
+  /// A consuming campaign with no spend rule has no eligible spend.
   static ({double eligibleNet, double invoiceNet}) spendTotals({
     required List<ExtractedProductItem> products,
     required List<PromotionalRuleItem> rules,
     required String spendLadderMode,
   }) {
     final invoiceNet = products.fold<double>(0, (sum, product) => sum + product.netEligibleLineSpend);
-    final spendRules = rules.where((rule) => rule.isSpendBased).toList();
+    final spendRules = rules.where(isConsumingSpendRule).toList();
+    if (spendLadderMode == 'consuming' && spendRules.isEmpty) {
+      return (eligibleNet: 0, invoiceNet: invoiceNet);
+    }
     var eligible = 0.0;
     for (final product in products) {
-      final member = spendLadderMode == 'consuming' && spendRules.isNotEmpty
+      final member = spendLadderMode == 'consuming'
           ? spendRules.any((rule) => hasExplicitSpendMembership(product, rule))
           : product.isTargetCompany;
       if (member) eligible += product.netEligibleLineSpend;

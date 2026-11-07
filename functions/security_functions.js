@@ -283,6 +283,13 @@ function sanitizePatch(patch) {
   return out;
 }
 
+function sanitizeClaimSlot(item) {
+  if (!item || item.claimSlot == null || item.claimSlot === "") return null;
+  const slot = Number(item.claimSlot);
+  if (!Number.isInteger(slot) || slot < 0 || slot > 100) return null;
+  return slot;
+}
+
 function sanitizeDecrements(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, 20).map((item) => {
@@ -291,6 +298,7 @@ function sanitizeDecrements(raw) {
       prizeIdentifier: String((item && item.prizeIdentifier) || "").trim().slice(0, 200),
       branchId: String((item && item.branchId) || "").trim().slice(0, 160),
       count: Number.isFinite(count) ? Math.floor(count) : 0,
+      claimSlot: sanitizeClaimSlot(item),
       unitValue: item && typeof item.unitValue === "number" ? item.unitValue : null,
       isVoucher: item ? item.isVoucher === true : false,
       gameType: String((item && item.gameType) || "claim").slice(0, 40),
@@ -419,13 +427,27 @@ exports.setUserRole = onCall(callableOptions, async (request) => {
  * receipts_transactions, then sharded counters. `actor.allowCreateReceipt`
  * lets the WhatsApp webhook insert the receipt inside that transaction.
  */
-/** Sum of quantities in a claimed_gifts array. */
+/**
+ * Units already stored, for the exclusive receipt cap.
+ * A missing quantity still counts as one. A positive quantity keeps its
+ * numeric value, including a fraction, so this cap does not become looser.
+ * Blank, zero, negative, and non-numeric quantities used to add nothing and
+ * could slip past the cap; those now count as one. The consuming ledger uses
+ * claimedEntryUnits instead and floors positive values.
+ */
 function claimedUnits(gifts) {
   if (!Array.isArray(gifts)) return 0;
-  return gifts.reduce((s, g) => {
-    const q = Number(g && g.quantity != null ? g.quantity : 1);
-    return s + (Number.isFinite(q) && q > 0 ? q : 0);
-  }, 0);
+  return gifts.reduce((sum, gift) => sum + exclusiveCapUnits(gift), 0);
+}
+
+function exclusiveCapUnits(gift) {
+  if (!gift || typeof gift !== "object") return 1;
+  const raw = gift.quantity;
+  if (raw == null) return 1;
+  if (typeof raw === "string" && raw.trim() === "") return 1;
+  const count = Number(raw);
+  if (Number.isFinite(count) && count > 0) return count;
+  return 1;
 }
 
 /**
@@ -630,6 +652,15 @@ async function applyCampaignPrizeClaim(db, input) {
       }
       if (reason === "extra_quantity") {
         throw new HttpsError("failed-precondition", "الكمية أكبر من الجولات المستحقة.", { reason });
+      }
+      if (reason === "missing_spend_rules") {
+        throw new HttpsError("failed-precondition", "حملة شرائح الإنفاق لا تحتوي على قاعدة إنفاق، لذلك لا تُصرف هدية.", { reason });
+      }
+      if (reason === "round_unbound") {
+        throw new HttpsError("failed-precondition", "تعذر تحديد الجولة المطلوبة، ولم يُصرف مخزون إضافي.", { reason });
+      }
+      if (reason === "round_conflict" || reason === "stale_round" || reason === "round_gap") {
+        throw new HttpsError("failed-precondition", "هذه الجولة لم تَعُد مطابقة للسجل المحفوظ، ولم يُصرف مخزون إضافي.", { reason });
       }
       if (reason) {
         throw new HttpsError("failed-precondition", "تعذر اعتماد هذه الجولة.", { reason });

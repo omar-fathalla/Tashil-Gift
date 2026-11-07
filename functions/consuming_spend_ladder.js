@@ -210,46 +210,106 @@ function keptLedgerEntry(gift) {
   };
 }
 
+function hasSpendRule(event) {
+  const rules = Array.isArray(event && event.promotionalRules) ? event.promotionalRules : [];
+  return rules.some(isSpend);
+}
+
+function claimSlotOf(decrement) {
+  if (!decrement || decrement.claimSlot == null || decrement.claimSlot === "") return null;
+  const slot = Number(decrement.claimSlot);
+  if (!Number.isInteger(slot) || slot < 0) return null;
+  return slot;
+}
+
+function unitGiftIds(entries) {
+  const ids = [];
+  for (const gift of entries) {
+    const units = claimedEntryUnits(gift);
+    for (let i = 0; i < units; i++) ids.push(String(gift.giftId || ""));
+  }
+  return ids;
+}
+
+// claimSlot is the ledger unit index this action is for. The same gift id may
+// be legal on the next round, so a retry is recognized by the slot, not by
+// the gift id. A request without a slot cannot tell a retry from the next
+// round and is refused. Exclusive claims never reach this function.
 function planConsumingClaim(event, receipt, decrements) {
   if (!event || event.spendLadderMode !== "consuming") return { skip: true };
   if (!Array.isArray(decrements) || decrements.length === 0) return { skip: true };
-  const played = receipt && receipt.game_played === true;
-  const remaining = Number(receipt && receipt.remaining_chances != null ? receipt.remaining_chances : 0);
-  if (played && remaining <= 0) return { reason: "already_claimed" };
+  if (!hasSpendRule(event)) return { reason: "missing_spend_rules" };
   const products = receipt && receipt.extracted_products;
   if (!Array.isArray(products) || products.length === 0) return { reason: "missing_lines" };
   const allow = event.allowMultipleChances === true;
   const computed = roundsFromRules(event.promotionalRules || [], products, allow);
   const rounds = applyCap(computed.rounds, allow ? event.maxChancesPerReceipt : 1);
   const existing = (Array.isArray(receipt.claimed_gifts) ? receipt.claimed_gifts : []).map(keptLedgerEntry);
-  let index = existing.reduce((sum, gift) => sum + claimedEntryUnits(gift), 0);
+  const occupiedIds = unitGiftIds(existing);
+  const occupied = occupiedIds.length;
+  const requests = [];
+  for (const decrement of decrements) {
+    const start = claimSlotOf(decrement);
+    const count = Math.floor(Number(decrement.count || decrement.quantity || 1));
+    if (start == null || !Number.isInteger(count) || count < 1) return { reason: "round_unbound" };
+    for (let n = 0; n < count; n++) requests.push({ slot: start + n, decrement });
+  }
+  if (requests.length === 0) return { reason: "round_unbound" };
+  for (let i = 1; i < requests.length; i++) {
+    if (requests[i].slot !== requests[0].slot + i) return { reason: "round_unbound" };
+  }
+  const start = requests[0].slot;
+  const end = start + requests.length;
+  const played = receipt && receipt.game_played === true;
+  const remaining = Number(receipt && receipt.remaining_chances != null ? receipt.remaining_chances : 0);
+  if (played && remaining <= 0 && occupied >= rounds.length && start >= rounds.length) {
+    return { reason: "already_claimed" };
+  }
+  if (occupied === end) {
+    for (let i = 0; i < requests.length; i++) {
+      const round = rounds[start + i];
+      if (!round) return { reason: "extra_quantity" };
+      const gift = canonicalGift(round, requests[i].decrement);
+      if (!gift) return { reason: "tier_mismatch" };
+      if (!occupiedIds[start + i] || occupiedIds[start + i] !== gift.giftId) {
+        return { reason: "round_conflict" };
+      }
+    }
+    return {
+      reason: null,
+      idempotent: true,
+      claimed_gifts: existing,
+      prizes_won: existing.map((gift) => gift.giftName).filter(Boolean),
+      remaining_chances: Math.max(0, rounds.length - occupied),
+      decrements: [],
+    };
+  }
+  if (occupied > end) return { reason: "stale_round" };
+  if (occupied > start) return { reason: "round_conflict" };
+  if (occupied < start) return { reason: "round_gap" };
   const added = [];
   const stockDecrements = [];
-  for (const decrement of decrements) {
-    const count = Number(decrement.count || decrement.quantity || 1);
-    for (let n = 0; n < count; n++) {
-      const round = rounds[index];
-      if (!round) return { reason: "extra_quantity" };
-      const gift = canonicalGift(round, decrement);
-      if (!gift) return { reason: "tier_mismatch" };
-      added.push(gift);
-      stockDecrements.push({
-        prizeIdentifier: gift.giftId,
-        count: 1,
-        unitValue: gift.unitValue,
-        isVoucher: gift.isVoucher,
-        branchId: decrement.branchId || "",
-        gameType: decrement.gameType || "chooseGift",
-      });
-      index += 1;
-    }
+  for (let i = 0; i < requests.length; i++) {
+    const round = rounds[start + i];
+    if (!round) return { reason: "extra_quantity" };
+    const gift = canonicalGift(round, requests[i].decrement);
+    if (!gift) return { reason: "tier_mismatch" };
+    added.push(gift);
+    stockDecrements.push({
+      prizeIdentifier: gift.giftId,
+      count: 1,
+      unitValue: gift.unitValue,
+      isVoucher: gift.isVoucher,
+      branchId: requests[i].decrement.branchId || "",
+      gameType: requests[i].decrement.gameType || "chooseGift",
+    });
   }
   const claimed = existing.concat(added);
   return {
     reason: null,
     claimed_gifts: claimed,
     prizes_won: claimed.map((gift) => gift.giftName).filter(Boolean),
-    remaining_chances: Math.max(0, rounds.length - index),
+    remaining_chances: Math.max(0, rounds.length - end),
     decrements: stockDecrements,
   };
 }

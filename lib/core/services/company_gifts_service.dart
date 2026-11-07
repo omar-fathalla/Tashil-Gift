@@ -1839,6 +1839,7 @@ class CompanyGiftsService {
     String gameType = 'claim',
     String? receiptId,
     Map<String, dynamic>? receiptPatch,
+    int? claimSlot,
   }) {
     return claimCampaignPrizes(
       eventId: eventId,
@@ -1852,6 +1853,7 @@ class CompanyGiftsService {
           'unitValue': unitValue,
           'isVoucher': isVoucher,
           'gameType': gameType,
+          if (claimSlot != null) 'claimSlot': claimSlot,
         },
       ],
     );

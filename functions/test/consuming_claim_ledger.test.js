@@ -93,7 +93,7 @@ function receipt(extra = {}) {
 
 const actor = { staff: true, uid: "staff-1" };
 
-function claim(db, prizeIdentifier, unitValue, patch) {
+function claim(db, prizeIdentifier, unitValue, patch, claimSlot) {
   return applyCampaignPrizeClaim(db, {
     eventId: "E",
     receiptId: "r1",
@@ -104,6 +104,7 @@ function claim(db, prizeIdentifier, unitValue, patch) {
       unitValue,
       isVoucher: true,
       gameType: "chooseGift",
+      claimSlot,
     }],
     receiptPatch: Object.assign({
       game_played: true,
@@ -122,15 +123,15 @@ function stock(db, index) {
 test("canonical metadata is stored and the client array cannot replace the ledger", async () => {
   const db = fakeDb({ "events/E": event(), "receipts_transactions/r1": receipt() });
   await assert.rejects(
-    claim(db, gift350, 100),
+    claim(db, gift350, 100, {}, 0),
     (error) => error.code === "failed-precondition",
   );
   assert.equal(stock(db, 0), 5);
   assert.equal(db.store.get("receipts_transactions/r1").claimed_gifts, undefined);
 
-  await claim(db, gift500, 100);
-  await claim(db, gift500, 100);
-  await claim(db, gift350, 150);
+  await claim(db, gift500, 100, {}, 0);
+  await claim(db, gift500, 100, {}, 1);
+  await claim(db, gift350, 150, {}, 2);
   const saved = db.store.get("receipts_transactions/r1");
   assert.deepEqual(saved.claimed_gifts.map((gift) => gift.giftId), [gift500, gift500, gift350]);
   assert.deepEqual(saved.claimed_gifts.map((gift) => gift.unitValue), [150, 150, 100]);
@@ -145,7 +146,7 @@ test("canonical metadata is stored and the client array cannot replace the ledge
   assert.equal(stock(db, 2), 4);
 
   await assert.rejects(
-    claim(db, gift500, 150),
+    claim(db, gift500, 150, {}, 3),
     (error) => error.code === "failed-precondition",
   );
   assert.equal(stock(db, 0), 3);
@@ -161,7 +162,7 @@ test("a missing quantity still advances the round, and a later call keeps the ea
       remaining_chances: 2,
     }),
   });
-  await claim(db, gift500, 100, { claimed_gifts: [] });
+  await claim(db, gift500, 100, { claimed_gifts: [] }, 1);
   const saved = db.store.get("receipts_transactions/r1");
   assert.equal(saved.claimed_gifts.length, 2);
   assert.equal(saved.claimed_gifts[0].giftId, gift500);
@@ -171,8 +172,27 @@ test("a missing quantity still advances the round, and a later call keeps the ea
 
 test("name-only and unknown ids do not change stock", async () => {
   const db = fakeDb({ "events/E": event(), "receipts_transactions/r1": receipt() });
-  await assert.rejects(claim(db, "قسيمة شراء 150 جنيه", 150), (error) => error.code === "failed-precondition");
-  await assert.rejects(claim(db, "unknown-gift", 150), (error) => error.code === "failed-precondition");
+  await assert.rejects(claim(db, "قسيمة شراء 150 جنيه", 150, {}, 0), (error) => error.code === "failed-precondition");
+  await assert.rejects(claim(db, "unknown-gift", 150, {}, 0), (error) => error.code === "failed-precondition");
   assert.equal(stock(db, 0), 5);
   assert.equal(stock(db, 2), 5);
+});
+
+test("replaying the same slot does not consume the next round or stock", async () => {
+  const db = fakeDb({ "events/E": event(), "receipts_transactions/r1": receipt() });
+  await claim(db, gift500, 150, {}, 0);
+  await claim(db, gift500, 150, {}, 0);
+  const saved = db.store.get("receipts_transactions/r1");
+  assert.equal(saved.claimed_gifts.length, 1);
+  assert.equal(saved.claimed_gifts[0].giftId, gift500);
+  assert.equal(stock(db, 0), 4);
+});
+
+test("a consuming campaign without a spend rule does not decrement stock", async () => {
+  const bare = event();
+  bare.promotionalRules = [{ conditionType: "by_quantity", minSpend: 0, triggerProduct: "كادبري" }];
+  const db = fakeDb({ "events/E": bare, "receipts_transactions/r1": receipt() });
+  await assert.rejects(claim(db, gift500, 150, {}, 0), (error) => error.code === "failed-precondition");
+  assert.equal(stock(db, 0), 5);
+  assert.equal(db.store.get("receipts_transactions/r1").claimed_gifts, undefined);
 });

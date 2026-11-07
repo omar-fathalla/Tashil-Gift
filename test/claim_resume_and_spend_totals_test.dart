@@ -24,6 +24,22 @@ void main() {
     expect(resume.wonNames, ['150']);
   });
 
+  test('a consuming campaign without a spend rule has no eligible spend', () {
+    final flagged = ExtractedProductItem(
+      name: 'سطر بإشارة الشركة فقط',
+      price: 40,
+      quantity: 2,
+      isTargetCompany: true,
+    );
+    final totals = PromotionalRuleMatcher.spendTotals(
+      products: [flagged],
+      rules: const [],
+      spendLadderMode: 'consuming',
+    );
+    expect(totals.eligibleNet, 0);
+    expect(totals.invoiceNet, 80);
+  });
+
   test('an empty barcode without a brand token is not eligible spend', () {
     const rule = PromotionalRuleItem(
       id: 'tier-500',

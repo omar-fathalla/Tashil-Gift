@@ -136,6 +136,18 @@ class MultiCampaignReceiptEvaluator {
       );
     }
 
+    // A readable receipt still does not qualify a consuming campaign that has
+    // no spend rule. A company flag or a quantity rule is not eligibility.
+    if (EventModel.normalizeSpendLadderMode(campaign.spendLadderMode) == 'consuming' &&
+        !campaign.promotionalRules.any(PromotionalRuleMatcher.isConsumingSpendRule)) {
+      return CampaignQualificationResult(
+        campaign: campaign,
+        isQualified: false,
+        rejectionReason: PromotionalRuleMatcher.missingSpendRulesMessage,
+        unfulfilledConditions: [PromotionalRuleMatcher.missingSpendRulesMessage],
+      );
+    }
+
     // 2. Date check
     if (campaign.isExpired) {
       final endStr = campaign.endDate != null

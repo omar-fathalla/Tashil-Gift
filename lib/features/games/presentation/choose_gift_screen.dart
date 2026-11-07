@@ -425,6 +425,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
     bool claimApplied = false;
     bool claimSaved = false;
+    final int? claimSlot = widget.roundPrizeNames.isNotEmpty ? _claimedUnits : null;
     try {
       audioService.playWinFanfare();
 
@@ -436,8 +437,8 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
 
       if (!widget.isDemo && widget.transactionId.isNotEmpty) {
         final giftsService = ref.read(companyGiftsServiceProvider);
-        await runGameClaim(
-          () => giftsService.decrementCampaignPrize(
+        Future<void> sendClaim() {
+          return giftsService.decrementCampaignPrize(
           widget.eventId,
           roundGiftId.isNotEmpty ? roundGiftId : selectedPrize,
           branchId: widget.branchId,
@@ -447,6 +448,7 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
               selectedPrize.toLowerCase().contains('voucher'),
           gameType: 'chooseGift',
           receiptId: widget.transactionId,
+          claimSlot: claimSlot,
           receiptPatch: {
             'game_played': true,
             'game_type': 'chooseGift',
@@ -469,9 +471,16 @@ class _ChooseGiftScreenState extends ConsumerState<ChooseGiftScreen>
               };
             }).toList(),
           },
-        ),
-          isFinalChance: _remainingChances <= 0,
         );
+        }
+        if (claimSlot != null) {
+          await runClaimWithSingleRetry(sendClaim);
+        } else {
+          await runGameClaim(
+            sendClaim,
+            isFinalChance: _remainingChances <= 0,
+          );
+        }
         claimSaved = true;
 
         if (_remainingChances == 0 && !_whatsappSent) {
