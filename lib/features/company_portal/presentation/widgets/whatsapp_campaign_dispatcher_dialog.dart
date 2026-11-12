@@ -22,6 +22,7 @@ class CustomerCampaignContact {
   final String lastBranch;
   final DateTime? lastVisitDate;
   final String? sourceTag;
+  final List<String> alternateNames;
   ContactDispatchStatus status;
   bool? isWhatsAppActive;
 
@@ -37,6 +38,7 @@ class CustomerCampaignContact {
     required this.lastBranch,
     this.lastVisitDate,
     this.sourceTag,
+    this.alternateNames = const [],
     this.status = ContactDispatchStatus.pending,
     this.isWhatsAppActive,
   });
@@ -55,6 +57,10 @@ class CustomerCampaignContact {
     sb.write(' ');
     for (final b in branches) {
       sb.write(b.toLowerCase());
+      sb.write(' ');
+    }
+    for (final alternate in alternateNames) {
+      sb.write(alternate.toLowerCase().toEnglishDigits());
       sb.write(' ');
     }
     return sb.toString();
