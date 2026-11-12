@@ -3225,6 +3225,81 @@ class AppStrings {
     en: 'The PDF will be sent as an attachment',
     hi: 'PDF अनुलग्नक के रूप में भेजा जाएगा',
   );
+  String get campaignMediaPickFile => _t(
+    ar: 'اختيار ملف من الجهاز',
+    en: 'Choose a file from this device',
+    hi: 'इस डिवाइस से फ़ाइल चुनें',
+  );
+  String get campaignMediaPickHint => _t(
+    ar: 'ارفع ملف PDF أو صورة JPG أو PNG أو WEBP. يُحفظ الملف ثم يُرسل مع الرسالة.',
+    en: 'Upload a PDF or a JPG, PNG, or WEBP image. The file is saved, then sent with the message.',
+    hi: 'PDF या JPG, PNG, WEBP छवि अपलोड करें। फ़ाइल सहेजी जाती है, फिर संदेश के साथ भेजी जाती है।',
+  );
+  String get campaignMediaReplace => _t(
+    ar: 'استبدال الملف',
+    en: 'Replace file',
+    hi: 'फ़ाइल बदलें',
+  );
+  String get campaignMediaClear => _t(
+    ar: 'إزالة الملف',
+    en: 'Remove file',
+    hi: 'फ़ाइल हटाएँ',
+  );
+  String get campaignMediaReady => _t(
+    ar: 'الملف جاهز للإرسال',
+    en: 'The file is ready to send',
+    hi: 'फ़ाइल भेजने के लिए तैयार है',
+  );
+  String get campaignMediaUploading => _t(
+    ar: 'جاري حفظ الملف',
+    en: 'Saving the file',
+    hi: 'फ़ाइल सहेजी जा रही है',
+  );
+  String get campaignMediaUploadFailed => _t(
+    ar: 'تعذر حفظ الملف. حاول مرة أخرى.',
+    en: 'Could not save the file. Try again.',
+    hi: 'फ़ाइल सहेजी नहीं जा सकी। फिर कोशिश करें।',
+  );
+  String get campaignMediaReadFailed => _t(
+    ar: 'تعذر قراءة الملف من الجهاز',
+    en: 'Could not read the file from this device',
+    hi: 'इस डिवाइस से फ़ाइल नहीं पढ़ी जा सकी',
+  );
+  String get campaignMediaTypeRejected => _t(
+    ar: 'يُقبل فقط ملف PDF أو صورة JPG أو PNG أو WEBP',
+    en: 'Only a PDF or a JPG, PNG, or WEBP image is accepted',
+    hi: 'केवल PDF या JPG, PNG, WEBP छवि स्वीकार है',
+  );
+  String get campaignMediaUnauthorized => _t(
+    ar: 'رفع الملف متاح لمدير النظام فقط',
+    en: 'Only a system admin can upload this file',
+    hi: 'यह फ़ाइल केवल सिस्टम व्यवस्थापक अपलोड कर सकता है',
+  );
+  String get campaignMediaEmpty => _t(
+    ar: 'الملف فارغ',
+    en: 'The file is empty',
+    hi: 'फ़ाइल खाली है',
+  );
+  String get campaignMediaTooLarge => _t(
+    ar: 'حجم الملف أكبر من 20 ميجابايت',
+    en: 'The file is larger than 20 MB',
+    hi: 'फ़ाइल 20 एमबी से बड़ी है',
+  );
+  String get campaignMediaUrlFallback => _t(
+    ar: 'أو الصق رابط ملف جاهز إن كان محفوظاً في مكان آخر',
+    en: 'Or paste a link to a file you already have',
+    hi: 'या किसी तैयार फ़ाइल का लिंक चिपकाएँ',
+  );
+  String get campaignMediaRequired => _t(
+    ar: 'أضف ملفاً أو رابط بوستر أولاً',
+    en: 'Add a file or a poster link first',
+    hi: 'पहले एक फ़ाइल या पोस्टर लिंक जोड़ें',
+  );
+  String get campaignMediaUploadedWins => _t(
+    ar: 'سيُرسل الملف المرفوع مع الرسالة. الرابط يُستخدم فقط بعد إزالة الملف.',
+    en: 'The uploaded file is sent with the message. The link is used only after you remove the file.',
+    hi: 'अपलोड की गई फ़ाइल संदेश के साथ भेजी जाती है। लिंक तभी उपयोग होता है जब फ़ाइल हटा दी जाए।',
+  );
   String get searchCustomerPlaceholder => _t(ar: 'بحث بالاسم أو رقم الهاتف أو الفرع...', en: 'Search by name, phone, or branch...', hi: 'नाम, फोन या शाखा द्वारा खोजें...');
   String get deselectAllCustomers => _t(ar: 'إلغاء تحديد الكل', en: 'Deselect All', hi: 'सभी अचयनित करें');
   String get selectAllCustomers => _t(ar: 'تحديد كافة العملاء', en: 'Select All Customers', hi: 'सभी ग्राहकों का चयन करें');

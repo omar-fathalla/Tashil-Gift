@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' hide Border;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +20,8 @@ import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/m3_action_menu.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
+import '../domain/whatsapp_campaign_media.dart';
+import '../domain/whatsapp_campaign_media_firebase.dart';
 import '../domain/whatsapp_gateway_config_model.dart';
 import '../domain/whatsapp_gateway_service.dart';
 import '../domain/company_supervisor.dart';
@@ -27,6 +30,7 @@ import 'widgets/company_supervisor_import_dialog.dart';
 import 'widgets/company_supervisors_audience_table.dart';
 import 'widgets/customer_import_dialog.dart';
 import 'widgets/whatsapp_campaign_dispatcher_dialog.dart';
+import 'widgets/whatsapp_campaign_media_panel.dart';
 import 'widgets/whatsapp_gateway_settings_dialog.dart';
 import 'widgets/whatsapp_live_outbox_view.dart';
 import 'widgets/whatsapp_webhook_inbox_view.dart';
@@ -98,6 +102,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   late final TextEditingController _messageController;
   MarketingMessageMode _messageMode = MarketingMessageMode.text;
   final TextEditingController _mediaUrlController = TextEditingController();
+  WhatsAppCampaignMediaAttachment? _campaignMedia;
+  bool _campaignMediaUploading = false;
+  double _campaignMediaProgress = 0;
   final TextEditingController _pollQuestionController = TextEditingController();
   final List<TextEditingController> _pollOptionControllers = [
     TextEditingController(text: 'نعم، أرغب في الاستلام'),
@@ -645,6 +652,136 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     return result;
   }
 
+  WhatsAppCampaignMediaUploader _campaignMediaUploader() {
+    final auth = ref.read(firebaseAuthProvider);
+    return WhatsAppCampaignMediaUploader(
+      storage: FirebaseWhatsAppCampaignMediaStorage(ref.read(firebaseStorageProvider)),
+      authorize: () async {
+        final user = auth.currentUser;
+        if (user == null || user.isAnonymous) return false;
+        try {
+          final token = await user.getIdTokenResult();
+          return canManageWhatsAppCampaignMedia(
+            role: token.claims?['role']?.toString(),
+            isAnonymous: user.isAnonymous,
+          );
+        } catch (_) {
+          return false;
+        }
+      },
+      currentUid: () => auth.currentUser?.uid,
+    );
+  }
+
+  WhatsAppCampaignOutboundSelection _outboundCampaignMedia() {
+    return resolveWhatsAppCampaignOutboundMedia(
+      mediaMode: _messageMode == MarketingMessageMode.media,
+      uploaded: _campaignMedia,
+      pastedUrl: _mediaUrlController.text,
+    );
+  }
+
+  String _campaignMediaFailureText(AppStrings strings, WhatsAppCampaignMediaFailure failure) {
+    switch (failure) {
+      case WhatsAppCampaignMediaFailure.unauthorized:
+      case WhatsAppCampaignMediaFailure.missingUser:
+        return strings.campaignMediaUnauthorized;
+      case WhatsAppCampaignMediaFailure.unsupportedType:
+        return strings.campaignMediaTypeRejected;
+      case WhatsAppCampaignMediaFailure.empty:
+        return strings.campaignMediaEmpty;
+      case WhatsAppCampaignMediaFailure.tooLarge:
+        return strings.campaignMediaTooLarge;
+      case WhatsAppCampaignMediaFailure.uploadFailed:
+        return strings.campaignMediaUploadFailed;
+    }
+  }
+
+  void _showCampaignMediaMessage(String message) {
+    final cs = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+        backgroundColor: cs.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _pickCampaignMediaFile(AppStrings strings) async {
+    if (_campaignMediaUploading) return;
+    final uploader = _campaignMediaUploader();
+    if (!await uploader.authorize()) {
+      if (!mounted) return;
+      _showCampaignMediaMessage(strings.campaignMediaUnauthorized);
+      return;
+    }
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showCampaignMediaMessage(strings.campaignMediaReadFailed);
+      return;
+    }
+    if (!mounted || picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _showCampaignMediaMessage(strings.campaignMediaReadFailed);
+      return;
+    }
+    final previous = _campaignMedia;
+    setState(() {
+      _campaignMediaUploading = true;
+      _campaignMediaProgress = 0;
+    });
+    try {
+      final uploaded = await uploader.upload(
+        bytes: bytes,
+        fileName: file.name,
+        onProgress: (value) {
+          if (!mounted) return;
+          setState(() => _campaignMediaProgress = value);
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _campaignMedia = uploaded;
+        _campaignMediaUploading = false;
+        _campaignMediaProgress = 1;
+      });
+      if (previous != null && previous.storagePath != uploaded.storagePath) {
+        unawaited(uploader.delete(previous.storagePath));
+      }
+    } on WhatsAppCampaignMediaUploadException catch (error) {
+      if (!mounted) return;
+      setState(() => _campaignMediaUploading = false);
+      _showCampaignMediaMessage(_campaignMediaFailureText(strings, error.failure));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _campaignMediaUploading = false);
+      _showCampaignMediaMessage(strings.campaignMediaUploadFailed);
+    }
+  }
+
+  Future<void> _clearCampaignMedia() async {
+    final current = _campaignMedia;
+    final uploader = _campaignMediaUploader();
+    if (mounted) {
+      setState(() {
+        _campaignMedia = null;
+        _campaignMediaProgress = 0;
+      });
+    }
+    if (current == null) return;
+    await uploader.delete(current.storagePath);
+  }
+
   /// Triggers the interactive sequential WhatsApp sender modal
   void _launchWhatsAppCampaign({
     required List<CustomerCampaignContact> targetContacts,
@@ -664,6 +801,18 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
       );
       return;
     }
+
+    if (_messageMode == MarketingMessageMode.media && _campaignMediaUploading) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.campaignMediaUploading, style: GoogleFonts.cairo()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final outboundMedia = _outboundCampaignMedia();
 
     // Validate Poll if poll mode is active
     if (_messageMode == MarketingMessageMode.poll) {
@@ -707,7 +856,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         companySlug: widget.lockedCompanySlug,
         strings: strings,
         isAr: isAr,
-        attachedMediaUrl: _messageMode == MarketingMessageMode.media ? _mediaUrlController.text.trim() : null,
+        attachedMediaUrl: outboundMedia.url,
+        attachedMediaFileName: outboundMedia.fileName,
+        attachedMediaMimeType: outboundMedia.mimeType,
         pollTitle: _messageMode == MarketingMessageMode.poll ? _pollQuestionController.text.trim() : null,
         pollOptions: _messageMode == MarketingMessageMode.poll
             ? _pollOptionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList()
@@ -1317,11 +1468,29 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                                   pollOptions: opts,
                                                   multipleAnswers: _pollMultipleAnswers,
                                                 );
-                                              } else if (_messageMode == MarketingMessageMode.media && _mediaUrlController.text.trim().isNotEmpty) {
+                                              } else if (_messageMode == MarketingMessageMode.media) {
+                                                final outboundMedia = _outboundCampaignMedia();
+                                                if (_campaignMediaUploading || outboundMedia.url == null) {
+                                                  setDialogState(() => isSending = false);
+                                                  messenger.showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        _campaignMediaUploading
+                                                            ? strings.campaignMediaUploading
+                                                            : strings.campaignMediaRequired,
+                                                        style: GoogleFonts.cairo(),
+                                                      ),
+                                                      behavior: SnackBarBehavior.floating,
+                                                    ),
+                                                  );
+                                                  return;
+                                                }
                                                 result = await _gatewayService.sendMediaMessage(
                                                   config: _gatewayConfig,
                                                   toPhone: formattedPhone,
-                                                  mediaUrl: _mediaUrlController.text.trim(),
+                                                  mediaUrl: outboundMedia.url!,
+                                                  filename: outboundMedia.fileName,
+                                                  mimeType: outboundMedia.mimeType,
                                                   caption: previewText,
                                                 );
                                               } else {
@@ -3049,120 +3218,18 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                   ),
                   const SizedBox(height: 14),
 
-                  // Feature 1: Media Poster & Image Attachment
-                  if (_messageMode == MarketingMessageMode.media) ...[
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 14),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cs.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.photo_library_rounded, size: 18, color: cs.primary),
-                              const SizedBox(width: 8),
-                              Text(
-                                isAr ? 'رابط بوستر العرض' : 'Media Poster URL',
-                                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _mediaUrlController,
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(
-                              hintText: 'https://example.com/promotions/supermarket_offer.jpg',
-                              hintStyle: GoogleFonts.cairo(fontSize: 12),
-                              prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                              suffixIcon: _mediaUrlController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded, size: 18),
-                                      onPressed: () => setState(() => _mediaUrlController.clear()),
-                                    )
-                                  : null,
-                              filled: true,
-                              fillColor: cs.surfaceContainerLow,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                            style: GoogleFonts.robotoMono(fontSize: 12),
-                          ),
-                          if (_mediaUrlController.text.trim().isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            if (isWhatsAppPdfAttachment(mediaUrl: _mediaUrlController.text.trim()))
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: cs.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.picture_as_pdf_rounded, color: cs.onPrimaryContainer),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        strings.pdfAttachmentReady,
-                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                constraints: const BoxConstraints(maxHeight: 180),
-                                width: double.infinity,
-                                color: cs.surfaceContainerHighest,
-                                child: Image.network(
-                                  _mediaUrlController.text.trim(),
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) => Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.broken_image_rounded, size: 16, color: cs.error),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              isAr ? 'تعذر تحميل المعاينة، يرجى التأكد من صحة الرابط' : 'Unable to preview image from URL',
-                                              style: GoogleFonts.cairo(fontSize: 12, color: cs.error),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Text(
-                            isAr
-                                ? 'يتم إرسال الصورة بجانب نص الرسالة كحزمة وسائط متكاملة'
-                                : 'The image will be dispatched together with the caption text',
-                            style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            strings.pdfAttachmentHint,
-                            style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
+                  if (_messageMode == MarketingMessageMode.media)
+                    WhatsAppCampaignMediaPanel(
+                      strings: strings,
+                      isAr: isAr,
+                      urlController: _mediaUrlController,
+                      attachment: _campaignMedia,
+                      uploading: _campaignMediaUploading,
+                      progress: _campaignMediaProgress,
+                      onPick: () => _pickCampaignMediaFile(strings),
+                      onClear: () => _clearCampaignMedia(),
+                      onUrlChanged: () => setState(() {}),
                     ),
-                  ],
 
                   // Feature 2: Interactive WhatsApp Polls
                   if (_messageMode == MarketingMessageMode.poll) ...[

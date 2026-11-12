@@ -61,6 +61,41 @@ service firebase.storage {
       allow delete: if isStaff();
     }
 
+    // WhatsApp campaign posters and PDFs. Only super_admin and admin may
+    // create or delete an object, and only under their own uid. Listing is
+    // denied for everyone so the prefix is not enumerable.
+    //
+    // The app sends WAHA a Firebase download URL (getDownloadURL). That https
+    // link carries an unguessable token and can be fetched by the WAHA server
+    // without the admin browser session. SDK reads stay staff-only. The token
+    // does not expire mid-send the way a short-lived signed URL can.
+    function isCampaignMediaUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.metadata.uploaderUid == request.auth.uid
+        && (
+          request.resource.contentType == 'application/pdf'
+          || request.resource.contentType.matches('image/(jpeg|png|webp)')
+        );
+    }
+
+    function isCampaignMediaName(name) {
+      return name.matches('.*\\.(pdf|jpe?g|png|webp)')
+        && !name.matches('.*\\.\\..*');
+    }
+
+    match /whatsapp_campaign_media/{uid}/{fileName} {
+      allow get: if isStaff();
+      allow list: if false;
+      allow create: if isStaff()
+        && request.auth.uid == uid
+        && isCampaignMediaName(fileName)
+        && isCampaignMediaUpload();
+      allow update: if false;
+      allow delete: if isStaff() && request.auth.uid == uid;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
