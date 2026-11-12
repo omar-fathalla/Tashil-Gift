@@ -241,6 +241,37 @@ describe("staff and partner claims", () => {
     }
   });
 
+  function supervisorPayload(overrides = {}) {
+    return {
+      name: "مشرف تجريبي Test Supervisor",
+      alternateNames: ["اسم بديل"],
+      mobile: "01099999997",
+      cleanPhone: "201099999997",
+      source: "excel_import",
+      audience: "company_supervisors",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+
+  test("company supervisors are readable and writable only by staff", async () => {
+    const ref = (db) => doc(db, "company_supervisors/01099999997");
+    await assertSucceeds(setDoc(ref(admin()), supervisorPayload()));
+    await assertSucceeds(getDoc(ref(admin())));
+    await assertSucceeds(getDocs(collection(superAdmin(), "company_supervisors")));
+    await assertSucceeds(updateDoc(ref(superAdmin()), { name: "مشرف تجريبي Test Supervisor" }));
+    await assertFails(setDoc(ref(admin()), supervisorPayload({ mobile: "01000000000" })));
+    await assertFails(setDoc(ref(partner()), supervisorPayload()));
+    await assertFails(getDoc(ref(partner())));
+    await assertFails(getDoc(ref(partnerOps())));
+    await assertFails(getDocs(collection(anon(), "company_supervisors")));
+    await assertFails(getDoc(ref(anon())));
+    const publicDb = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(publicDb, "company_supervisors/01099999997")));
+    await assertSucceeds(deleteDoc(ref(admin())));
+  });
+
   test("unauthenticated clients cannot read or write", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, "events/camp-1")));

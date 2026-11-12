@@ -75,6 +75,42 @@ void main() {
       expect(result.messageId, equals('msg_media_123'));
     });
 
+    test('Feature 1b: a PDF url is sent as a document on /api/sendFile', () async {
+      final service = WhatsAppGatewayService(
+        wahaAuthHeadersBuilder: () async => {
+          'Authorization': 'Bearer test-id-token',
+          'X-Firebase-AppCheck': 'test-app-check',
+        },
+      );
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('check-exists')) {
+          return http.Response(json.encode({
+            'numberExists': true,
+            'chatId': '201099999997@c.us',
+          }), 200);
+        }
+        expect(request.url.path, endsWith('/api/sendFile'));
+        final body = json.decode(request.body) as Map<String, dynamic>;
+        expect(body['chatId'], equals('201099999997@c.us'));
+        expect(body['caption'], equals('ملف المشرفين'));
+        expect(body['file']['mimetype'], equals('application/pdf'));
+        expect(body['file']['filename'], equals('supervisors.pdf'));
+        expect(body['file']['url'], equals('https://example.com/files/supervisors.pdf'));
+        return http.Response(json.encode({'id': 'msg_pdf_1'}), 200);
+      });
+
+      final result = await service.sendMediaMessage(
+        config: baseConfig,
+        toPhone: '01099999997',
+        mediaUrl: 'https://example.com/files/supervisors.pdf',
+        caption: 'ملف المشرفين',
+        client: mockClient,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.messageId, equals('msg_pdf_1'));
+    });
+
     // Feature 2: Interactive Polls
     test('Feature 2: sendPollMessage posts poll question and options to /api/sendPoll', () async {
       final service = WhatsAppGatewayService(

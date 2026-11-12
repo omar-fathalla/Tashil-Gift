@@ -21,7 +21,10 @@ import '../../../core/widgets/m3_button_groups.dart';
 import '../../admin/domain/event_model.dart';
 import '../domain/whatsapp_gateway_config_model.dart';
 import '../domain/whatsapp_gateway_service.dart';
+import '../domain/company_supervisor.dart';
 import '../domain/marketing_contact_model.dart';
+import 'widgets/company_supervisor_import_dialog.dart';
+import 'widgets/company_supervisors_audience_table.dart';
 import 'widgets/customer_import_dialog.dart';
 import 'widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'widgets/whatsapp_gateway_settings_dialog.dart';
@@ -48,6 +51,7 @@ enum CustomerSegmentType {
   winners,
   topSpenders,
   repeatShoppers,
+  companySupervisors,
 }
 
 /// Standalone Dedicated Partner Customer Relationship CRM & WhatsApp Marketing Screen
@@ -121,6 +125,16 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   // WhatsApp Gateway Service & Config
   final WhatsAppGatewayService _gatewayService = WhatsAppGatewayService();
   WhatsAppGatewayConfigModel _gatewayConfig = const WhatsAppGatewayConfigModel();
+
+  // Stored company-supervisors audience. Not derived from receipts or gifts.
+  StreamSubscription<QuerySnapshot>? _supervisorsSub;
+  FirebaseFirestore? _supervisorsFirestore;
+  List<CompanySupervisor> _cachedSupervisors = [];
+  bool _supervisorsLoaded = false;
+  bool _supervisorsFailed = false;
+  String _supervisorsSignature = '';
+  String _lastSupervisorFilterKey = '';
+  List<CustomerCampaignContact> _cachedSupervisorContacts = [];
 
   @override
   void initState() {
@@ -234,8 +248,85 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     );
   }
 
+  void _ensureSupervisorsStream(FirebaseFirestore firestore) {
+    if (_supervisorsFirestore == firestore && _supervisorsSub != null) return;
+    _supervisorsSub?.cancel();
+    _supervisorsFirestore = firestore;
+    if (_cachedSupervisors.isEmpty) {
+      _supervisorsLoaded = false;
+      _supervisorsFailed = false;
+    }
+    _supervisorsSub = firestore.collection(CompanySupervisor.collectionName).snapshots().listen(
+      (snapshot) {
+        if (!mounted) return;
+        final parsed = <CompanySupervisor>[];
+        for (final doc in snapshot.docs) {
+          try {
+            parsed.add(CompanySupervisor.fromFirestore(doc));
+          } catch (_) {}
+        }
+        final deduped = CompanySupervisor.dedupeByMobile(parsed);
+        final fromCache = snapshot.metadata.isFromCache;
+        if (deduped.isEmpty && _cachedSupervisors.isNotEmpty && fromCache) return;
+        final signature = deduped
+            .map((supervisor) => '${supervisor.mobile}|${supervisor.name}|${supervisor.alternateNames.join('/')}')
+            .join('\n');
+        if (signature == _supervisorsSignature && _supervisorsLoaded && !_supervisorsFailed) return;
+        setState(() {
+          _cachedSupervisors = deduped;
+          _supervisorsSignature = signature;
+          _supervisorsLoaded = true;
+          _supervisorsFailed = false;
+          _lastSupervisorFilterKey = '';
+        });
+      },
+      onError: (_) {
+        if (!mounted) return;
+        setState(() {
+          _supervisorsFailed = true;
+          _supervisorsLoaded = true;
+        });
+      },
+    );
+  }
+
+  List<CustomerCampaignContact> _filteredSupervisorContacts() {
+    final filterKey = '${_supervisorsSignature}_${_searchQuery.trim()}';
+    if (_lastSupervisorFilterKey == filterKey) return _cachedSupervisorContacts;
+    final query = _searchQuery.trim().toLowerCase().toEnglishDigits();
+    final result = <CustomerCampaignContact>[];
+    for (final supervisor in _cachedSupervisors) {
+      final contact = supervisor.toCampaignContact();
+      contact.isWhatsAppActive = _verifiedWhatsAppMap[supervisor.cleanPhone];
+      if (query.isNotEmpty && !contact.searchIndex.contains(query)) continue;
+      result.add(contact);
+    }
+    _lastSupervisorFilterKey = filterKey;
+    _cachedSupervisorContacts = result;
+    return result;
+  }
+
+  void _openSupervisorImportDialog(AppStrings strings) {
+    showDialog<int>(
+      context: context,
+      builder: (ctx) => CompanySupervisorImportDialog(strings: strings),
+    ).then((saved) {
+      if (!mounted || saved == null) return;
+      final cs = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(strings.companySupervisorsSaved(saved), style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          backgroundColor: cs.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    });
+  }
+
   @override
   void dispose() {
+    _supervisorsSub?.cancel();
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _messageController.dispose();
@@ -536,6 +627,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
         case CustomerSegmentType.repeatShoppers:
           if (!contact.isRepeat) return false;
           break;
+        case CustomerSegmentType.companySupervisors:
+          return false;
       }
 
       // Search query filter with O(1) pre-computed index (Rule 9)
@@ -854,8 +947,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                               _selectedContactIds.add(c.id);
                             }
                           }
-                          _selectedSegment = CustomerSegmentType.activeWhatsApp;
+                          if (_selectedSegment != CustomerSegmentType.companySupervisors) {
+                            _selectedSegment = CustomerSegmentType.activeWhatsApp;
+                          }
                           _lastFilterCacheKey = '';
+                          _lastSupervisorFilterKey = '';
                         });
                         Navigator.of(dialogCtx).pop();
                       },
@@ -1886,6 +1982,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
     final firestore = ref.watch(firestoreProvider);
+    _ensureSupervisorsStream(firestore);
 
     return StreamBuilder<QuerySnapshot>(
       stream: _getEventsStream(firestore),
@@ -1977,6 +2074,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                 );
 
             final filteredContacts = _getFilteredContacts();
+            final showingSupervisors = _selectedSegment == CustomerSegmentType.companySupervisors;
+            final audienceContacts = showingSupervisors ? _filteredSupervisorContacts() : filteredContacts;
             final activeCampaignName = _selectedEventId != null && _selectedEventId != 'all'
                 ? (companyEvents.where((e) => e.id == _selectedEventId).map((e) => e.eventName).firstOrNull ?? effectiveCompanyName)
                 : effectiveCompanyName;
@@ -2164,7 +2263,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   isAr: isAr,
                                   companyName: effectiveCompanyName,
                                   campaignName: activeCampaignName,
-                                  filteredContacts: filteredContacts,
+                                  filteredContacts: audienceContacts,
                                 ),
                               ),
                               const SizedBox(height: 18),
@@ -2176,7 +2275,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                                   isMobile: isMobile,
                                   strings: strings,
                                   isAr: isAr,
-                                  filteredContacts: filteredContacts,
+                                  filteredContacts: audienceContacts,
                                   companyName: effectiveCompanyName,
                                   campaignName: activeCampaignName,
                                   companySlug: effectiveSlug,
@@ -2216,40 +2315,58 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           ),
                         ),
                       )
-                    else if (filteredContacts.isEmpty)
-                      SliverToBoxAdapter(
-                        child: Container(
-                          margin: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: 32),
-                          padding: const EdgeInsets.all(36),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                          ),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.person_search_rounded, size: 54, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
-                                const SizedBox(height: 12),
-                                Text(
-                                  strings.noCustomersFound,
-                                  style: GoogleFonts.cairo(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
+                    else if (showingSupervisors && !_supervisorsLoaded)
+                      _buildAudienceStatusSliver(
+                        cs: cs,
+                        isMobile: isMobile,
+                        icon: Icons.hourglass_top_rounded,
+                        message: strings.companySupervisorsLoading,
+                        showProgress: true,
+                      )
+                    else if (showingSupervisors && _supervisorsFailed && audienceContacts.isEmpty)
+                      _buildAudienceStatusSliver(
+                        cs: cs,
+                        isMobile: isMobile,
+                        icon: Icons.cloud_off_rounded,
+                        message: strings.companySupervisorsLoadError,
+                      )
+                    else if (audienceContacts.isEmpty)
+                      _buildAudienceStatusSliver(
+                        cs: cs,
+                        isMobile: isMobile,
+                        icon: showingSupervisors ? Icons.badge_outlined : Icons.person_search_rounded,
+                        message: showingSupervisors ? strings.companySupervisorsEmpty : strings.noCustomersFound,
+                      )
+                    else if (showingSupervisors)
+                      CompanySupervisorsAudienceTable(
+                        contacts: audienceContacts,
+                        selectedIds: _selectedContactIds,
+                        currentPage: _currentPage,
+                        rowsPerPage: _rowsPerPage,
+                        isMobile: isMobile,
+                        isAr: isAr,
+                        strings: strings,
+                        colorScheme: cs,
+                        onToggle: (id) => setState(() {
+                          if (_selectedContactIds.contains(id)) {
+                            _selectedContactIds.remove(id);
+                          } else {
+                            _selectedContactIds.add(id);
+                          }
+                        }),
+                        onPageChanged: (page) => setState(() => _currentPage = page),
+                        onSend: (contact) => _launchWhatsAppCampaign(
+                          targetContacts: [contact],
+                          companyName: effectiveCompanyName,
+                          campaignName: activeCampaignName,
+                          strings: strings,
+                          isAr: isAr,
                         ),
                       )
                     else if (isMobile)
-                      _buildMobileCustomerCardsList(filteredContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName)
+                      _buildMobileCustomerCardsList(audienceContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName)
                     else
-                      _buildDesktopCustomerTable(filteredContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName),
+                      _buildDesktopCustomerTable(audienceContacts, cs, strings, isAr, effectiveCompanyName, activeCampaignName),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 48)),
                   ],
@@ -2263,6 +2380,50 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   },
 );
 }
+
+  Widget _buildAudienceStatusSliver({
+    required ColorScheme cs,
+    required bool isMobile,
+    required IconData icon,
+    required String message,
+    bool showProgress = false,
+  }) {
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 32),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showProgress)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: CircularProgressIndicator(color: cs.primary),
+                )
+              else
+                Icon(icon, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   /// Builds the 4 executive KPI summary cards with adaptive responsive layouts
   Widget _buildKpiMetricsGrid(ColorScheme cs, double screenWidth, AppStrings strings, bool isAr) {
@@ -2934,6 +3095,27 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           ),
                           if (_mediaUrlController.text.trim().isNotEmpty) ...[
                             const SizedBox(height: 12),
+                            if (isWhatsAppPdfAttachment(mediaUrl: _mediaUrlController.text.trim()))
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.picture_as_pdf_rounded, color: cs.onPrimaryContainer),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        strings.pdfAttachmentReady,
+                                        style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: cs.onPrimaryContainer),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
@@ -2970,6 +3152,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             isAr
                                 ? 'يتم إرسال الصورة بجانب نص الرسالة كحزمة وسائط متكاملة'
                                 : 'The image will be dispatched together with the caption text',
+                            style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            strings.pdfAttachmentHint,
                             style: GoogleFonts.cairo(fontSize: 11, color: cs.onSurfaceVariant),
                           ),
                         ],
@@ -3343,6 +3530,8 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
   }) {
     final allFilteredSelected = filteredContacts.isNotEmpty &&
         filteredContacts.every((c) => _selectedContactIds.contains(c.id));
+    final supervisorAudience = _selectedSegment == CustomerSegmentType.companySupervisors;
+    final searchHint = supervisorAudience ? strings.companySupervisorSearchPlaceholder : strings.searchCustomerPlaceholder;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3352,7 +3541,15 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
           scrollDirection: Axis.horizontal,
           child: M3ConnectedButtonGroup<CustomerSegmentType>(
             selectedValue: _selectedSegment,
-            onSelected: (seg) => setState(() => _selectedSegment = seg),
+            onSelected: (seg) => setState(() {
+              if (seg != _selectedSegment) {
+                _selectedContactIds.clear();
+                _currentPage = 0;
+                _lastFilterCacheKey = '';
+                _lastSupervisorFilterKey = '';
+              }
+              _selectedSegment = seg;
+            }),
             segments: [
               M3ButtonSegment(
                 value: CustomerSegmentType.all,
@@ -3381,6 +3578,11 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     : 'WhatsApp (${_verifiedWhatsAppMap.values.where((v) => v).length})',
                 icon: Icons.verified_rounded,
               ),
+              M3ButtonSegment(
+                value: CustomerSegmentType.companySupervisors,
+                label: strings.filterSegmentCompanySupervisors,
+                icon: Icons.supervisor_account_rounded,
+              ),
             ],
           ),
         ),
@@ -3398,7 +3600,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                     onSubmitted: (val) => _executeSearchImmediately(val),
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: strings.searchCustomerPlaceholder,
+                      hintText: searchHint,
                       hintStyle: GoogleFonts.cairo(fontSize: 13),
                       prefixIcon: IconButton(
                         icon: _isSearching
@@ -3439,18 +3641,20 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        icon: const Icon(Icons.person_add_rounded, size: 16),
+                        icon: Icon(supervisorAudience ? Icons.upload_file_rounded : Icons.person_add_rounded, size: 16),
                         label: Text(
-                          isAr ? 'إضافة عملاء' : 'Add Customers',
+                          supervisorAudience ? strings.importCompanySupervisors : (isAr ? 'إضافة عملاء' : 'Add Customers'),
                           style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
-                        onPressed: () => _openCustomerImportDialog(
-                          strings: strings,
-                          isAr: isAr,
-                          companySlug: companySlug,
-                          companyName: companyName,
-                          availableBranches: availableBranches,
-                        ),
+                        onPressed: supervisorAudience
+                            ? () => _openSupervisorImportDialog(strings)
+                            : () => _openCustomerImportDialog(
+                                  strings: strings,
+                                  isAr: isAr,
+                                  companySlug: companySlug,
+                                  companyName: companyName,
+                                  availableBranches: availableBranches,
+                                ),
                       ),
 
                       // Filter Active WhatsApp Numbers (Mobile)
@@ -3516,7 +3720,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            strings.selectedCustomersCount(_selectedContactIds.length),
+                            supervisorAudience
+                                ? strings.selectedSupervisorsCount(_selectedContactIds.length)
+                                : strings.selectedCustomersCount(_selectedContactIds.length),
                             style: GoogleFonts.cairo(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -3610,7 +3816,7 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                       onSubmitted: (val) => _executeSearchImmediately(val),
                       textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
-                        hintText: strings.searchCustomerPlaceholder,
+                        hintText: searchHint,
                         hintStyle: GoogleFonts.cairo(fontSize: 13),
                         prefixIcon: IconButton(
                           icon: _isSearching
@@ -3652,18 +3858,20 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 1,
                         ),
-                        icon: const Icon(Icons.person_add_rounded, size: 18),
+                        icon: Icon(supervisorAudience ? Icons.upload_file_rounded : Icons.person_add_rounded, size: 18),
                         label: Text(
-                          isAr ? 'إضافة عملاء' : 'Add Customers',
+                          supervisorAudience ? strings.importCompanySupervisors : (isAr ? 'إضافة عملاء' : 'Add Customers'),
                           style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
-                        onPressed: () => _openCustomerImportDialog(
-                          strings: strings,
-                          isAr: isAr,
-                          companySlug: companySlug,
-                          companyName: companyName,
-                          availableBranches: availableBranches,
-                        ),
+                        onPressed: supervisorAudience
+                            ? () => _openSupervisorImportDialog(strings)
+                            : () => _openCustomerImportDialog(
+                                  strings: strings,
+                                  isAr: isAr,
+                                  companySlug: companySlug,
+                                  companyName: companyName,
+                                  availableBranches: availableBranches,
+                                ),
                       ),
 
                       // Filter Active WhatsApp Numbers (Desktop)
@@ -3729,7 +3937,9 @@ class _CompanyCustomersMarketingScreenState extends ConsumerState<CompanyCustome
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            strings.selectedCustomersCount(_selectedContactIds.length),
+                            supervisorAudience
+                                ? strings.selectedSupervisorsCount(_selectedContactIds.length)
+                                : strings.selectedCustomersCount(_selectedContactIds.length),
                             style: GoogleFonts.cairo(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,

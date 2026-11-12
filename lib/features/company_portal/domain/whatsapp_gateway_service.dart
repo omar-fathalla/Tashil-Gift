@@ -13,6 +13,34 @@ import '../presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'whatsapp_gateway_config_model.dart';
 import '../../../core/services/firebase_scope.dart';
 
+/// True when the existing media attachment should be sent as a PDF document.
+bool isWhatsAppPdfAttachment({
+  required String mediaUrl,
+  String? filename,
+  String? mimeType,
+}) {
+  final mime = (mimeType ?? '').toLowerCase().trim();
+  if (mime == 'application/pdf') return true;
+  if (mime.startsWith('image/')) return false;
+  final candidate = (filename != null && filename.trim().isNotEmpty) ? filename.trim() : mediaUrl.trim();
+  final path = candidate.split('?').first.split('#').first.toLowerCase();
+  return path.endsWith('.pdf');
+}
+
+String whatsAppPdfFilename(String mediaUrl) {
+  final path = mediaUrl.split('?').first.split('#').first;
+  final slash = path.lastIndexOf('/');
+  final raw = slash >= 0 ? path.substring(slash + 1) : path;
+  String decoded;
+  try {
+    decoded = Uri.decodeFull(raw).trim();
+  } catch (_) {
+    decoded = raw.trim();
+  }
+  if (decoded.isEmpty) return 'document.pdf';
+  return decoded.toLowerCase().endsWith('.pdf') ? decoded : '$decoded.pdf';
+}
+
 /// Global Riverpod Provider for WhatsAppGatewayService
 final whatsappGatewayServiceProvider = Provider<WhatsAppGatewayService>((ref) => WhatsAppGatewayService());
 
@@ -849,7 +877,8 @@ class WhatsAppGatewayService {
       if (config.provider == WhatsAppGatewayProvider.waha) {
         final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
-        final url = Uri.parse('$endpoint/api/sendImage');
+        final pdf = isWhatsAppPdfAttachment(mediaUrl: mediaUrl, filename: filename, mimeType: mimeType);
+        final url = Uri.parse('$endpoint/api/${pdf ? 'sendFile' : 'sendImage'}');
         final headers = await buildWahaProxyHeaders({
           'Content-Type': 'application/json',
         });
@@ -870,8 +899,8 @@ class WhatsAppGatewayService {
           'session': session,
           'chatId': resolved.chatId,
           'file': {
-            'mimetype': mimeType ?? 'image/jpeg',
-            'filename': filename ?? 'offer_poster.jpg',
+            'mimetype': mimeType ?? (pdf ? 'application/pdf' : 'image/jpeg'),
+            'filename': filename ?? (pdf ? whatsAppPdfFilename(mediaUrl) : 'offer_poster.jpg'),
             'url': mediaUrl,
           },
           'caption': caption ?? '',
