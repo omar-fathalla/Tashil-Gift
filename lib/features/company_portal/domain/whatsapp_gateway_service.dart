@@ -14,17 +14,95 @@ import 'whatsapp_gateway_config_model.dart';
 import '../../../core/services/firebase_scope.dart';
 
 /// True when the existing media attachment should be sent as a PDF document.
+///
+/// Content type is checked before the file name, and the file name before the
+/// URL. A Firebase download URL does not have to end in `.pdf`.
 bool isWhatsAppPdfAttachment({
   required String mediaUrl,
   String? filename,
   String? mimeType,
 }) {
-  final mime = (mimeType ?? '').toLowerCase().trim();
+  final mime = (mimeType ?? '').toLowerCase().split(';').first.trim();
   if (mime == 'application/pdf') return true;
   if (mime.startsWith('image/')) return false;
   final candidate = (filename != null && filename.trim().isNotEmpty) ? filename.trim() : mediaUrl.trim();
   final path = candidate.split('?').first.split('#').first.toLowerCase();
   return path.endsWith('.pdf');
+}
+
+/// How [WhatsAppGatewayService.sendMediaMessage] will hand a file to WAHA.
+class WhatsAppOutboundMedia {
+  final bool isPdf;
+  final String apiPath;
+  final String mimeType;
+  final String filename;
+
+  const WhatsAppOutboundMedia({
+    required this.isPdf,
+    required this.apiPath,
+    required this.mimeType,
+    required this.filename,
+  });
+}
+
+WhatsAppOutboundMedia planWhatsAppOutboundMedia({
+  required String mediaUrl,
+  String? filename,
+  String? mimeType,
+}) {
+  final pdf = isWhatsAppPdfAttachment(
+    mediaUrl: mediaUrl,
+    filename: filename,
+    mimeType: mimeType,
+  );
+  if (pdf) {
+    final provided = filename?.trim() ?? '';
+    final name = provided.isNotEmpty ? provided : whatsAppPdfFilename(mediaUrl);
+    final withExt = name.toLowerCase().endsWith('.pdf') ? name : '$name.pdf';
+    return WhatsAppOutboundMedia(
+      isPdf: true,
+      apiPath: 'sendFile',
+      mimeType: 'application/pdf',
+      filename: withExt,
+    );
+  }
+
+  final mime = (mimeType ?? '').toLowerCase().split(';').first.trim();
+  final named = (filename != null && filename.trim().isNotEmpty) ? filename.trim() : mediaUrl;
+  final candidate = named.split('?').first.split('#').first.toLowerCase();
+  final String imageMime;
+  if (mime == 'image/png') {
+    imageMime = 'image/png';
+  } else if (mime == 'image/webp') {
+    imageMime = 'image/webp';
+  } else if (mime == 'image/gif') {
+    imageMime = 'image/gif';
+  } else if (mime == 'image/jpeg' || mime == 'image/jpg') {
+    imageMime = 'image/jpeg';
+  } else if (candidate.endsWith('.png')) {
+    imageMime = 'image/png';
+  } else if (candidate.endsWith('.webp')) {
+    imageMime = 'image/webp';
+  } else if (candidate.endsWith('.gif')) {
+    imageMime = 'image/gif';
+  } else {
+    imageMime = 'image/jpeg';
+  }
+
+  final provided = filename?.trim() ?? '';
+  final fallback = imageMime == 'image/png'
+      ? 'offer_poster.png'
+      : imageMime == 'image/webp'
+          ? 'offer_poster.webp'
+          : imageMime == 'image/gif'
+              ? 'offer_poster.gif'
+              : 'offer_poster.jpg';
+  return WhatsAppOutboundMedia(
+    isPdf: false,
+    apiPath: 'sendImage',
+    mimeType: imageMime,
+    filename: provided.isNotEmpty ? provided : fallback,
+  );
 }
 
 String whatsAppPdfFilename(String mediaUrl) {
@@ -877,8 +955,12 @@ class WhatsAppGatewayService {
       if (config.provider == WhatsAppGatewayProvider.waha) {
         final endpoint = resolveEndpoint(config);
         final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
-        final pdf = isWhatsAppPdfAttachment(mediaUrl: mediaUrl, filename: filename, mimeType: mimeType);
-        final url = Uri.parse('$endpoint/api/${pdf ? 'sendFile' : 'sendImage'}');
+        final plan = planWhatsAppOutboundMedia(
+          mediaUrl: mediaUrl,
+          filename: filename,
+          mimeType: mimeType,
+        );
+        final url = Uri.parse('$endpoint/api/${plan.apiPath}');
         final headers = await buildWahaProxyHeaders({
           'Content-Type': 'application/json',
         });
@@ -899,8 +981,8 @@ class WhatsAppGatewayService {
           'session': session,
           'chatId': resolved.chatId,
           'file': {
-            'mimetype': mimeType ?? (pdf ? 'application/pdf' : 'image/jpeg'),
-            'filename': filename ?? (pdf ? whatsAppPdfFilename(mediaUrl) : 'offer_poster.jpg'),
+            'mimetype': plan.mimeType,
+            'filename': plan.filename,
             'url': mediaUrl,
           },
           'caption': caption ?? '',
@@ -1319,6 +1401,8 @@ class WhatsAppGatewayService {
     required String companyName,
     required String campaignName,
     String? attachedMediaUrl,
+    String? attachedMediaFileName,
+    String? attachedMediaMimeType,
     String? pollTitle,
     List<String>? pollOptions,
     bool multiplePollAnswers = false,
@@ -1401,6 +1485,8 @@ class WhatsAppGatewayService {
           toPhone: targetPhone,
           mediaUrl: attachedMediaUrl.trim(),
           caption: personalizedMessage,
+          filename: attachedMediaFileName,
+          mimeType: attachedMediaMimeType,
           client: client,
         );
       } else {

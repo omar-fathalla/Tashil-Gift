@@ -92,6 +92,8 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
   final AppStrings strings;
   final bool isAr;
   final String? attachedMediaUrl;
+  final String? attachedMediaFileName;
+  final String? attachedMediaMimeType;
   final String? pollTitle;
   final List<String>? pollOptions;
   final bool multiplePollAnswers;
@@ -106,6 +108,8 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
     required this.strings,
     required this.isAr,
     this.attachedMediaUrl,
+    this.attachedMediaFileName,
+    this.attachedMediaMimeType,
     this.pollTitle,
     this.pollOptions,
     this.multiplePollAnswers = false,
@@ -242,6 +246,8 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
         companyName: widget.companyName,
         campaignName: widget.campaignName,
         attachedMediaUrl: widget.attachedMediaUrl,
+        attachedMediaFileName: widget.attachedMediaFileName,
+        attachedMediaMimeType: widget.attachedMediaMimeType,
         pollTitle: widget.pollTitle,
         pollOptions: widget.pollOptions,
         multiplePollAnswers: widget.multiplePollAnswers,
