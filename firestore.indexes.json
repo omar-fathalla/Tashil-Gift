@@ -54,6 +54,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "companySlug", "order": "ASCENDING" },
+        { "fieldPath": "parts_count", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "receipts_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companySlug", "order": "ASCENDING" },
         { "fieldPath": "is_valid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]

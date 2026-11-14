@@ -6,12 +6,48 @@ const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
  * cannot read other users' receipts under firestore.rules, so the cross-user
  * lookup happens here. Mirrors ReceiptDeduplicationHelper (Dart):
  * deterministic id rcpt_{campaignId}_{sanitizedReceipt} plus receipt_number
- * query. Returns only {duplicate, existingStatus} - never other users' data.
+ * query, then every component of a combined " + " upload against single
+ * receipts and earlier combined receipts. Returns only {duplicate,
+ * existingStatus} - never other users' data.
  */
 const UNSAFE = /[/\\?%*:|"<>\s]/g;
 
 function normalizeReceiptNumber(raw) {
   return String(raw == null ? "" : raw).trim().replace(/\s+/g, "");
+}
+
+const MAX_COMPONENTS = 10;
+const LEGACY_COMBINED_SCAN_LIMIT = 300;
+
+/**
+ * Physical receipt numbers inside one upload. Combined uploads
+ * (allowComplementaryReceipts) store them joined with " + ".
+ */
+function componentReceiptNumbers(raw) {
+  const out = [];
+  for (const part of normalizeReceiptNumber(raw).split("+")) {
+    if (part && !out.includes(part)) out.push(part);
+  }
+  return out.slice(0, MAX_COMPONENTS);
+}
+
+/** Stored components; records without the array split their joined receipt_number. */
+function storedComponents(d) {
+  const arr = d && d.component_receipt_numbers;
+  if (Array.isArray(arr) && arr.length) {
+    const out = [];
+    for (const v of arr) {
+      const n = normalizeReceiptNumber(v);
+      if (n && !out.includes(n)) out.push(n);
+    }
+    if (out.length) return out;
+  }
+  return componentReceiptNumbers(d && d.receipt_number);
+}
+
+function sharedComponent(components, d) {
+  const existing = storedComponents(d);
+  return components.find((c) => existing.includes(c)) || null;
 }
 
 function deterministicDocId(campaignId, receiptNumber) {
@@ -165,9 +201,11 @@ async function checkReceiptDuplicateHandler(db, request) {
 
   // Campaign must exist and belong to the claimed company (no probing other companies).
   const eventId = campaignId;
+  let eventData = null;
   if (eventId) {
     const ev = await db.collection("events").doc(eventId).get();
-    if (!ev.exists || (ev.data() || {}).companySlug !== companySlug) {
+    eventData = ev.exists ? (ev.data() || {}) : null;
+    if (!eventData || eventData.companySlug !== companySlug) {
       throw new HttpsError("permission-denied", "Campaign/company mismatch.");
     }
   }
@@ -194,16 +232,53 @@ async function checkReceiptDuplicateHandler(db, request) {
     }
   }
 
-  const snap = await db.collection("receipts_transactions")
-    .where("receipt_number", "==", receiptNumber).limit(20).get();
-  for (const doc of snap.docs) {
-    const d = doc.data() || {};
-    if (!isRedeemed(d)) continue;
+  const inScope = (d) => {
     const isBundle = d.is_multi_campaign_bundle === true || d.bundle_group_id != null;
-    if (isMultiScan && (d.companySlug === companySlug || isBundle)) return hit(d);
-    if (campaignId && (d.campaignId === campaignId || (isBundle && d.companySlug === companySlug))) {
+    if (isMultiScan && (d.companySlug === companySlug || isBundle)) return true;
+    return !!campaignId && (d.campaignId === campaignId || (isBundle && d.companySlug === companySlug));
+  };
+  const firstHit = async (docs, components) => {
+    for (const doc of docs) {
+      const d = doc.data() || {};
+      if (!isRedeemed(d) || !inScope(d)) continue;
+      if (components && !sharedComponent(components, d)) continue;
       return hit(d);
     }
+    return null;
+  };
+  const receipts = db.collection("receipts_transactions");
+
+  const snap = await receipts.where("receipt_number", "==", receiptNumber).limit(20).get();
+  const exact = await firstHit(snap.docs, null);
+  if (exact) return exact;
+
+  // Each physical receipt of a combined upload may be used once, whether it
+  // was stored alone or as part of an earlier combined upload.
+  const components = componentReceiptNumbers(receiptNumber);
+  if (components.length > 1) {
+    const singles = await receipts.where("receipt_number", "in", components).limit(20).get();
+    const single = await firstHit(singles.docs, components);
+    if (single) return single;
+  }
+  const tagged = await receipts
+    .where("component_receipt_numbers", "array-contains-any", components).limit(20).get();
+  const taggedHit = await firstHit(tagged.docs, components);
+  if (taggedHit) return taggedHit;
+
+  // Combined receipts saved before component_receipt_numbers existed only
+  // carry the joined string; they can exist only where combining is allowed.
+  if (isMultiScan || (eventData && eventData.allowComplementaryReceipts === true)) {
+    const legacy = await receipts
+      .where("companySlug", "==", companySlug)
+      .where("parts_count", ">", 1)
+      .limit(LEGACY_COMBINED_SCAN_LIMIT).get();
+    const legacyDocs = legacy.docs.filter((doc) => {
+      const d = doc.data() || {};
+      const hasArray = Array.isArray(d.component_receipt_numbers) && d.component_receipt_numbers.length > 0;
+      return !hasArray && String(d.receipt_number || "").includes("+");
+    });
+    const legacyHit = await firstHit(legacyDocs, components);
+    if (legacyHit) return legacyHit;
   }
   return { duplicate: false, existingStatus };
 }
@@ -215,6 +290,9 @@ module.exports = {
   isRedeemed,
   giftLabel,
   normalizeReceiptNumber,
+  componentReceiptNumbers,
+  storedComponents,
+  sharedComponent,
   isAdminCaller,
   isLockedForUpload,
   redeemedSummary,
