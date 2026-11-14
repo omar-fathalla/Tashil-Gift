@@ -62,6 +62,49 @@ class ReceiptDeduplicationHelper {
     return raw.trim().replaceAll(RegExp(r'\s+'), '');
   }
 
+  /// Firestore field holding every physical receipt number in an upload.
+  static const String componentsField = 'component_receipt_numbers';
+
+  /// Physical receipt numbers inside one upload. A combined upload stores
+  /// them joined with ' + '; a single receipt yields one entry.
+  static List<String> componentReceiptNumbers(String? raw) {
+    final out = <String>[];
+    for (final part in normalizeReceiptNumber(raw).split('+')) {
+      if (part.isNotEmpty && !out.contains(part)) out.add(part);
+    }
+    return out;
+  }
+
+  /// Components of a stored receipt. Records saved before the array field
+  /// existed fall back to splitting their joined receipt_number.
+  static List<String> storedComponents(Map<String, dynamic> data) {
+    final raw = data[componentsField];
+    if (raw is List && raw.isNotEmpty) {
+      final out = <String>[];
+      for (final v in raw) {
+        final n = normalizeReceiptNumber(v?.toString());
+        if (n.isNotEmpty && !out.contains(n)) out.add(n);
+      }
+      if (out.isNotEmpty) return out;
+    }
+    return componentReceiptNumbers(data['receipt_number']?.toString());
+  }
+
+  /// First physical receipt number shared by an upload and a stored record.
+  static String? sharedComponent(String? receiptNumber, Map<String, dynamic> stored) {
+    final existing = storedComponents(stored);
+    for (final c in componentReceiptNumbers(receiptNumber)) {
+      if (existing.contains(c)) return c;
+    }
+    return null;
+  }
+
+  /// Fields to write with a receipt so later uploads can match each component.
+  static Map<String, dynamic> componentFields(String? receiptNumber) {
+    final components = componentReceiptNumbers(receiptNumber);
+    return components.isEmpty ? const {} : {componentsField: components};
+  }
+
   /// Sanitizes receipt number for use inside Firestore document keys (removes /, \, etc.)
   static String sanitizeForDocId(String receiptNumber) {
     final clean = normalizeReceiptNumber(receiptNumber);

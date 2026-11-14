@@ -330,13 +330,15 @@ class MultiCampaignReceiptEvaluator {
       }
     }
 
-    final totalChances = clampCampaignChances(
+    final totalChances = settleCampaignChances(
       math.max(
         result.chancesEarned > 0 ? result.chancesEarned : 1,
         compositeBundle?.totalChances ?? 1,
       ),
       allowMultipleChances: campaign.allowMultipleChances,
       maxChancesPerReceipt: campaign.maxChancesPerReceipt,
+      exclusiveLadder: PromotionalRuleMatcher.hasExclusiveSpendLadder(campaign.promotionalRules) &&
+          campaign.spendLadderMode != 'consuming',
     );
 
     final promoQuantity = resolvedLinkedGifts.isNotEmpty

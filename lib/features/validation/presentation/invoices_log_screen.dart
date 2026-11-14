@@ -17,6 +17,7 @@ import '../../../core/utils/canonical_branch_resolver.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../../core/services/ai_receipt_service.dart';
+import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
 import '../../admin/domain/retail_chain_model.dart';
@@ -1922,6 +1923,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
         'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
+        ...ReceiptDeduplicationHelper.componentFields(result.receiptNumber),
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
         if (canonical.trim().isNotEmpty) 'branch_detected': canonical,
         'canonical_branch': canonical,

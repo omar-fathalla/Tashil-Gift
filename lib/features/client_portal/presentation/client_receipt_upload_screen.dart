@@ -1849,12 +1849,14 @@ class _ClientReceiptUploadScreenState
         0,
         (acc, r) => acc + PromotionalRuleMatcher.matchedRuleUnits(r),
       );
-      final int calculatedChances = clampCampaignChances(
+      final int calculatedChances = settleCampaignChances(
         ruleUnits > 0
             ? ruleUnits
             : (result.chancesEarned > 0 ? result.chancesEarned : 1),
         allowMultipleChances: _activeEvent!.allowMultipleChances,
         maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
+        exclusiveLadder: PromotionalRuleMatcher.hasExclusiveSpendLadder(_activeEvent!.promotionalRules) &&
+            _activeEvent!.spendLadderMode != 'consuming',
       );
       final DocumentReference<Map<String, dynamic>> transactionRef = firestore
           .collection('receipts_transactions')
@@ -2012,12 +2014,14 @@ class _ClientReceiptUploadScreenState
             : (prizeNames.isNotEmpty ? prizeNames.first : 'هدية ترويجية مميزة'),
       );
       // Composite bundle chances govern (AIR-83)
-      final totalChances = clampCampaignChances(
+      final totalChances = settleCampaignChances(
         compositeBundle.matchedRules.isNotEmpty
             ? compositeBundle.totalChances
             : (result.chancesEarned > 0 ? result.chancesEarned : 1),
         allowMultipleChances: _activeEvent!.allowMultipleChances,
         maxChancesPerReceipt: _activeEvent!.maxChancesPerReceipt,
+        exclusiveLadder: PromotionalRuleMatcher.hasExclusiveSpendLadder(_activeEvent!.promotionalRules) &&
+            _activeEvent!.spendLadderMode != 'consuming',
       );
 
       final ruleLevelGame =

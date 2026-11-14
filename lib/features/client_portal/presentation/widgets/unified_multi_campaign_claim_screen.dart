@@ -288,6 +288,7 @@ class _UnifiedMultiCampaignClaimScreenState
           'app_version': AppVersionConfig.appVersion,
           if (RepDeviceId.value.isNotEmpty) 'rep_device_id': RepDeviceId.value,
           'receipt_number': widget.receiptNumber,
+          ...ReceiptDeduplicationHelper.componentFields(widget.receiptNumber),
           'campaignId': campaign.id,
           'submittedByUid': ref.read(firebaseAuthProvider).currentUser?.uid ?? '',
           'companySlug': campaign.companySlug,

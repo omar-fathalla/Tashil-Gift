@@ -731,12 +731,14 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       );
 
       // Save or Update in Firestore (Upsert) - Composite bundle chances govern (AIR-83)
-      final int totalChances = clampCampaignChances(
+      final int totalChances = settleCampaignChances(
         compositeBundle.matchedRules.isNotEmpty
             ? compositeBundle.totalChances
             : (result.chancesEarned > 0 ? result.chancesEarned : 1),
         allowMultipleChances: activeEvent.allowMultipleChances,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,
+        exclusiveLadder: PromotionalRuleMatcher.hasExclusiveSpendLadder(activeEvent.promotionalRules) &&
+            activeEvent.spendLadderMode != 'consuming',
       );
       final DocumentReference<Map<String, dynamic>> transactionRef =
           existingDoc != null ? existingDoc.reference : firestore.collection('receipts_transactions').doc(deterministicDocId);

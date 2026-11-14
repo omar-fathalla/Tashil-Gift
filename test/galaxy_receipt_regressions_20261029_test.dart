@@ -30,12 +30,12 @@ void main() {
     expect(r.spend > 79, isTrue, reason: 'matcher spend must override the AI total of 79');
   });
 
-  test('City Square A: Snickers 177 + Galaxy 3x149 -> 624 -> rule_3 x1', () {
+  test('City Square A: Snickers 177 + Galaxy 3x149 -> 624 -> rule_3 x1 + rule_1 from the 174 remainder', () {
     final r = run([
       item('سنيكرز', '5000159558914', 177, 1),
       item('جلاكسى جواهر', '6221134031478', 149, 3),
     ]);
-    expect(r.award, {'rule_3': 1});
+    expect(r.award, {'rule_3': 1, 'rule_1': 1});
     expect(r.spend, closeTo(624, 0.01));
   });
 
