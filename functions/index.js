@@ -30,9 +30,9 @@ const callableOptions = {
 admin.initializeApp();
 const db = admin.firestore();
 
-// firebase.json rewrites /c/** and the other preview prefixes to this
-// function with the original path intact (it is not stripped to "/").
-// Only /c/<digits> is served. maxInstances bounds a path-fuzzing flood.
+// firebase.json regex rewrites send only real preview paths here, with the
+// original path intact. Anything else that still reaches Cloud Run is 404.
+// maxInstances bounds a path-fuzzing flood.
 exports.sharePreview = onRequest(
   { ...httpsOptions, maxInstances: SHARE_PREVIEW_MAX_INSTANCES },
   (req, res) => handleSharePreview(req, res, db),

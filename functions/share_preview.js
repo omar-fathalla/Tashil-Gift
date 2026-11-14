@@ -3,14 +3,38 @@
 /**
  * OpenGraph preview for campaign links.
  *
- * Firebase Hosting rewrites /c/** to this function and forwards the original
- * path (firebase.json). Direct Cloud Run requests use that same path. The
- * allowlist therefore matches req.path, not a prefix-stripped suffix.
+ * firebase.json regex rewrites forward only the original path (query string
+ * stays on req.query). Direct Cloud Run requests see that same path. Patterns
+ * here must stay aligned with those rewrites: one id segment, optional slash.
  */
 
 const PREVIEW_CACHE_CONTROL = "public, max-age=300, s-maxage=3600";
 const NOT_FOUND_CACHE_CONTROL = "public, max-age=60, s-maxage=300";
 const SHARE_PREVIEW_MAX_INSTANCES = 5;
+const BROWSER_LOOKUP_TIMEOUT_MS = 250;
+
+// Real preview ids: company slugs (almarai, coca-cola, 7up), numeric codes
+// (469, 512), and Firestore ids. Dots, tildes, and extra segments are not ids.
+const PREVIEW_ID = "[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*";
+
+/**
+ * Hosting regexes, in match order. manager matches the pre-change
+ * sharePreview check: portal, p, ep, ops, agency.
+ * /c has an explicit numeric rule plus the slug rule (7up, coca-cola, almarai).
+ */
+const SHARE_PREVIEW_REWRITES = [
+  { regex: "^/c/\\d+/?$", manager: false },
+  { regex: `^/c/${PREVIEW_ID}/?$`, manager: false },
+  { regex: `^/portal/${PREVIEW_ID}/?$`, manager: true },
+  { regex: `^/client/${PREVIEW_ID}/?$`, manager: false },
+  { regex: `^/promoter/${PREVIEW_ID}/?$`, manager: false },
+  { regex: `^/ops/${PREVIEW_ID}/?$`, manager: true },
+  { regex: `^/agency/${PREVIEW_ID}/?$`, manager: true },
+  { regex: `^/p/${PREVIEW_ID}/?$`, manager: true },
+  { regex: `^/ep/${PREVIEW_ID}/?$`, manager: true },
+  { regex: `^/event/${PREVIEW_ID}/?$`, manager: false },
+  { regex: `^/share/${PREVIEW_ID}/?$`, manager: false },
+];
 
 /**
  * Escapes HTML entities to prevent XSS in dynamic meta tags
@@ -322,11 +346,10 @@ function requestPath(req) {
 }
 
 /**
- * Allow only GET/HEAD on /c/<digits> with at most one trailing slash.
- * Returns { id } or null. Null means reject before any Firestore read.
- * Query strings are ignored. Percent-encoded slashes are decoded so
- * /c/469%2Fsubadmin cannot sneak past the single-segment rule.
- * Dot segments are not normalized away.
+ * GET/HEAD on a real preview path. Returns { id, prefix, manager } or null.
+ * Null means reject before any Firestore read. Query strings are ignored.
+ * Percent-encoded slashes are decoded so /c/469%2Fsubadmin cannot sneak past
+ * the single-segment rule. Dot segments are not normalized away.
  */
 function matchSharePreviewRoute(method, rawPath) {
   const normalizedMethod = String(method || "").toUpperCase();
@@ -343,9 +366,12 @@ function matchSharePreviewRoute(method, rawPath) {
     return null;
   }
 
-  const match = pathname.match(/^\/c\/([0-9]+)\/?$/);
-  if (!match) return null;
-  return { id: match[1] };
+  const route = SHARE_PREVIEW_REWRITES.find((entry) => new RegExp(entry.regex).test(pathname));
+  if (!route) return null;
+
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length !== 2 || !segments[1]) return null;
+  return { id: segments[1], prefix: segments[0], manager: route.manager };
 }
 
 function sendNotFound(res) {
@@ -364,15 +390,48 @@ async function handleSharePreview(req, res, db) {
   try {
     const query = (req && req.query) || {};
     const eventIdParam = query.event || "";
-    // Lookup is awaited so a missing id is a real 404, not a generic 200.
-    // /c/ pages stay customer/promoter previews (not manager portals).
-    const resolvedEvent = await resolveEvent(db, eventIdParam, route.id);
-    if (!resolvedEvent) {
-      sendNotFound(res);
-      return;
+    const headers = (req && req.headers) || {};
+    const userAgent = String(headers["user-agent"] || "").toLowerCase();
+    const isSocialCrawler = /whatsapp|facebookexternalhit|facebot|twitterbot|telegrambot|linkedinbot|slackbot|discordbot|pinterest|bot|crawler|spider|preview/i.test(userAgent);
+
+    // Same resolution order as before: ?event= doc, then path id as doc or companySlug.
+    // Browsers still race Firestore against 250ms and still receive the shell.
+    const cacheKey = `${eventIdParam || ""}:${route.id}`.toLowerCase();
+    const cached = eventPreviewCache.get(cacheKey);
+    let resolvedEvent = null;
+
+    if (cached && Date.now() - cached.timestamp < PREVIEW_CACHE_TTL_MS) {
+      resolvedEvent = cached.data;
+    } else if (isSocialCrawler) {
+      resolvedEvent = await resolveEvent(db, eventIdParam, route.id);
+    } else {
+      const timeoutMarker = Symbol("preview-timeout");
+      const lookup = resolveEvent(db, eventIdParam, route.id);
+      let timer;
+      let raced;
+      try {
+        raced = await Promise.race([
+          lookup.then(
+            (data) => ({ data }),
+            (error) => ({ error }),
+          ),
+          new Promise((resolve) => {
+            timer = setTimeout(() => resolve(timeoutMarker), BROWSER_LOOKUP_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (raced === timeoutMarker) {
+        resolvedEvent = null;
+      } else if (raced.error) {
+        throw raced.error;
+      } else {
+        resolvedEvent = raced.data;
+      }
     }
 
-    const meta = extractPreviewMetadata(resolvedEvent, query, false);
+    const meta = extractPreviewMetadata(resolvedEvent, query, route.manager);
     res.set("Cache-Control", PREVIEW_CACHE_CONTROL);
     res.set("Content-Type", "text/html; charset=utf-8");
     res.status(200).send(buildPreviewHtml(meta));
@@ -389,4 +448,5 @@ module.exports = {
   PREVIEW_CACHE_CONTROL,
   NOT_FOUND_CACHE_CONTROL,
   SHARE_PREVIEW_MAX_INSTANCES,
+  SHARE_PREVIEW_REWRITES,
 };
