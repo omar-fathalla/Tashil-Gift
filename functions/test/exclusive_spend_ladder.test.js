@@ -41,8 +41,17 @@ test("remainder buys one lower tier only, never a cascade", () => {
   assert.strictEqual(exclusiveLadderUnits(galaxy(), receipt(1250)), 3);
 });
 
-test("Smart Multipliers OFF keeps one offer", () => {
-  assert.strictEqual(exclusiveLadderUnits(galaxy({ allowMultipleChances: false }), receipt(618)), 1);
+test("Smart Multipliers OFF: 618 is still 450 + 150, and 309.5 is one gift", () => {
+  const off = galaxy({ allowMultipleChances: false });
+  assert.strictEqual(exclusiveLadderUnits(off, receipt(618)), 2);
+  assert.strictEqual(exclusiveLadderUnits(off, receipt(309.5)), 1);
+});
+
+test("receiptUnitLimit: an OFF campaign cannot be inflated past the ladder", () => {
+  const off = galaxy({ allowMultipleChances: false, maxChancesPerReceipt: 1 });
+  assert.strictEqual(receiptUnitLimit(off, receipt(618, { chances_earned: 9 })), 2);
+  assert.strictEqual(receiptUnitLimit(off, receipt(309.5, { chances_earned: 9 })), 1);
+  assert.strictEqual(receiptUnitLimit(off, receipt(618, { chances_earned: 2 })), 2);
 });
 
 test("consuming mode and non-barcode rules are left alone", () => {

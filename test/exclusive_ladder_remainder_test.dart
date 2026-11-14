@@ -77,8 +77,24 @@ void main() {
       expect(_award(618, cap: 3), {'t450': 1, 't150': 1});
     });
 
-    test('Smart Multipliers OFF keeps one offer', () {
-      expect(_award(618, multipliers: false), {'t450': 1});
+    test('Smart Multipliers OFF still gives 450 + 150, and 309.5 stays one gift', () {
+      expect(_award(618, multipliers: false), {'t450': 1, 't150': 1});
+      expect(_award(309.5, multipliers: false), {'t150': 1});
+      expect(_units(_award(618, multipliers: false)), 2);
+    });
+
+    test('a cap of 1 does not drop the remainder; a cap above 1 still trims', () {
+      expect(_award(618, multipliers: false, cap: 1), {'t450': 1, 't150': 1});
+      expect(_units(_award(1500, multipliers: true, cap: 3)), 3);
+      expect(
+        settleCampaignChances(2, allowMultipleChances: false, exclusiveLadder: true),
+        2,
+      );
+      expect(
+        settleCampaignChances(1, allowMultipleChances: false, exclusiveLadder: true),
+        1,
+      );
+      expect(settleCampaignChances(5, allowMultipleChances: false), 1);
     });
   });
 }

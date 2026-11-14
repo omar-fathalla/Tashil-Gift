@@ -470,20 +470,24 @@ function piecesPerOffer(event) {
   return best;
 }
 
-// Max gift PIECES this receipt may claim. Switch ON with a cap: cap offers
-// (highest value first on the client). Switch OFF: no cross-offer cap here
-// (each rule is already limited to one offer by the client). Always bounded by
-// the receipt's own chances_earned (offers) and, for an exclusive spend
-// ladder, by the offers its stored lines pay for (top tier + one remainder
-// tier), so an inflated chances_earned cannot raise the limit.
+// Max gift PIECES this receipt may claim. A cap above 1 trims, switch on or
+// off. A cap of 1 does not apply to an exclusive ladder: that ladder is the
+// top tier plus one remainder tier, and the count is recomputed from the
+// stored lines so chances_earned cannot raise it. Other campaigns keep
+// today's cap.
 function receiptUnitLimit(event, receipt, patch) {
   const allow = event && event.allowMultipleChances === true;
   const cap = Number(event && event.maxChancesPerReceipt);
-  let units = allow && Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : Infinity;
+  const ladder = exclusiveLadderUnits(event, receipt);
+  // A cap of 1 is the old one-gift clamp. It does not apply to an exclusive
+  // ladder, so the top tier and one remainder tier both stand. A cap set
+  // above 1 still binds, switch on or off. Other campaigns keep today's cap.
+  let units = Infinity;
+  if (ladder != null && Number.isFinite(cap) && cap > 1) units = Math.floor(cap);
+  else if (ladder == null && allow && Number.isFinite(cap) && cap > 0) units = Math.floor(cap);
   const src = patch && patch.chances_earned != null ? patch.chances_earned : (receipt && receipt.chances_earned);
   const chances = Number(src);
   if (Number.isFinite(chances) && chances > 0) units = Math.min(units, Math.floor(chances));
-  const ladder = exclusiveLadderUnits(event, receipt);
   // 0 means the stored lines could not be read as a ladder at all; that is
   // left to chances_earned rather than blocking the claim outright.
   if (ladder != null && ladder > 0) units = Math.min(units, ladder);

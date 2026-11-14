@@ -2232,6 +2232,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
 
         // Calculate / enforce chances & rewards earned based on quantity and spend multipliers (AIR-83)
         int calculatedChances = result.chancesEarned;
+        // Exclusive ladders keep the remainder tier even when Smart Multipliers
+        // is off, so the final chance clamp must not fold that award back to 1.
+        final bool exclusiveLadder = EventModel.normalizeSpendLadderMode(spendLadderMode) != 'consuming' &&
+            PromotionalRuleMatcher.hasExclusiveSpendLadder(promotionalRules);
         if (result.isValid) {
           // Pre-resolve deterministic rule matches from Dart engine (AIR-83)
           final dartMatchedRules = promotionalRules.isNotEmpty
@@ -2253,7 +2257,10 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
             // Piece counts (quantity) in the basket must NEVER inflate chances!
             final ruleTotalChances = dartMatchedRules.fold<int>(0, (sum, r) => sum + PromotionalRuleMatcher.matchedRuleUnits(r));
             calculatedChances = ruleTotalChances > 0 ? ruleTotalChances : 1;
-            if (maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
+            // A cap of 1 is the old "multipliers off" clamp and must not drop
+            // the remainder tier. A cap the campaign set above 1 still binds.
+            final bool keepRemainder = exclusiveLadder && maxChancesPerReceipt <= 1;
+            if (!keepRemainder && maxChancesPerReceipt > 0 && calculatedChances > maxChancesPerReceipt) {
               calculatedChances = maxChancesPerReceipt;
             }
           } else if (hasAnyRuleMatch) {
@@ -2320,12 +2327,13 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         } else {
           calculatedChances = 0;
         }
-        // Campaign-level Smart Multipliers switch is the single source of
-        // truth: OFF => at most 1 chance; ON => capped by maxChancesPerReceipt.
-        calculatedChances = clampCampaignChances(
+        // Smart Multipliers OFF => at most 1 chance, except an exclusive ladder,
+        // which keeps its top tier plus one remainder tier. ON => the cap.
+        calculatedChances = settleCampaignChances(
           calculatedChances,
           allowMultipleChances: allowMultipleChances,
           maxChancesPerReceipt: maxChancesPerReceipt,
+          exclusiveLadder: exclusiveLadder,
         );
         result = result.copyWith(chancesEarned: calculatedChances);
 
@@ -3560,8 +3568,9 @@ class PromotionalRuleMatcher {
   }
 
   /// [maxUnitsPerReceipt]: when non-null the campaign's per-receipt unit cap
-  /// is enforced on the result (see [capMatchedRuleUnits]): ON => at most
-  /// [maxUnitsPerReceipt] gift units (0 = no cap), OFF => exactly 1 unit.
+  /// is enforced on the result (see [capMatchedRuleUnits]). A cap above 1 trims.
+  /// A cap of 0 or 1 does not: an exclusive ladder keeps its top tier and one
+  /// remainder tier, and other campaigns keep today's switch behaviour.
   static List<MatchedPromotionalRuleResult> matchAllWithMultipliers({
     AiReceiptAnalysisResult? result,
     List<ExtractedProductItem> extractedProducts = const [],
@@ -3580,10 +3589,18 @@ class PromotionalRuleMatcher {
       spendLadderMode: spendLadderMode,
     );
     if (maxUnitsPerReceipt == null) return raw;
+    // A cap of 1 is the old one-gift clamp. On an exclusive ladder it must not
+    // drop the remainder tier; a cap set above 1 still trims, switch on or off.
+    final bool ladder = EventModel.normalizeSpendLadderMode(spendLadderMode) != 'consuming' &&
+        hasExclusiveSpendLadder(promotionalRules);
+    final int cap = ladder
+        ? (maxUnitsPerReceipt > 1 ? maxUnitsPerReceipt : 0)
+        : (allowCampaignMultipliers && maxUnitsPerReceipt > 0 ? maxUnitsPerReceipt : 0);
+    if (cap <= 0) return raw;
     return capMatchedRuleUnits(
       raw,
-      allowMultipleChances: allowCampaignMultipliers,
-      maxChancesPerReceipt: maxUnitsPerReceipt,
+      allowMultipleChances: true,
+      maxChancesPerReceipt: cap,
     );
   }
 
@@ -3855,11 +3872,13 @@ class PromotionalRuleMatcher {
         // share one pool they form a ladder. The receipt gets the highest tier
         // it reaches; a tier without maxSpend is implicitly capped by the next
         // tier's minSpend. Multipliers apply to the top tier only (e.g. 900 on
-        // a 450 top tier = 2x top gift). With Smart Multipliers ON, the spend
-        // left after that tier's threshold(s) then buys the highest strictly
-        // lower tier it reaches, once (618 on 150/350/450 = 450 + 150). This is
-        // a single remainder step, never a cascade, so the server bound in
-        // functions/exclusive_spend_ladder.js can mirror it exactly.
+        // a 450 top tier = 2x top gift, and only when Smart Multipliers is ON).
+        // The spend left after that tier's threshold then buys the highest
+        // strictly lower tier it reaches, once (618 on 150/350/450 = 450 + 150),
+        // whether or not Smart Multipliers is on. With it off the top tier is
+        // not multiplied, so a ladder yields at most the top tier plus one
+        // remainder tier. This is a single remainder step, never a cascade, so
+        // the server bound in functions/exclusive_spend_ladder.js can mirror it.
         final bool isSpendLadder =
             group.where((r) => r.isSpendBased).length > 1;
         final sortedGroup = isSpendLadder
@@ -4043,7 +4062,7 @@ class PromotionalRuleMatcher {
             );
 
             if (isSpendLadder) {
-              if (isRemainderAward || !allowCampaignMultipliers) break;
+              if (isRemainderAward) break;
               ladderAwardedMinSpend = rule.minSpend;
             }
             if (remainingPoolSpend <= 0) break;
@@ -5474,6 +5493,29 @@ class PromotionalRuleMatcher {
     return b.effectiveMinSpend.compareTo(a.effectiveMinSpend);
   }
 
+  /// True when two or more spend rules share one pool, so exclusive mode is a ladder.
+  static bool hasExclusiveSpendLadder(List<PromotionalRuleItem> rules) {
+    final Map<String, int> spendPoolCounts = {};
+    for (final rule in rules) {
+      final poolKey = _spendPoolKey(rule);
+      if (poolKey != null) spendPoolCounts[poolKey] = (spendPoolCounts[poolKey] ?? 0) + 1;
+    }
+    final Map<String, int> groupCounts = {};
+    for (final rule in rules) {
+      if (!rule.isSpendBased) continue;
+      final familyKey = _getProductGroupKey(rule);
+      final poolKey = _spendPoolKey(rule);
+      final bool sharedPool = poolKey != null && (spendPoolCounts[poolKey] ?? 0) > 1;
+      final key = sharedPool
+          ? poolKey
+          : familyKey.contains('_family')
+              ? familyKey
+              : (poolKey ?? familyKey);
+      groupCounts[key] = (groupCounts[key] ?? 0) + 1;
+    }
+    return groupCounts.values.any((count) => count > 1);
+  }
+
   /// Spend rules on the same product set share one pool, whatever their wording.
   static String? _spendPoolKey(PromotionalRuleItem rule) {
     if (!rule.isSpendBased || rule.isCombo || rule.selectedBarcodes.isEmpty) return null;
@@ -5769,6 +5811,32 @@ class SpendAwardRound {
     }
     return rounds;
   }
+}
+
+/// Chance count stored on the receipt.
+///
+/// Smart Multipliers OFF normally yields at most 1. An exclusive spend ladder
+/// is the exception: the highest tier plus one remainder tier are both kept.
+/// A per-receipt cap applies to that exception only when the campaign set it
+/// above 1. Smart Multipliers ON keeps [clampCampaignChances].
+int settleCampaignChances(
+  int chances, {
+  required bool allowMultipleChances,
+  int maxChancesPerReceipt = 0,
+  bool exclusiveLadder = false,
+}) {
+  if (chances <= 0) return chances;
+  if (exclusiveLadder) {
+    if (maxChancesPerReceipt > 1 && chances > maxChancesPerReceipt) {
+      return maxChancesPerReceipt;
+    }
+    return chances;
+  }
+  return clampCampaignChances(
+    chances,
+    allowMultipleChances: allowMultipleChances,
+    maxChancesPerReceipt: maxChancesPerReceipt,
+  );
 }
 
 /// Applies the campaign-level Smart Multipliers switch to a chance count.

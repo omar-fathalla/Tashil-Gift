@@ -7,8 +7,9 @@ const { explicitMember } = require("./consuming_spend_ladder");
  * Mirrors PromotionalRuleMatcher in lib/core/services/ai_receipt_service.dart:
  * rules sharing one barcode set form a ladder; the receipt gets the highest
  * tier it reaches (multiplied only for the top tier when Smart Multipliers is
- * ON) and, when ON, the spend left after that tier's threshold buys the
- * highest strictly lower tier it reaches, once.
+ * ON). The spend left after that tier's threshold buys the highest strictly
+ * lower tier it reaches, once, whether or not Smart Multipliers is on. With
+ * it off the top tier counts once, so a ladder is at most two offers.
  *
  * Membership is a barcode/name/brand match OR the stored company flag, and the
  * line is the gross line the client uses, so the bound is never below a count
@@ -72,7 +73,7 @@ function poolUnits(tiers, spend, allowMultiple) {
     if (top && allowMultiple) {
       count = Math.max(1, Math.floor((spend + Math.max(0, tolerance(rule))) / min));
     }
-    if (!ladder || !allowMultiple) return count;
+    if (!ladder) return count;
     const remainder = Math.max(0, spend - min * count);
     const lower = tiers.slice(i + 1).find((r) => Number(r.minSpend) < min && reaches(r, remainder));
     return count + (lower ? 1 : 0);
