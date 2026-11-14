@@ -155,44 +155,81 @@
         "function": "wahaProxy"
       },
       {
-        "source": "/portal/**",
-        "function": "sharePreview"
+        "regex": "^/c/\\d+/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/c/**",
-        "function": "sharePreview"
+        "regex": "^/c/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/client/**",
-        "function": "sharePreview"
+        "regex": "^/portal/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/promoter/**",
-        "function": "sharePreview"
+        "regex": "^/client/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/ops/**",
-        "function": "sharePreview"
+        "regex": "^/promoter/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/agency/**",
-        "function": "sharePreview"
+        "regex": "^/ops/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/p/**",
-        "function": "sharePreview"
+        "regex": "^/agency/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/ep/**",
-        "function": "sharePreview"
+        "regex": "^/p/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/event/**",
-        "function": "sharePreview"
+        "regex": "^/ep/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
-        "source": "/share/**",
-        "function": "sharePreview"
+        "regex": "^/event/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
+      },
+      {
+        "regex": "^/share/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "function": {
+          "functionId": "sharePreview",
+          "region": "us-central1"
+        }
       },
       {
         "source": "**",
