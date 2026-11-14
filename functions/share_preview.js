@@ -1,0 +1,392 @@
+"use strict";
+
+/**
+ * OpenGraph preview for campaign links.
+ *
+ * Firebase Hosting rewrites /c/** to this function and forwards the original
+ * path (firebase.json). Direct Cloud Run requests use that same path. The
+ * allowlist therefore matches req.path, not a prefix-stripped suffix.
+ */
+
+const PREVIEW_CACHE_CONTROL = "public, max-age=300, s-maxage=3600";
+const NOT_FOUND_CACHE_CONTROL = "public, max-age=60, s-maxage=300";
+const SHARE_PREVIEW_MAX_INSTANCES = 5;
+
+/**
+ * Escapes HTML entities to prevent XSS in dynamic meta tags
+ */
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// In-memory TTL cache (5 minutes) to eliminate repeated Firestore round-trips on hot paths
+const eventPreviewCache = new Map();
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Resolves event document from Firestore by eventId or companySlug with in-memory caching
+ */
+async function resolveEvent(db, eventIdParam, routeIdentifier) {
+  const cacheKey = `${eventIdParam || ""}:${routeIdentifier || ""}`.toLowerCase();
+  const cached = eventPreviewCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < PREVIEW_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  let result = null;
+  if (eventIdParam) {
+    const eventDoc = await db.collection("events").doc(eventIdParam).get();
+    if (eventDoc.exists) result = eventDoc.data();
+  }
+
+  if (!result && routeIdentifier) {
+    const directDoc = await db.collection("events").doc(routeIdentifier).get();
+    if (directDoc.exists) {
+      result = directDoc.data();
+    } else {
+      const cleanSlug = routeIdentifier.toLowerCase();
+      const slugQuery = await db
+        .collection("events")
+        .where("companySlug", "==", cleanSlug)
+        .limit(1)
+        .get();
+
+      if (!slugQuery.empty) result = slugQuery.docs[0].data();
+    }
+  }
+
+  eventPreviewCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  return result;
+}
+
+/**
+ * Extracts and formats metadata for social share preview
+ */
+function extractPreviewMetadata(resolvedEvent, query, isManagerPortal) {
+  let companyName = "تسهيل جيفت";
+  let eventName = "منظومة إدارة العروض والهدايا الترويجية";
+  let companyLogoUrl = "https://tashil-gift.web.app/icons/Icon-512.png";
+  let welcomeDesc = "Tashil Gift - Smart Multi-Company Promotion & Validation Platform by Switch Point";
+
+  if (resolvedEvent) {
+    companyName = resolvedEvent.targetCompany || resolvedEvent.companyName || companyName;
+    eventName = resolvedEvent.eventName || eventName;
+    if (resolvedEvent.companyLogoUrl?.trim()) {
+      companyLogoUrl = resolvedEvent.companyLogoUrl.trim();
+    }
+    const welcome = resolvedEvent.welcomeMessage?.trim() || resolvedEvent.welcomeTitle?.trim();
+    if (welcome) {
+      welcomeDesc = welcome;
+    }
+  } else if (query.companyName) {
+    companyName = query.companyName;
+  }
+
+  if (query.logo) {
+    companyLogoUrl = query.logo;
+  }
+
+  let pageTitle = "";
+  let pageDescription = "";
+
+  if (isManagerPortal) {
+    pageTitle = `${companyName} • بوابة الشريك | Tashil Gift`;
+    pageDescription = `منظومة إدارة ومتابعة الحملات الترويجية والهدايا لشركة ${companyName}`;
+  } else {
+    pageTitle = `${eventName} (${companyName}) | Tashil Gift`;
+    pageDescription = welcomeDesc;
+  }
+
+  return {
+    pageTitle,
+    pageDescription,
+    companyLogoUrl,
+  };
+}
+
+/**
+ * Builds HTML page template with rich OpenGraph / Twitter meta tags and Instant M3 Splash Loader
+ */
+function buildPreviewHtml({ pageTitle, pageDescription, companyLogoUrl }) {
+  const escapedTitle = escapeHtml(pageTitle);
+  const escapedDesc = escapeHtml(pageDescription);
+  const escapedLogo = escapeHtml(companyLogoUrl);
+
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapedTitle}</title>
+  <meta name="description" content="${escapedDesc}">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="${escapedTitle}">
+  <link rel="apple-touch-icon" href="/icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+  <link rel="icon" type="image/png" href="/favicon.png"/>
+
+  <!-- Open Graph / WhatsApp / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Tashil Gift">
+  <meta property="og:title" content="${escapedTitle}">
+  <meta property="og:description" content="${escapedDesc}">
+  <meta property="og:image" content="${escapedLogo}">
+  <meta property="og:image:secure_url" content="${escapedLogo}">
+  <meta property="og:image:alt" content="${escapedTitle}">
+  <meta property="og:image:width" content="600">
+  <meta property="og:image:height" content="600">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapedTitle}">
+  <meta name="twitter:description" content="${escapedDesc}">
+  <meta name="twitter:image" content="${escapedLogo}">
+
+  <link rel="manifest" href="/manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #F8FAF3;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #app-splash-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #F8FAF3;
+      z-index: 999999;
+      transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s;
+    }
+
+    #app-splash-loader.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 40px;
+      border-radius: 24px;
+      background: #FFFFFF;
+      border: 1px solid rgba(74, 93, 35, 0.14);
+      box-shadow: 0 12px 32px rgba(74, 93, 35, 0.06);
+      max-width: 320px;
+      width: 85%;
+      text-align: center;
+    }
+
+    .splash-logo-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #4A5D23 0%, #637B30 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      font-size: 28px;
+      font-weight: 900;
+      box-shadow: 0 6px 16px rgba(74, 93, 35, 0.25);
+      margin-bottom: 16px;
+      animation: pulseBadge 1.8s infinite ease-in-out;
+    }
+
+    .splash-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #1B1C18;
+      margin: 0 0 6px 0;
+    }
+
+    .splash-subtitle {
+      font-size: 13px;
+      color: #5C5F52;
+      margin: 0 0 20px 0;
+    }
+
+    .m3-linear-progress {
+      width: 100%;
+      height: 6px;
+      background-color: #E3E8D8;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .m3-linear-progress-bar {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 45%;
+      background-color: #4A5D23;
+      border-radius: 999px;
+      animation: m3Indeterminate 1.25s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes m3Indeterminate {
+      0% { right: -45%; width: 35%; }
+      50% { width: 55%; }
+      100% { right: 100%; width: 35%; }
+    }
+
+    @keyframes pulseBadge {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-splash-loader">
+    <div class="splash-card">
+      <div class="splash-logo-badge">G</div>
+      <h1 class="splash-title">${escapedTitle}</h1>
+      <p class="splash-subtitle">جاري تهيئة البوابة الذكية...</p>
+      <div class="m3-linear-progress">
+        <div class="m3-linear-progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var hash = window.location.hash;
+      if (hash && (hash.startsWith('#/') || hash.startsWith('#!/'))) {
+        var cleanPath = hash.replace(/^#[!]?/, '');
+        if (cleanPath.startsWith('/')) {
+          window.history.replaceState(null, '', cleanPath);
+        }
+      }
+    })();
+
+    function dismissSplashLoader() {
+      var loader = document.getElementById('app-splash-loader');
+      if (loader && !loader.classList.contains('loaded')) {
+        loader.classList.add('loaded');
+        setTimeout(function() { loader.remove(); }, 350);
+      }
+    }
+
+    window.addEventListener('flutter-first-frame', dismissSplashLoader);
+    var observer = new MutationObserver(function() {
+      if (document.querySelector('flutter-view') || document.querySelector('flt-glass-pane')) {
+        dismissSplashLoader();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  </script>
+  <!-- Flutter Web Bootstrap -->
+  <script src="/flutter_bootstrap.js" async></script>
+</body>
+</html>`;
+}
+
+
+function clearSharePreviewCache() {
+  eventPreviewCache.clear();
+}
+
+function requestPath(req) {
+  if (req && typeof req.path === "string" && req.path.length > 0) return req.path;
+  if (req && typeof req.url === "string" && req.url.length > 0) return req.url;
+  return "/";
+}
+
+/**
+ * Allow only GET/HEAD on /c/<digits> with at most one trailing slash.
+ * Returns { id } or null. Null means reject before any Firestore read.
+ * Query strings are ignored. Percent-encoded slashes are decoded so
+ * /c/469%2Fsubadmin cannot sneak past the single-segment rule.
+ * Dot segments are not normalized away.
+ */
+function matchSharePreviewRoute(method, rawPath) {
+  const normalizedMethod = String(method || "").toUpperCase();
+  if (normalizedMethod !== "GET" && normalizedMethod !== "HEAD") return null;
+
+  const raw = String(rawPath == null ? "/" : rawPath);
+  const withoutQuery = raw.split("#")[0].split("?")[0];
+  if (!withoutQuery.startsWith("/")) return null;
+
+  let pathname;
+  try {
+    pathname = decodeURIComponent(withoutQuery);
+  } catch {
+    return null;
+  }
+
+  const match = pathname.match(/^\/c\/([0-9]+)\/?$/);
+  if (!match) return null;
+  return { id: match[1] };
+}
+
+function sendNotFound(res) {
+  res.set("Cache-Control", NOT_FOUND_CACHE_CONTROL);
+  res.set("Content-Type", "text/plain; charset=utf-8");
+  res.status(404).send("Not Found");
+}
+
+async function handleSharePreview(req, res, db) {
+  const route = matchSharePreviewRoute(req && req.method, requestPath(req));
+  if (!route) {
+    sendNotFound(res);
+    return;
+  }
+
+  try {
+    const query = (req && req.query) || {};
+    const eventIdParam = query.event || "";
+    // Lookup is awaited so a missing id is a real 404, not a generic 200.
+    // /c/ pages stay customer/promoter previews (not manager portals).
+    const resolvedEvent = await resolveEvent(db, eventIdParam, route.id);
+    if (!resolvedEvent) {
+      sendNotFound(res);
+      return;
+    }
+
+    const meta = extractPreviewMetadata(resolvedEvent, query, false);
+    res.set("Cache-Control", PREVIEW_CACHE_CONTROL);
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send(buildPreviewHtml(meta));
+  } catch (error) {
+    console.error("Error generating share preview:", error);
+    res.redirect("/index.html");
+  }
+}
+
+module.exports = {
+  matchSharePreviewRoute,
+  handleSharePreview,
+  clearSharePreviewCache,
+  PREVIEW_CACHE_CONTROL,
+  NOT_FOUND_CACHE_CONTROL,
+  SHARE_PREVIEW_MAX_INSTANCES,
+};
