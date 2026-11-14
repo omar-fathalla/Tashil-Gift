@@ -3852,11 +3852,14 @@ class PromotionalRuleMatcher {
         final spendTierOrder = List<PromotionalRuleItem>.from(group)
           ..sort((a, b) => b.effectiveMinSpend.compareTo(a.effectiveMinSpend));
         // Exclusive spend tiers (general, all campaigns): when 2+ spend rules
-        // share one pool they form a ladder. The receipt gets ONLY the highest
-        // tier it reaches; a tier without maxSpend is implicitly capped by the
-        // next tier's minSpend. Multipliers apply to the top tier only
-        // (e.g. 900 on a 450 top tier = 2x top gift); lower tiers are single
-        // brackets and never receive the remainder of a higher tier's spend.
+        // share one pool they form a ladder. The receipt gets the highest tier
+        // it reaches; a tier without maxSpend is implicitly capped by the next
+        // tier's minSpend. Multipliers apply to the top tier only (e.g. 900 on
+        // a 450 top tier = 2x top gift). With Smart Multipliers ON, the spend
+        // left after that tier's threshold(s) then buys the highest strictly
+        // lower tier it reaches, once (618 on 150/350/450 = 450 + 150). This is
+        // a single remainder step, never a cascade, so the server bound in
+        // functions/exclusive_spend_ladder.js can mirror it exactly.
         final bool isSpendLadder =
             group.where((r) => r.isSpendBased).length > 1;
         final sortedGroup = isSpendLadder
@@ -3869,8 +3872,12 @@ class PromotionalRuleMatcher {
               ..sort(compareRulesByGiftValue));
         double? remainingPoolSpend;
         final Set<int> poolConsumedIndices = {};
+        double? ladderAwardedMinSpend;
 
         for (final rule in sortedGroup) {
+          final awardedMin = ladderAwardedMinSpend;
+          final bool isRemainderAward = awardedMin != null;
+          if (awardedMin != null && rule.minSpend >= awardedMin) continue;
           // Check combo brand requirement (e.g. Signal AND Closeup together)
           if (rule.isCombo && rule.requiredBrands.isNotEmpty) {
             final Set<String> foundBrands = {};
@@ -3962,7 +3969,11 @@ class PromotionalRuleMatcher {
           final effectiveMin = rule.effectiveMinSpend;
           final bool qualifiesMin =
               effectiveMin > 0 && totalEligibleSpend >= effectiveMin;
+          // A remainder only has to reach the lower tier's threshold: its
+          // maxSpend marks where the higher tier starts, and that tier is
+          // already awarded.
           final bool qualifiesMax = isTopTierInGroup ||
+              isRemainderAward ||
               rule.maxSpend == null ||
               rule.maxSpend! <= 0 ||
               rule.maxSpend! <= rule.minSpend ||
@@ -3970,7 +3981,7 @@ class PromotionalRuleMatcher {
 
           if (qualifiesMin && qualifiesMax) {
             int count = 1;
-            if (isBoundedBracket) {
+            if (isRemainderAward || isBoundedBracket) {
               // Bounded middle bracket range (e.g. 95 to 139 EGP) qualifies as 1 bracket match
               count = 1;
             } else if (allowCampaignMultipliers) {
@@ -3982,9 +3993,10 @@ class PromotionalRuleMatcher {
             }
 
             // Spend used by this rule; the remainder stays available to lower tiers.
-            final double usedSpend = isBoundedBracket
+            final double threshold = rule.minSpend > 0 ? rule.minSpend : effectiveMin;
+            final double usedSpend = isBoundedBracket && !isSpendLadder
                 ? totalEligibleSpend
-                : (rule.minSpend > 0 ? rule.minSpend : effectiveMin) * count;
+                : threshold * count;
             remainingPoolSpend = (totalEligibleSpend - usedSpend).clamp(0.0, double.infinity);
             poolConsumedIndices.addAll(matchingProductIndices);
 
@@ -4030,7 +4042,10 @@ class PromotionalRuleMatcher {
               ),
             );
 
-            if (isSpendLadder) break; // exclusive: only the highest reached tier
+            if (isSpendLadder) {
+              if (isRemainderAward || !allowCampaignMultipliers) break;
+              ladderAwardedMinSpend = rule.minSpend;
+            }
             if (remainingPoolSpend <= 0) break;
           }
         }

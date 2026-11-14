@@ -683,9 +683,10 @@ class EventModel {
   /// Maximum draw chances / gifts allowed per single receipt (0 = unlimited / no cap).
   final int maxChancesPerReceipt;
 
-  /// `exclusive` keeps today's ladder: only the highest tier, multiplied.
-  /// `consuming` spends that tier's threshold and gives the remainder to the
-  /// next tier. Missing or unknown values stay `exclusive`.
+  /// `exclusive`: the highest tier reached (multiplied), then the remainder
+  /// buys the highest lower tier once (Smart Multipliers ON only).
+  /// `consuming` keeps spending each tier's threshold down the ladder.
+  /// Missing or unknown values stay `exclusive`.
   final String spendLadderMode;
 
   static String normalizeSpendLadderMode(dynamic raw) {

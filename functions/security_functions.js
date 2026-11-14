@@ -8,6 +8,7 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { planConsumingClaim } = require("./consuming_spend_ladder");
+const { exclusiveLadderUnits } = require("./exclusive_spend_ladder");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -472,7 +473,9 @@ function piecesPerOffer(event) {
 // Max gift PIECES this receipt may claim. Switch ON with a cap: cap offers
 // (highest value first on the client). Switch OFF: no cross-offer cap here
 // (each rule is already limited to one offer by the client). Always bounded by
-// the receipt's own chances_earned (offers).
+// the receipt's own chances_earned (offers) and, for an exclusive spend
+// ladder, by the offers its stored lines pay for (top tier + one remainder
+// tier), so an inflated chances_earned cannot raise the limit.
 function receiptUnitLimit(event, receipt, patch) {
   const allow = event && event.allowMultipleChances === true;
   const cap = Number(event && event.maxChancesPerReceipt);
@@ -480,6 +483,10 @@ function receiptUnitLimit(event, receipt, patch) {
   const src = patch && patch.chances_earned != null ? patch.chances_earned : (receipt && receipt.chances_earned);
   const chances = Number(src);
   if (Number.isFinite(chances) && chances > 0) units = Math.min(units, Math.floor(chances));
+  const ladder = exclusiveLadderUnits(event, receipt);
+  // 0 means the stored lines could not be read as a ladder at all; that is
+  // left to chances_earned rather than blocking the claim outright.
+  if (ladder != null && ladder > 0) units = Math.min(units, ladder);
   return Number.isFinite(units) ? units * piecesPerOffer(event) : Infinity;
 }
 

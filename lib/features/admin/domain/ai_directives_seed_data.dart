@@ -1767,6 +1767,28 @@ class AiDirectivesSeedData {
           tags: ['al-durra', 'agricultural-corn-exclusion', 'popcorn-spices', 'independent-rice-isolation', 'zero-hallucination', 'air-87'],
           lastUpdated: '2026-10-24',
         ),
+        const AiDirectiveModel(
+          id: 'AIR-88',
+          code: 'EXCLUSIVE_SPEND_LADDER_REMAINDER_AND_COMPONENT_RECEIPT_DEDUP_STANDARD',
+          orderIndex: 88,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار باقي الإنفاق في الشرائح الحصرية ومنع تكرار الفواتير المجمعة',
+          titleEn: 'Exclusive Spend Ladder Remainder & Combined Receipt Component Dedup Standard',
+          descriptionAr:
+              'في الشرائح الحصرية (الوضع الافتراضي) تحصل الفاتورة على أعلى شريحة وصلت لها، ثم يُحسب باقي إنفاق منتجات الحملة بعد حد تلك الشريحة ويُمنح أعلى شريحة أقل منها يصل لها الباقي مرة واحدة فقط مع احترام هامش الخصم وحد الهدايا لكل فاتورة. وفي الرفع المجمع (أكثر من فاتورة بعلامة " + ") يُحفظ رقم كل فاتورة على حدة ويُرفض الرفع إذا سبق استخدام أي فاتورة منها منفردة أو داخل رفع مجمع سابق.',
+          descriptionEn:
+              'In exclusive ladders (the default) a receipt gets the highest tier it reaches; the brand-eligible spend left after that tier\'s threshold then buys the highest lower tier it reaches, once, within the tier tolerance and the per-receipt cap. Combined " + " uploads store every component receipt number and are rejected if any component was already used alone or inside an earlier combined upload.',
+          logicAr:
+              '1. PromotionalRuleMatcher: بعد منح أعلى شريحة (مضروبة عند تفعيل المضاعفات) يُحسب الباقي = الإنفاق المؤهل − حد الشريحة × العدد.\n2. يُمنح الباقي لأعلى شريحة أقل حدها (بعد هامش الخصم) لا يتجاوز الباقي، مرة واحدة دون تسلسل إضافي، وفقط عند تفعيل المضاعفات.\n3. chances_earned يساوي إجمالي الهدايا، والخادم يعيد حسابها من سطور الفاتورة ولا يسمح بأكثر منها.\n4. component_receipt_numbers يُحفظ مع كل فاتورة، والسجلات القديمة تُقسم على " + ".',
+          logicEn:
+              '1. PromotionalRuleMatcher: after the top tier (multiplied when Smart Multipliers is ON), remainder = eligible spend − tier threshold × count.\n2. The remainder buys the highest strictly lower tier whose tolerance-adjusted minimum it reaches, once, no further cascade, only with Smart Multipliers ON.\n3. chances_earned equals the total offers; the server recomputes the bound from the stored lines and never allows more.\n4. component_receipt_numbers is stored on every receipt; older records are split on " + ".',
+          exampleInput:
+              'شرائح 150 / 350 / 450 بهامش 5 ج.م، وفاتورة بها 618 ج.م من منتجات الحملة، ثم فاتورة أخرى بها 309.5 ج.م.',
+          exampleOutput:
+              'الأولى: شريحة 450 + شريحة 150 من باقي 168 ج.م (هديتان). الثانية: شريحة 150 مرة واحدة فقط.',
+          tags: ['spend-ladder', 'exclusive-tiers', 'remainder', 'combined-receipts', 'dedup', 'air-88'],
+          lastUpdated: '2026-11-14',
+        ),
       ];
 }
 

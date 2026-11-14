@@ -70,12 +70,16 @@ void main() {
     return {for (final m in matched) m.rule.id: m.multiplier};
   }
 
-  test('627 EGP -> one 100 voucher only (exclusive top tier, not 4 Snickers)', () {
-    expect(award(627), {'rule_3': 1});
+  test('627 EGP -> one 100 voucher + one Snickers from the 177 remainder (not 4 Snickers)', () {
+    expect(award(627), {'rule_3': 1, 'rule_1': 1});
   });
 
-  test('600 EGP -> one 100 voucher only', () {
-    expect(award(600), {'rule_3': 1});
+  test('600 EGP -> one 100 voucher + one Snickers from the 150 remainder', () {
+    expect(award(600), {'rule_3': 1, 'rule_1': 1});
+  });
+
+  test('599 EGP -> one 100 voucher only (149 remainder reaches no tier)', () {
+    expect(award(599), {'rule_3': 1});
   });
 
   test('900 EGP -> two 100 vouchers', () {
