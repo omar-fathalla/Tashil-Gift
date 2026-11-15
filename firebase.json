@@ -147,6 +147,15 @@
             "value": "public, max-age=0, must-revalidate"
           }
         ]
+      },
+      {
+        "regex": "^/(?:c|portal|client|promoter|ops|agency|p|ep|event|share)/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300, s-maxage=3600"
+          }
+        ]
       }
     ],
     "rewrites": [
