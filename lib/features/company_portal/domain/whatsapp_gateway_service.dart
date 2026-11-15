@@ -190,6 +190,28 @@ class WhatsAppGatewayConnectionStatus {
   });
 }
 
+/// Outcome of a WAHA session-control / status / QR call, carrying the real reason
+/// (HTTP code, WAHA session status, or network error) so the UI never has to guess.
+class WahaCallOutcome {
+  final bool ok;
+  final int? statusCode;
+  final String? sessionStatus;
+  final String? error;
+  final bool isNetworkError;
+  final Uint8List? bytes;
+  final Map<String, dynamic>? details;
+
+  const WahaCallOutcome({
+    required this.ok,
+    this.statusCode,
+    this.sessionStatus,
+    this.error,
+    this.isNetworkError = false,
+    this.bytes,
+    this.details,
+  });
+}
+
 /// Result of live screenshot capture with diagnostics
 class WhatsAppScreenshotResult {
   final bool isSuccess;
@@ -432,10 +454,11 @@ class WhatsAppGatewayService {
           final headers = await buildWahaProxyHeaders();
           final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 12));
           if (response.statusCode == 200) {
-            final data = json.decode(response.body) as Map<String, dynamic>? ?? {};
+            final data = decodeWahaJsonMap(response.body) ?? <String, dynamic>{};
             final status = data['status']?.toString().toUpperCase() ?? '';
             final isConnected = status == 'WORKING';
-            final me = data['me'] as Map<String, dynamic>?;
+            final meRaw = data['me'];
+            final me = meRaw is Map ? meRaw : null;
             final rawPhone = me?['id']?.toString().replaceAll('@c.us', '') ?? '';
             final pushName = me?['pushName']?.toString() ?? '';
             final displayPhone = rawPhone.isNotEmpty
@@ -1342,12 +1365,188 @@ class WhatsAppGatewayService {
       final headers = await buildWahaProxyHeaders();
       final response = await httpClient.get(url, headers: headers).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>?;
+        return decodeWahaJsonMap(response.body);
       }
+      debugPrint('WAHA session details HTTP ${response.statusCode}: ${response.body}');
       return null;
     } catch (e) {
       debugPrint('Error fetching session details: $e');
       return null;
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// Decodes a WAHA JSON object without strict casts (nested maps from the web
+  /// JSON decoder are not always `Map<String, dynamic>`).
+  static Map<String, dynamic>? decodeWahaJsonMap(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static const Set<String> kWahaSessionStatuses = {
+    'SCAN_QR_CODE',
+    'WORKING',
+    'STARTING',
+    'FAILED',
+    'STOPPED',
+  };
+
+  /// Reads the session status from a WAHA session object, or from a WAHA error
+  /// message such as "... current status is 'FAILED'" (422 on /auth/qr).
+  static String? parseWahaSessionStatus(String body) {
+    final map = decodeWahaJsonMap(body);
+    final direct = map?['status']?.toString().trim().toUpperCase() ?? '';
+    if (kWahaSessionStatuses.contains(direct)) return direct;
+    final upper = body.toUpperCase();
+    // "... only in SCAN_QR_CODE status. The current status is 'FAILED'" -> FAILED
+    final current = RegExp(r"STATUS IS\s*['\x22]?(SCAN_QR_CODE|WORKING|STARTING|FAILED|STOPPED)").firstMatch(upper);
+    if (current != null) return current.group(1);
+    final all = RegExp(r'(SCAN_QR_CODE|WORKING|STARTING|FAILED|STOPPED)').allMatches(upper).toList();
+    return all.isEmpty ? null : all.last.group(1);
+  }
+
+  static bool _looksLikeNetworkError(Object e) {
+    final s = e.toString();
+    return s.contains('Failed to fetch') ||
+        s.contains('XMLHttpRequest') ||
+        s.contains('ClientException') ||
+        s.contains('SocketException') ||
+        s.contains('TimeoutException');
+  }
+
+  /// Arabic, user-facing explanation of a WAHA session status.
+  static String describeWahaSessionStatusAr(String? status) {
+    switch (status) {
+      case 'WORKING':
+        return 'الجلسة متصلة بالفعل برقم واتساب.';
+      case 'SCAN_QR_CODE':
+        return 'الجلسة جاهزة لمسح كود الـ QR.';
+      case 'STARTING':
+        return 'جارٍ تشغيل محرك الواتساب على السيرفر، انتظر ثوانٍ...';
+      case 'FAILED':
+        return 'الجلسة معطلة (FAILED)، غالباً لأن واتساب أخرج الجهاز المرتبط أو بعد حظر مؤقت. اضغط "إعادة تشغيل الجلسة" لتوليد كود QR جديد.';
+      case 'STOPPED':
+        return 'الجلسة متوقفة (STOPPED). اضغط "إعادة تشغيل الجلسة" لتشغيلها وتوليد كود QR.';
+      default:
+        return 'حالة الجلسة غير معروفة.';
+    }
+  }
+
+  /// Arabic explanation of a failed proxy/WAHA HTTP call.
+  static String describeWahaFailureAr(WahaCallOutcome o) {
+    if (o.isNetworkError) {
+      return 'تعذر الوصول إلى خادم الواتساب من المتصفح (انقطاع إنترنت أو انتهاء المهلة). تأكد من الاتصال ثم أعد المحاولة.';
+    }
+    switch (o.statusCode) {
+      case 401:
+        return 'انتهت صلاحية تسجيل الدخول أو فحص الأمان (رمز 401). حدّث الصفحة وسجّل الدخول مرة أخرى.';
+      case 403:
+        return 'حسابك لا يملك صلاحية إدارة الواتساب (رمز 403).';
+      case 429:
+        return 'طلبات كثيرة في وقت قصير (رمز 429). انتظر دقيقة ثم أعد المحاولة.';
+      case 422:
+        return describeWahaSessionStatusAr(o.sessionStatus);
+      case 502:
+      case 503:
+      case 504:
+        return 'خادم الواتساب لا يستجيب حالياً (رمز ${o.statusCode}).';
+    }
+    if (o.statusCode != null) {
+      return 'رد خادم الواتساب برمز ${o.statusCode}.';
+    }
+    return o.error ?? 'خطأ غير معروف.';
+  }
+
+  /// GET /api/sessions/{session} with the real status and failure reason.
+  Future<WahaCallOutcome> fetchSessionStatusDetailed(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) {
+      return const WahaCallOutcome(ok: false, error: 'not WAHA');
+    }
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = resolveEndpoint(config);
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final headers = await buildWahaProxyHeaders();
+      final response = await httpClient
+          .get(Uri.parse('$endpoint/api/sessions/$session'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      final details = decodeWahaJsonMap(response.body);
+      return WahaCallOutcome(
+        ok: response.statusCode == 200,
+        statusCode: response.statusCode,
+        sessionStatus: response.statusCode == 200 ? parseWahaSessionStatus(response.body) : null,
+        details: details,
+        error: response.statusCode == 200 ? null : response.body,
+      );
+    } catch (e) {
+      return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// GET /api/{session}/auth/qr; on 422 also returns the session status WAHA reported.
+  Future<WahaCallOutcome> fetchQrCodeDetailed(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) {
+      return const WahaCallOutcome(ok: false, error: 'not WAHA');
+    }
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = resolveEndpoint(config);
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final headers = await buildWahaProxyHeaders();
+      final response = await httpClient
+          .get(Uri.parse('$endpoint/api/$session/auth/qr'), headers: headers)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return WahaCallOutcome(ok: true, statusCode: 200, sessionStatus: 'SCAN_QR_CODE', bytes: response.bodyBytes);
+      }
+      return WahaCallOutcome(
+        ok: false,
+        statusCode: response.statusCode,
+        sessionStatus: response.statusCode == 422 ? parseWahaSessionStatus(response.body) : null,
+        error: response.body,
+      );
+    } catch (e) {
+      return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
+    } finally {
+      if (client == null) httpClient.close();
+    }
+  }
+
+  /// POST /api/sessions/{session}/{action} where action is restart, start, stop or logout.
+  Future<WahaCallOutcome> controlSession(
+    WhatsAppGatewayConfigModel config,
+    String action, {
+    http.Client? client,
+  }) async {
+    const allowed = {'restart', 'start', 'stop', 'logout'};
+    if (config.provider != WhatsAppGatewayProvider.waha || !allowed.contains(action)) {
+      return WahaCallOutcome(ok: false, error: 'unsupported action $action');
+    }
+    final httpClient = client ?? http.Client();
+    try {
+      final endpoint = resolveEndpoint(config);
+      final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
+      final headers = await buildWahaProxyHeaders();
+      final response = await httpClient
+          .post(Uri.parse('$endpoint/api/sessions/$session/$action'), headers: headers)
+          .timeout(const Duration(seconds: 30));
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      return WahaCallOutcome(
+        ok: ok,
+        statusCode: response.statusCode,
+        sessionStatus: parseWahaSessionStatus(response.body),
+        error: ok ? null : response.body,
+      );
+    } catch (e) {
+      return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
     } finally {
       if (client == null) httpClient.close();
     }
@@ -1391,6 +1590,36 @@ class WhatsAppGatewayService {
         .replaceAll('{الفرع}', branchName)
         .replaceAll('{الهدايا}', giftsText)
         .replaceAll('{المشتريات}', '${contact.totalSpend.toStringAsFixed(0)} ج.م');
+  }
+
+  /// Returns an Arabic reason when a failed send means the whole batch must stop,
+  /// or null when only this contact failed (e.g. number not on WhatsApp).
+  Future<String?> _batchHaltReason({
+    required WhatsAppGatewayConfigModel config,
+    required WhatsAppGatewayResult result,
+    http.Client? client,
+  }) async {
+    if (config.provider != WhatsAppGatewayProvider.waha) return null;
+    final code = result.statusCode;
+    if (code == 404) return null; // number not registered on WhatsApp
+    if (code == 401 || code == 403) {
+      return 'انتهت صلاحية تسجيل الدخول أو لا توجد صلاحية (رمز $code).';
+    }
+    if (code == 429) {
+      return 'تم تجاوز حد الطلبات المسموح (رمز 429).';
+    }
+    // 422 (session not WORKING), 5xx, or a network/unknown failure: ask WAHA.
+    final status = await fetchSessionStatusDetailed(config, client: client);
+    if (status.ok && status.sessionStatus == 'WORKING') {
+      return null;
+    }
+    if (status.ok) {
+      return 'جلسة الواتساب غير متصلة (الحالة: ${status.sessionStatus ?? 'غير معروفة'}).';
+    }
+    if (code == 422) {
+      return 'جلسة الواتساب غير متصلة (رمز 422).';
+    }
+    return 'تعذر التحقق من حالة جلسة الواتساب (${describeWahaFailureAr(status)})';
   }
 
   /// Dispatches a batch of messages sequentially with anti-spam pacing jitter and progress notifications
@@ -1507,6 +1736,29 @@ class WhatsAppGatewayService {
         successCount++;
         contact.status = ContactDispatchStatus.sent;
       } else {
+        // Circuit breaker: a session that is no longer WORKING (ban, logout, crash),
+        // an expired login or the proxy rate limit means every next send will fail
+        // too and keeps hammering WhatsApp. Stop the whole batch on the first one.
+        final haltReason = await _batchHaltReason(config: config, result: result, client: client);
+        if (haltReason != null) {
+          // Not really attempted: keep it pending so a resume picks it up.
+          contact.status = ContactDispatchStatus.pending;
+          final remaining = contacts.length - i;
+          yield BatchProgressEvent(
+            currentIndex: i,
+            totalContacts: contacts.length,
+            successCount: successCount,
+            failureCount: failureCount,
+            currentContact: contact,
+            isCompleted: false,
+            isCancelled: true,
+            isHalted: true,
+            haltReason: haltReason,
+            statusMessage: 'تم إيقاف الإرسال تلقائياً بعد $successCount رسالة ناجحة: $haltReason '
+                'لم يتم إرسال $remaining رسالة متبقية. أعد ربط الواتساب ثم استأنف الإرسال.',
+          );
+          break;
+        }
         failureCount++;
         contact.status = ContactDispatchStatus.failed;
       }
@@ -1547,6 +1799,10 @@ class BatchProgressEvent {
   final bool isCancelled;
   final String statusMessage;
 
+  /// True when the batch was stopped automatically by the circuit breaker.
+  final bool isHalted;
+  final String? haltReason;
+
   const BatchProgressEvent({
     required this.currentIndex,
     required this.totalContacts,
@@ -1557,6 +1813,8 @@ class BatchProgressEvent {
     this.isCompleted = false,
     this.isCancelled = false,
     required this.statusMessage,
+    this.isHalted = false,
+    this.haltReason,
   });
 
   double get progressFraction => totalContacts > 0 ? (currentIndex / totalContacts).clamp(0.0, 1.0) : 0.0;

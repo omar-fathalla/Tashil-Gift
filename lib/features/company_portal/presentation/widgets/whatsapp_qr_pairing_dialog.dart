@@ -70,7 +70,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
 
   void _startSessionPolling() {
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _pollSessionStatus();
     });
   }
@@ -78,11 +78,17 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
   Future<void> _pollSessionStatus() async {
     if (!mounted) return;
     try {
-      final details = await _service.fetchSessionDetails(widget.config);
-      if (!mounted || details == null) return;
+      final outcome = await _service.fetchSessionStatusDetailed(widget.config);
+      if (!mounted) return;
+      if (!outcome.ok || outcome.details == null) {
+        debugPrint('WAHA session poll failed: ${outcome.statusCode} ${outcome.error}');
+        return;
+      }
+      final details = outcome.details!;
 
-      final status = details['status']?.toString().toUpperCase() ?? 'UNKNOWN';
-      final me = details['me'] as Map<String, dynamic>?;
+      final status = outcome.sessionStatus ?? _sessionStatus;
+      final meRaw = details['me'];
+      final me = meRaw is Map ? meRaw : null;
       final rawPhone = me?['id']?.toString().replaceAll('@c.us', '') ?? '';
       final pushName = me?['pushName']?.toString() ?? '';
 
@@ -129,39 +135,45 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
     });
 
     try {
-      final bytes = await _service.fetchQrCode(widget.config);
+      final qr = await _service.fetchQrCodeDetailed(widget.config);
       if (!mounted) return;
 
-      if (bytes != null && bytes.isNotEmpty) {
+      if (qr.ok && qr.bytes != null && qr.bytes!.isNotEmpty) {
         setState(() {
-          _qrBytes = bytes;
+          _qrBytes = qr.bytes;
           _isLoadingQr = false;
+          _sessionStatus = 'SCAN_QR_CODE';
         });
-      } else {
-        // Check session details to know why QR is not available
-        final details = await _service.fetchSessionDetails(widget.config);
-        final status = details?['status']?.toString().toUpperCase() ?? '';
+        return;
+      }
 
-        setState(() {
-          _isLoadingQr = false;
-          _sessionStatus = status.isNotEmpty ? status : _sessionStatus;
-          if (status == 'WORKING') {
-            _qrError = widget.isAr
-                ? 'الجلسة متصلة بالفعل برقم هاتف!'
-                : 'Session is already connected to a phone!';
-          } else if (status == 'FAILED') {
-            _qrError = widget.isAr
-                ? 'الجلسة معطلة حالياً. اضغط "إعادة تشغيل الجلسة" لتنشيطها وتوليد كود الـ QR.'
-                : 'Session failed. Click "Restart Session" to re-initialize and generate QR.';
-          } else if (status == 'STARTING') {
-            _qrError = widget.isAr
-                ? 'جارٍ تشغيل محرك الواتساب بالسيرفر، انتظر ثوانٍ معدودة...'
-                : 'WhatsApp engine is starting on server, please wait a moment...';
-          } else {
-            _qrError = widget.isAr
-                ? 'تعذر تحميل رمز QR من السيرفر. تأكد من عمل السيرفر وصحة المفتاح.'
-                : 'Failed to load QR code. Ensure the server is online and API key is valid.';
-          }
+      // Find out the real reason: WAHA's 422 names the status; otherwise ask the session.
+      var status = qr.sessionStatus;
+      if (status == null && !qr.isNetworkError) {
+        final s = await _service.fetchSessionStatusDetailed(widget.config);
+        if (s.ok) status = s.sessionStatus;
+      }
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingQr = false;
+        _qrBytes = null;
+        if (status != null) _sessionStatus = status;
+        if (status != null) {
+          _qrError = widget.isAr
+              ? WhatsAppGatewayService.describeWahaSessionStatusAr(status)
+              : 'Session status: $status';
+        } else {
+          _qrError = widget.isAr
+              ? 'تعذر تحميل رمز QR: ${WhatsAppGatewayService.describeWahaFailureAr(qr)}'
+              : 'Failed to load QR code (${qr.statusCode ?? qr.error})';
+        }
+      });
+
+      // The engine is booting: try again shortly instead of leaving an error.
+      if (status == 'STARTING') {
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted && _qrBytes == null) _fetchQrCode();
         });
       }
     } catch (e) {
@@ -173,6 +185,9 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
       }
     }
   }
+
+  bool get _canOfferRestart =>
+      _sessionStatus == 'FAILED' || _sessionStatus == 'STOPPED' || _sessionStatus == 'UNKNOWN';
 
   Future<void> _requestPairingCode() async {
     final rawPhone = _phoneController.text.toEnglishDigits().trim();
@@ -213,31 +228,95 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
     }
   }
 
-  Future<void> _restartSession() async {
-    setState(() => _isActionInProgress = true);
-    final success = await _service.restartInstance(widget.config);
+  void _showActionSnack(String message, {required bool success}) {
     if (!mounted) return;
-
-    setState(() => _isActionInProgress = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          success
-              ? (widget.isAr ? 'تم إرسال أمر إعادة تشغيل الجلسة بنجاح' : 'Session restart triggered successfully')
-              : (widget.isAr ? 'تعذر إعادة تشغيل الجلسة' : 'Failed to restart session'),
-          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
-        ),
+        content: Text(message, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
         backgroundColor: success ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
       ),
     );
+  }
 
-    if (success) {
-      // Wait 3 seconds for server engine initialization then fetch QR
-      await Future.delayed(const Duration(seconds: 3));
-      if (mounted) {
-        _fetchQrCode();
+  /// Waits for the session to leave STARTING; returns the last known status.
+  Future<String?> _waitForSessionToSettle({int maxSeconds = 40}) async {
+    String? last;
+    for (var waited = 0; waited < maxSeconds; waited += 4) {
+      await Future.delayed(const Duration(seconds: 4));
+      if (!mounted) return last;
+      final s = await _service.fetchSessionStatusDetailed(widget.config);
+      if (s.ok && s.sessionStatus != null) {
+        last = s.sessionStatus;
+        setState(() => _sessionStatus = last!);
+        if (last != 'STARTING') return last;
       }
     }
+    return last;
+  }
+
+  /// Restart with fallbacks: restart → start → (session still FAILED) logout + start.
+  Future<void> _restartSession() async {
+    setState(() {
+      _isActionInProgress = true;
+      _qrError = null;
+      _isLoadingQr = true;
+    });
+
+    var outcome = await _service.controlSession(widget.config, 'restart');
+    if (!outcome.ok && !outcome.isNetworkError && outcome.statusCode != 401 && outcome.statusCode != 403) {
+      // e.g. the session was STOPPED or missing on the server: start it instead.
+      final started = await _service.controlSession(widget.config, 'start');
+      if (started.ok) outcome = started;
+    }
+    if (!mounted) return;
+
+    if (!outcome.ok) {
+      setState(() {
+        _isActionInProgress = false;
+        _isLoadingQr = false;
+        _qrError = widget.isAr
+            ? 'تعذر إعادة تشغيل الجلسة: ${WhatsAppGatewayService.describeWahaFailureAr(outcome)}'
+            : 'Failed to restart session (${outcome.statusCode ?? outcome.error})';
+      });
+      _showActionSnack(
+        widget.isAr
+            ? 'تعذر إعادة تشغيل الجلسة: ${WhatsAppGatewayService.describeWahaFailureAr(outcome)}'
+            : 'Failed to restart session',
+        success: false,
+      );
+      return;
+    }
+
+    _showActionSnack(
+      widget.isAr ? 'تم إرسال أمر إعادة تشغيل الجلسة، جارٍ تجهيز كود QR...' : 'Session restart triggered, preparing QR...',
+      success: true,
+    );
+
+    var status = await _waitForSessionToSettle();
+    if (!mounted) return;
+
+    if (status == 'FAILED') {
+      // Old WhatsApp login is no longer valid (logged out / banned device): clear it and start fresh.
+      final loggedOut = await _service.controlSession(widget.config, 'logout');
+      if (loggedOut.ok) {
+        await _service.controlSession(widget.config, 'start');
+        _showActionSnack(
+          widget.isAr
+              ? 'تم مسح بيانات الربط القديمة لأنها لم تعد صالحة. امسح كود QR الجديد من الهاتف.'
+              : 'Old login was no longer valid and was cleared. Scan the new QR.',
+          success: true,
+        );
+        status = await _waitForSessionToSettle();
+        if (!mounted) return;
+      }
+    }
+
+    setState(() => _isActionInProgress = false);
+    if (status == 'WORKING') {
+      setState(() => _isLoadingQr = false);
+      return;
+    }
+    _fetchQrCode();
   }
 
   Future<void> _logoutSession() async {
@@ -658,9 +737,25 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        FilledButton.tonal(
-                          onPressed: _fetchQrCode,
-                          child: Text(widget.isAr ? 'إعادة المحاولة' : 'Retry', style: GoogleFonts.cairo(fontSize: 11)),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (_canOfferRestart)
+                              FilledButton.icon(
+                                onPressed: _isActionInProgress ? null : _restartSession,
+                                icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                                label: Text(
+                                  widget.strings.restartSessionBtn,
+                                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            FilledButton.tonal(
+                              onPressed: _fetchQrCode,
+                              child: Text(widget.isAr ? 'إعادة المحاولة' : 'Retry', style: GoogleFonts.cairo(fontSize: 11)),
+                            ),
+                          ],
                         ),
                       ],
                     )
