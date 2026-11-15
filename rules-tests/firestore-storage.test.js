@@ -277,6 +277,16 @@ describe("staff and partner claims", () => {
     await assertFails(getDoc(doc(db, "events/camp-1")));
     await assertFails(setDoc(doc(db, "receipts_transactions/nope"), receiptPayload()));
   });
+
+  test("loginThrottle is server-only for every client", async () => {
+    const dbs = [superAdmin(), admin(), partnerOps(), anon(), testEnv.unauthenticatedContext().firestore()];
+    for (const db of dbs) {
+      await assertFails(getDoc(doc(db, "loginThrottle/abc")));
+      await assertFails(getDocs(collection(db, "loginThrottle")));
+      await assertFails(setDoc(doc(db, "loginThrottle/abc"), { failures: 0 }));
+      await assertFails(deleteDoc(doc(db, "loginThrottle/abc")));
+    }
+  });
 });
 
 describe("storage rules", () => {
