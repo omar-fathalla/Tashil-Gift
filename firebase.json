@@ -95,7 +95,43 @@
         ]
       },
       {
-        "source": "**/!(*.*)",
+        "regex": "^/[^/.][^/.]*/?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          }
+        ]
+      },
+      {
+        "regex": "^/(?:[^/.][^/]*/){2,}[^/.][^/.]*/?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          }
+        ]
+      },
+      {
+        "regex": "^/(?:[^/cpoaes.][^/]*|c[^/l][^/]*|cl|cl[^/i][^/]*|cli|cli[^/e][^/]*|clie|clie[^/n][^/]*|clien|clien[^/t][^/]*|client[^/]+|p[^/or][^/]*|po|po[^/r][^/]*|por|por[^/t][^/]*|port|port[^/a][^/]*|porta|porta[^/l][^/]*|portal[^/]+|pr|pr[^/o][^/]*|pro|pro[^/m][^/]*|prom|prom[^/o][^/]*|promo|promo[^/t][^/]*|promot|promot[^/e][^/]*|promote|promote[^/r][^/]*|promoter[^/]+|o|o[^/p][^/]*|op|op[^/s][^/]*|ops[^/]+|a|a[^/g][^/]*|ag|ag[^/e][^/]*|age|age[^/n][^/]*|agen|agen[^/c][^/]*|agenc|agenc[^/y][^/]*|agency[^/]+|e|e[^/pv][^/]*|ep[^/]+|ev|ev[^/e][^/]*|eve|eve[^/n][^/]*|even|even[^/t][^/]*|event[^/]+|s|s[^/h][^/]*|sh|sh[^/a][^/]*|sha|sha[^/r][^/]*|shar|shar[^/e][^/]*|share[^/]+)/[^/.][^/.]*/?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          }
+        ]
+      },
+      {
+        "regex": "^/(?:portal|client|promoter|agency|event|share|ops|ep|p|c)/(?:-[^/.]*|[^/.]*-|[^/.]*--[^/.]*|[^/.]*[^A-Za-z0-9./-][^/.]*)/?$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate, max-age=0"
+          }
+        ]
+      },
+      {
+        "regex": "(?i)\\.(?:php|cgi)/?$",
         "headers": [
           {
             "key": "Cache-Control",
