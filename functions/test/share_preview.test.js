@@ -8,6 +8,7 @@ const {
   clearSharePreviewCache,
   SHARE_PREVIEW_MAX_INSTANCES,
   SHARE_PREVIEW_REWRITES,
+  SLUG_CAMPAIGN_LOOKUP_LIMIT,
 } = require("../share_preview");
 
 const LONG_CACHE = "public, max-age=300, s-maxage=3600";
@@ -22,10 +23,12 @@ const hostingRewrites = firebaseJson.hosting.rewrites;
 function createDb(seed = {}) {
   const docs = new Map(Object.entries(seed));
   let reads = 0;
+  const slugLimits = [];
   const db = {
     get reads() {
       return reads;
     },
+    slugLimits,
     collection(name) {
       return {
         doc(id) {
@@ -42,18 +45,23 @@ function createDb(seed = {}) {
         },
         where(field, _op, value) {
           const query = {
-            limit() {
+            _limit: Number.POSITIVE_INFINITY,
+            limit(n) {
+              query._limit = n;
               return query;
             },
             async get() {
               reads += 1;
+              if (field === "companySlug") slugLimits.push(query._limit);
               const found = [];
               for (const [docPath, data] of docs) {
                 if (docPath.startsWith(`${name}/`) && data[field] === value) {
-                  found.push({ data: () => ({ ...data }) });
+                  const id = docPath.slice(name.length + 1);
+                  found.push({ id, data: () => ({ ...data }) });
                 }
               }
-              return { empty: found.length === 0, docs: found };
+              const limited = found.slice(0, query._limit);
+              return { empty: limited.length === 0, docs: limited, size: limited.length };
             },
           };
           return query;
@@ -218,11 +226,122 @@ test("?event= on /c/<slug> and /ops/<slug> still selects that event", async () =
 test("a word slug missed by doc id still resolves through companySlug", async () => {
   const { res } = await invoke({
     path: "/c/almarai",
-    seed: { "events/abc": { companySlug: "almarai", eventName: "Slug Hit", targetCompany: "Almarai" } },
+    seed: {
+      "events/abc": {
+        companySlug: "almarai",
+        eventName: "Slug Hit",
+        targetCompany: "Almarai",
+        isActive: true,
+      },
+    },
   });
   assert.equal(res.statusCode, 200);
   assert.match(res.body, /Slug Hit/);
   assert.equal(res.body.includes("بوابة الشريك"), false);
+});
+
+test("a slug whose inactive campaign sorts first previews the newest active one", async () => {
+  const august2026 = Math.floor(Date.parse("2026-08-01T00:00:00.000Z") / 1000);
+  const { res, db } = await invoke({
+    path: "/c/512",
+    seed: {
+      "events/closed-first": {
+        companySlug: "512",
+        eventName: "Closed First",
+        targetCompany: "Old Co",
+        isActive: false,
+        createdAt: "2026-12-01T00:00:00.000Z",
+        startDate: "2026-12-01T00:00:00.000Z",
+      },
+      "events/unset-active": {
+        companySlug: "512",
+        eventName: "Unset Active",
+        targetCompany: "Maybe Co",
+        createdAt: "2026-12-15T00:00:00.000Z",
+      },
+      "events/active-older": {
+        companySlug: "512",
+        eventName: "Active Older",
+        targetCompany: "Live Co",
+        isActive: true,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        startDate: "2026-11-01T00:00:00.000Z",
+      },
+      "events/active-newer": {
+        companySlug: "512",
+        eventName: "Active Newer",
+        targetCompany: "Live Co",
+        isActive: true,
+        createdAt: { seconds: august2026, nanoseconds: 0 },
+        startDate: "2020-01-01T00:00:00.000Z",
+      },
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["cache-control"], LONG_CACHE);
+  assert.equal(res.headers["content-type"], "text/html; charset=utf-8");
+  assert.match(res.body, /Active Newer/);
+  assert.equal(res.body.includes("Closed First"), false);
+  assert.equal(res.body.includes("Unset Active"), false);
+  assert.equal(res.body.includes("Active Older"), false);
+  assert.equal(res.body.includes("بوابة الشريك"), false);
+  assert.equal(db.slugLimits[0], SLUG_CAMPAIGN_LOOKUP_LIMIT);
+  assert.ok(SLUG_CAMPAIGN_LOOKUP_LIMIT > 1);
+});
+
+test("a slug with only inactive campaigns falls back to the generic preview", async () => {
+  const { res } = await invoke({
+    path: "/c/512",
+    seed: {
+      "events/closed-newer": {
+        companySlug: "512",
+        eventName: "Closed Newer",
+        targetCompany: "Shut Co",
+        isActive: false,
+        createdAt: "2026-12-01T00:00:00.000Z",
+      },
+      "events/closed-older": {
+        companySlug: "512",
+        eventName: "Closed Older",
+        targetCompany: "Shut Co",
+        isActive: false,
+        createdAt: "2024-01-01T00:00:00.000Z",
+      },
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["cache-control"], LONG_CACHE);
+  assert.equal(res.headers["content-type"], "text/html; charset=utf-8");
+  assert.match(res.body, /flutter_bootstrap\.js/);
+  assert.match(res.body, /منظومة إدارة العروض والهدايا الترويجية/);
+  assert.equal(res.body.includes("Closed Newer"), false);
+  assert.equal(res.body.includes("Closed Older"), false);
+  assert.equal(res.body.includes("Shut Co"), false);
+});
+
+test("slug recency uses startDate when createdAt is missing", async () => {
+  const { res } = await invoke({
+    path: "/promoter/512",
+    seed: {
+      "events/older-start": {
+        companySlug: "512",
+        eventName: "Older Start",
+        targetCompany: "Live Co",
+        isActive: true,
+        startDate: "2026-02-01T00:00:00.000Z",
+      },
+      "events/no-created": {
+        companySlug: "512",
+        eventName: "Start Date Wins",
+        targetCompany: "Live Co",
+        isActive: true,
+        startDate: "2026-07-01T00:00:00.000Z",
+      },
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.body, /Start Date Wins/);
+  assert.equal(res.body.includes("Older Start"), false);
 });
 
 test("a well-formed missing id still serves the generic preview shell", async () => {

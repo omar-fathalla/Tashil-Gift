@@ -53,6 +53,63 @@ function escapeHtml(str) {
 const eventPreviewCache = new Map();
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// Equality on companySlug alone uses the automatic single-field index.
+// isActive and recency are applied in memory, so this lookup does not need a
+// composite index. Recency matches the client: createdAt, otherwise startDate,
+// newest first (client_receipt_upload_screen, company_manager_portal_screen).
+// A slug with more campaigns than the cap can miss an active one and fall
+// back to the generic preview rather than advertise a closed campaign.
+const SLUG_CAMPAIGN_LOOKUP_LIMIT = 100;
+
+function timestampToMillis(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  if (typeof value.toDate === "function") {
+    try {
+      const date = value.toDate();
+      if (date instanceof Date && !Number.isNaN(date.getTime())) return date.getTime();
+    } catch {
+      // Fall through to seconds/nanoseconds.
+    }
+  }
+  if (typeof value === "object") {
+    const seconds = value.seconds ?? value._seconds;
+    if (typeof seconds === "number" && Number.isFinite(seconds)) {
+      const nanos = value.nanoseconds ?? value._nanoseconds ?? 0;
+      const extra = typeof nanos === "number" && Number.isFinite(nanos) ? Math.floor(nanos / 1e6) : 0;
+      return seconds * 1000 + extra;
+    }
+  }
+  return null;
+}
+
+function campaignRecencyMillis(data) {
+  const created = timestampToMillis(data && data.createdAt);
+  if (created != null) return created;
+  const start = timestampToMillis(data && data.startDate);
+  return start == null ? 0 : start;
+}
+
+function pickNewestActiveCampaign(docs) {
+  const active = [];
+  for (const doc of docs || []) {
+    const data = doc && typeof doc.data === "function" ? doc.data() : null;
+    if (!data || data.isActive !== true) continue;
+    active.push(data);
+  }
+  if (active.length === 0) return null;
+  active.sort((a, b) => campaignRecencyMillis(b) - campaignRecencyMillis(a));
+  return active[0];
+}
+
 /**
  * Resolves event document from Firestore by eventId or companySlug with in-memory caching
  */
@@ -78,10 +135,17 @@ async function resolveEvent(db, eventIdParam, routeIdentifier) {
       const slugQuery = await db
         .collection("events")
         .where("companySlug", "==", cleanSlug)
-        .limit(1)
+        .limit(SLUG_CAMPAIGN_LOOKUP_LIMIT)
         .get();
 
-      if (!slugQuery.empty) result = slugQuery.docs[0].data();
+      const slugDocs = slugQuery.docs || [];
+      if (slugDocs.length >= SLUG_CAMPAIGN_LOOKUP_LIMIT) {
+        console.warn(
+          `sharePreview slug lookup for ${cleanSlug} hit the ${SLUG_CAMPAIGN_LOOKUP_LIMIT} document cap`,
+        );
+      }
+      // No active campaign: leave result null so the generic preview is served.
+      result = pickNewestActiveCampaign(slugDocs);
     }
   }
 
@@ -449,4 +513,5 @@ module.exports = {
   NOT_FOUND_CACHE_CONTROL,
   SHARE_PREVIEW_MAX_INSTANCES,
   SHARE_PREVIEW_REWRITES,
+  SLUG_CAMPAIGN_LOOKUP_LIMIT,
 };

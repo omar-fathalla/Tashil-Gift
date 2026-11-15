@@ -4287,6 +4287,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         voucherSerialMode: _voucherSerialMode,
         allowComplementaryReceipts: _allowComplementaryReceipts,
         enableWhatsAppWinnerNotification: _enableWhatsAppWinnerNotification,
+        spendLadderMode: widget.eventToEdit?.spendLadderMode ?? 'exclusive',
+        createdAt: widget.eventToEdit?.createdAt,
       );
 
       String createdEventId = widget.eventToEdit?.id ?? '';
@@ -4297,7 +4299,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         );
         createdEventId = docRef.id;
       } else {
-        await firestore.collection('events').doc(widget.eventToEdit!.id).update(event.toFirestore()).timeout(
+        final updatedBy = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+        await firestore.collection('events').doc(widget.eventToEdit!.id).update(
+          event.toEditFirestore(
+            existing: widget.eventToEdit!,
+            updatedBy: updatedBy,
+          ),
+        ).timeout(
           const Duration(seconds: 5),
           onTimeout: () {},
         );
