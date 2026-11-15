@@ -297,6 +297,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Server-only partnerPortalLogin brute-force counters (hashed keys).
+    match /loginThrottle/{docId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

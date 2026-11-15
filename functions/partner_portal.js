@@ -12,17 +12,10 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("./admin_sdk");
 const { RateLimitError, clientKey, consumeRateLimit, hash } = require("./rate_limit");
+const { LoginThrottledError, beginLoginAttempt, loginClientIp, recordLoginSuccess } = require("./login_throttle");
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
-const LOGIN_CLIENT_LIMITS = [
-  { name: "min", windowMs: MINUTE, max: 10 },
-  { name: "day", windowMs: DAY, max: 200 },
-];
-const LOGIN_ACCOUNT_LIMITS = [
-  { name: "min", windowMs: MINUTE, max: 20 },
-  { name: "day", windowMs: DAY, max: 500 },
-];
 const INFO_CLIENT_LIMITS = [
   { name: "min", windowMs: MINUTE, max: 60 },
   { name: "day", windowMs: DAY, max: 2000 },
@@ -31,8 +24,9 @@ const INFO_CLIENT_LIMITS = [
 const callableOptions = {
   region: "us-central1",
   memory: "256MiB",
-  // Portal visitors are often not signed in; App Check is monitored, not
-  // enforced, across the project. Brute force is bounded by the rate limits.
+  // Portal visitors are often not signed in. App Check is monitored, not
+  // enforced: the Android/iOS builds use the web app id and cannot mint App
+  // Check tokens. Brute force is bounded by loginThrottle and rate limits.
   enforceAppCheck: false,
 };
 
@@ -193,15 +187,18 @@ function publicInfo({ slug, eventId, event, company }) {
   };
 }
 
-async function limit(db, scope, key, limits) {
+/** HTTP 429 with a Retry-After header (Express exposes the response as req.res). */
+function tooManyAttempts(request, retryAfterSec) {
+  const res = request.rawRequest && request.rawRequest.res;
+  if (res && !res.headersSent) res.set("Retry-After", String(retryAfterSec));
+  return new HttpsError("resource-exhausted", "Too many attempts. Please wait and try again.", { retryAfterSec });
+}
+
+async function limit(request, db, scope, key, limits) {
   try {
     await consumeRateLimit({ db, scope, key, limits });
   } catch (err) {
-    if (err instanceof RateLimitError) {
-      throw new HttpsError("resource-exhausted", "Too many attempts. Please wait and try again.", {
-        retryAfterSec: err.retryAfterSec,
-      });
-    }
+    if (err instanceof RateLimitError) throw tooManyAttempts(request, err.retryAfterSec);
     throw err;
   }
 }
@@ -209,7 +206,7 @@ async function limit(db, scope, key, limits) {
 const partnerPortalInfo = onCall(callableOptions, async (request) => {
   const db = admin.firestore();
   const data = request.data || {};
-  await limit(db, "portalInfo", clientKey({ uid: request.auth && request.auth.uid, rawRequest: request.rawRequest }), INFO_CLIENT_LIMITS);
+  await limit(request, db, "portalInfo", clientKey({ uid: request.auth && request.auth.uid, rawRequest: request.rawRequest }), INFO_CLIENT_LIMITS);
   const ctx = await loadContext(db, data.companySlug, data.eventId);
   if (!ctx.slug) throw new HttpsError("invalid-argument", "companySlug or eventId is required.");
   return publicInfo(ctx);
@@ -224,10 +221,16 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
   if (!role) throw new HttpsError("invalid-argument", "role is required.");
   if (!username || !password) throw new HttpsError("invalid-argument", "username and password are required.");
 
-  await limit(db, "portalLogin", clientKey({ uid: request.auth && request.auth.uid, rawRequest: request.rawRequest }), LOGIN_CLIENT_LIMITS);
+  // Lockout / IP cap is decided before any company, event or credential read.
+  let attempt;
+  try {
+    attempt = await beginLoginAttempt({ db, identifier: username, ip: loginClientIp(request.rawRequest) });
+  } catch (err) {
+    if (err instanceof LoginThrottledError) throw tooManyAttempts(request, err.retryAfterSec);
+    throw err;
+  }
   const ctx = await loadContext(db, data.companySlug, data.eventId);
   if (!ctx.slug) throw new HttpsError("invalid-argument", "companySlug or eventId is required.");
-  await limit(db, "portalLoginAcct", `${ctx.slug}|${role}|${username.toLowerCase()}`, LOGIN_ACCOUNT_LIMITS);
 
   let companyEvents = [];
   if (role === ROLE_AGENCY && !(ctx.eventId && ctx.event && ctx.event.hasCustomAgencyCredentials === true)) {
@@ -241,6 +244,7 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
     console.warn("partnerPortalLogin rejected", { slug: ctx.slug, role, reason: result.error });
     return { ok: false, reason: result.error, info };
   }
+  await recordLoginSuccess({ db, ...attempt });
   const spec = portalTokenSpec(ctx.slug, result);
   const customToken = await admin.auth().createCustomToken(spec.uid, spec.claims);
   return {
