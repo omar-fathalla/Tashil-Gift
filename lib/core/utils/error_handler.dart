@@ -139,8 +139,9 @@ class AppErrorHandler {
   /// dispensed (safe to treat a retried auto-claim as done).
   static bool isAlreadyClaimedError(dynamic error) {
     if (error is FirebaseFunctionsException) {
-      final m = (error.message ?? '').toLowerCase();
-      return error.code == 'failed-precondition' && m.contains('already claimed');
+      if (error.code != 'failed-precondition') return false;
+      if (claimStateMessages.containsKey(claimRejectionReason(error))) return true;
+      return (error.message ?? '').toLowerCase().contains('already claimed');
     }
     return error.toString().toLowerCase().contains('already claimed');
   }
@@ -164,6 +165,13 @@ class AppErrorHandler {
         'الفاتورة لا تستوفي شروط أي عرض في الحملة، لذلك لا تُصرف هدية.',
   };
 
+  /// Reason codes for a receipt whose gift the server already dispensed.
+  /// The claim is refused before any stock or receipt write.
+  static const Map<String, String> claimStateMessages = {
+    'already_claimed': 'تم صرف هدية هذه الفاتورة من قبل، ولا يمكن صرفها مرة أخرى.',
+    'unit_cap_exhausted': 'تم صرف كل الهدايا المستحقة لهذه الفاتورة من قبل.',
+  };
+
   /// The server's machine-readable rejection reason, or null.
   static String? claimRejectionReason(dynamic error) {
     if (error is FirebaseFunctionsException) {
@@ -182,8 +190,9 @@ class AppErrorHandler {
     if (error is FirebaseFunctionsException) {
       final msg = (error.message ?? '').trim();
       if (RegExp(r'[\u0600-\u06FF]').hasMatch(msg)) return msg;
-      final eligibility = claimEligibilityMessages[claimRejectionReason(error)];
-      if (eligibility != null) return eligibility;
+      final reason = claimRejectionReason(error);
+      final known = claimEligibilityMessages[reason] ?? claimStateMessages[reason];
+      if (known != null) return known;
       final m = msg.toLowerCase();
       if (m.contains('already claimed')) return 'تم صرف هدية هذه الفاتورة من قبل.';
       if (m.contains('not enough prize stock')) return 'رصيد الهدايا في هذا الفرع لا يكفي. يرجى تغذية الرصيد ثم إعادة المحاولة.';
