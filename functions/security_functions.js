@@ -9,6 +9,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { planConsumingClaim } = require("./consuming_spend_ladder");
 const { exclusiveLadderUnits } = require("./exclusive_spend_ladder");
+const { evaluateClaimEligibility, ELIGIBILITY_REASONS, REASONS } = require("./campaign_eligibility");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -475,7 +476,9 @@ function piecesPerOffer(event) {
 // top tier plus one remainder tier, and the count is recomputed from the
 // stored lines so chances_earned cannot raise it. Other campaigns keep
 // today's cap.
-function receiptUnitLimit(event, receipt, patch) {
+// serverUnits is the gift count the stored invoice lines earn (campaign_eligibility.js);
+// it only ever lowers the limit.
+function receiptUnitLimit(event, receipt, patch, serverUnits) {
   const allow = event && event.allowMultipleChances === true;
   const cap = Number(event && event.maxChancesPerReceipt);
   const ladder = exclusiveLadderUnits(event, receipt);
@@ -491,6 +494,7 @@ function receiptUnitLimit(event, receipt, patch) {
   // 0 means the stored lines could not be read as a ladder at all; that is
   // left to chances_earned rather than blocking the claim outright.
   if (ladder != null && ladder > 0) units = Math.min(units, ladder);
+  if (Number.isFinite(serverUnits) && serverUnits > 0) units = Math.min(units, Math.floor(serverUnits));
   return Number.isFinite(units) ? units * piecesPerOffer(event) : Infinity;
 }
 
@@ -566,6 +570,7 @@ async function applyCampaignPrizeClaim(db, input) {
   const partner = actor.partner === true;
   const anonymous = actor.anonymous === true;
   const system = actor.system === true;
+  const nowMs = Number.isFinite(input && input.nowMs) ? input.nowMs : Date.now();
 
   if (!eventId || eventId.length > 128) {
     throw new HttpsError("invalid-argument", "eventId is required.");
@@ -601,7 +606,7 @@ async function applyCampaignPrizeClaim(db, input) {
     }
     const event = eventSnap.data() || {};
     if (event.isActive !== true && !staff) {
-      throw new HttpsError("failed-precondition", "Campaign is not active.");
+      throw new HttpsError("failed-precondition", "Campaign is not active.", { reason: REASONS.CAMPAIGN_INACTIVE });
     }
     if (partner) {
       const slug = String((actor.token && actor.token.companySlug) || "");
@@ -646,6 +651,17 @@ async function applyCampaignPrizeClaim(db, input) {
           }
         }
       }
+    }
+
+    // Staff keep their manual override; every other actor is re-verified from
+    // the stored campaign and receipt before any stock is touched.
+    let serverUnits = null;
+    if (receipt && decrements.length > 0 && !confirmOnly && !staff) {
+      const verdict = evaluateClaimEligibility({ event, receipt, nowMs, system });
+      if (!verdict.ok) {
+        throw new HttpsError("failed-precondition", verdict.message, Object.assign({ reason: verdict.code }, verdict.details));
+      }
+      serverUnits = verdict.serverUnits;
     }
 
     let consumingLedger = false;
@@ -695,7 +711,7 @@ async function applyCampaignPrizeClaim(db, input) {
     // does not run for it and cannot replace claimed_gifts.
     let trim = null;
     if (receipt && decrements.length > 0 && !consumingLedger) {
-      const limit = receiptUnitLimit(event, receipt, patch);
+      const limit = receiptUnitLimit(event, receipt, patch, serverUnits);
       const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
       const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
       if (Number.isFinite(limit) && already + requested > limit) {
@@ -867,7 +883,10 @@ exports.decrementCampaignPrize = onCall(callableOptions, async (request) => {
   } catch (err) {
     const isHttps = err instanceof HttpsError;
     // Only touch the receipt once the caller passed auth checks.
-    const authed = isHttps && err.code !== "unauthenticated" && err.code !== "permission-denied" && !(err.message || "").includes("App Check");
+    const reason = isHttps && err.details && err.details.reason;
+    // An eligibility rejection writes nothing at all, not even the failure marker.
+    const authed = isHttps && err.code !== "unauthenticated" && err.code !== "permission-denied" &&
+      !(err.message || "").includes("App Check") && !ELIGIBILITY_REASONS.has(reason);
     await recordClaimFailure(authed ? admin.firestore() : null, data,
       request && request.auth ? request.auth.uid : null, err);
     throw err;

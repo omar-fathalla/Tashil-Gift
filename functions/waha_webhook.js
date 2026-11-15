@@ -602,6 +602,10 @@ async function handleWahaWebhook(req, res, deps) {
         waha_message_id: messageId,
         is_valid: true,
         timestamp: stamp,
+        ...(result.receiptDate ? { receipt_date: String(result.receiptDate) } : {}),
+        ...(Array.isArray(result.extractedProducts) && result.extractedProducts.length
+          ? { extracted_products: result.extractedProducts }
+          : {}),
       },
       receiptPatch: {
         game_played: true,
