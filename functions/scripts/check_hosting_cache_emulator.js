@@ -11,7 +11,6 @@
  */
 
 const LONG_CACHE = "public, max-age=300, s-maxage=3600";
-const SHORT_CACHE = "public, max-age=60, s-maxage=300";
 const NO_CACHE = "no-cache, no-store, must-revalidate, max-age=0";
 const REVALIDATE = "public, max-age=0, must-revalidate";
 
@@ -53,10 +52,17 @@ const cases = [
     cache: LONG_CACHE,
   },
   {
+    method: "GET",
+    urlPath: "/c/999999",
+    status: 200,
+    cache: LONG_CACHE,
+    body: /og:title/,
+  },
+  {
     method: "POST",
     urlPath: "/c/469",
     status: 404,
-    cache: SHORT_CACHE,
+    cache: LONG_CACHE,
     body: /^Not Found$/,
   },
   ...[
@@ -74,11 +80,7 @@ const cases = [
     "/share",
     "/share/",
     "/c/469/subadmin",
-    "/c/469/sugarcrm/index.php",
     "/~user",
-    "/index.cgi",
-    "/c/469/foo.cgi",
-    "/c/foo.cgi",
     "/c/not_a_slug",
     "/portal/unilever/extra",
     "/",
@@ -90,11 +92,18 @@ const cases = [
     cache: NO_CACHE,
     body: /FIXTURE_SHELL/,
   })),
+  ...["/c/469/sugarcrm/index.php", "/index.cgi", "/c/469/foo.cgi", "/c/foo.cgi"].map((urlPath) => ({
+    method: "GET",
+    urlPath,
+    status: 200,
+    cache: null,
+    body: /FIXTURE_SHELL/,
+  })),
   {
     method: "GET",
     urlPath: "/~user/.cgi",
     status: 404,
-    cache: NO_CACHE,
+    cache: null,
   },
   ...[
     "/flutter.js",
