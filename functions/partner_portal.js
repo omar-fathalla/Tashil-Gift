@@ -11,8 +11,8 @@
  */
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("./admin_sdk");
-const { RateLimitError, clientIp, clientKey, consumeRateLimit, hash } = require("./rate_limit");
-const { LoginThrottledError, beginLoginAttempt, recordLoginSuccess } = require("./login_throttle");
+const { RateLimitError, clientKey, consumeRateLimit, hash } = require("./rate_limit");
+const { LoginThrottledError, beginLoginAttempt, loginClientIp, recordLoginSuccess } = require("./login_throttle");
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -224,7 +224,7 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
   // Lockout / IP cap is decided before any company, event or credential read.
   let attempt;
   try {
-    attempt = await beginLoginAttempt({ db, identifier: username, ip: clientIp(request.rawRequest) });
+    attempt = await beginLoginAttempt({ db, identifier: username, ip: loginClientIp(request.rawRequest) });
   } catch (err) {
     if (err instanceof LoginThrottledError) throw tooManyAttempts(request, err.retryAfterSec);
     throw err;
@@ -244,7 +244,7 @@ const partnerPortalLogin = onCall(callableOptions, async (request) => {
     console.warn("partnerPortalLogin rejected", { slug: ctx.slug, role, reason: result.error });
     return { ok: false, reason: result.error, info };
   }
-  await recordLoginSuccess({ db, idKey: attempt.idKey });
+  await recordLoginSuccess({ db, ...attempt });
   const spec = portalTokenSpec(ctx.slug, result);
   const customToken = await admin.auth().createCustomToken(spec.uid, spec.claims);
   return {
