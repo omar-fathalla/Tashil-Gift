@@ -33,7 +33,6 @@ const CLAIM_PATCH_KEYS = new Set([
   "claim_status",
   "claimed_at",
   "matched_reward_value",
-  "claim_trimmed_to_limit",
   "linked_gifts",
   "unit_value",
   "is_voucher",
@@ -45,6 +44,12 @@ const CLAIM_PATCH_KEYS = new Set([
 // 2.0.163: claiming is automatic; the rep's handover tap only confirms. A
 // confirm-only patch (no decrements) may touch these keys after the claim.
 const CONFIRM_PATCH_KEYS = new Set(["handed_over_confirmed", "voucher_serials", "voucher_serial"]);
+
+// The claim state of a receipt is written only by the claim transaction.
+// The client still sends remaining_chances and claimed_gifts; they are taken
+// out of the patch and only used as hints (gift labels, an earlier close).
+const CLAIM_STATE_KEYS = ["remaining_chances", "claimed_gifts"];
+const ALREADY_CLAIMED = "already_claimed";
 
 function assertAppCheck(request) {
   if (!request || request.app == null) {
@@ -526,27 +531,30 @@ function giftKey(g) {
   return String((g && (g.giftId || g.giftName || g.name)) || "");
 }
 
-/** Rewrites the client patch so the receipt records only what was granted. */
-function trimPatchToDecrements(patch, granted) {
+/**
+ * Client gift entries that match what this call granted, each quantity capped
+ * at the grant. `left` holds the granted units no client entry described.
+ */
+function grantedGiftEntries(clientGifts, granted) {
   const left = new Map();
   for (const d of granted) left.set(d.prizeIdentifier, (left.get(d.prizeIdentifier) || 0) + d.count);
-  const total = granted.reduce((s, d) => s + d.count, 0);
-  let gifts = Array.isArray(patch.claimed_gifts) ? patch.claimed_gifts : null;
-  if (gifts) {
-    gifts = gifts.map((g) => {
-      const key = [g && g.giftId, g && g.giftName].find((k) => k && left.has(String(k)));
-      if (!key) return null;
-      const q = Math.min(Number(g.quantity || 1), left.get(String(key)));
-      left.set(String(key), left.get(String(key)) - q);
-      return q > 0 ? Object.assign({}, g, { quantity: q }) : null;
-    }).filter(Boolean);
-    if (gifts.length === 0 && granted.length > 0) {
-      gifts = granted.map((d) => ({ giftId: "", giftName: d.prizeIdentifier, quantity: d.count,
-        unitValue: d.unitValue || 0, isVoucher: d.isVoucher === true }));
-    }
-    patch.claimed_gifts = gifts;
+  const entries = [];
+  for (const g of Array.isArray(clientGifts) ? clientGifts : []) {
+    if (!g || typeof g !== "object") continue;
+    const key = [g.giftId, g.giftName].find((k) => k && left.has(String(k)));
+    if (!key) continue;
+    const q = Math.min(Number(g.quantity || 1), left.get(String(key)));
+    left.set(String(key), left.get(String(key)) - q);
+    if (q > 0) entries.push(Object.assign({}, g, { quantity: q }));
   }
-  const names = (gifts || granted.map((d) => ({ giftName: d.prizeIdentifier, quantity: d.count })))
+  return { entries, left };
+}
+
+/** Rewrites the client summary fields so the receipt records only what was granted. */
+function trimPatchToDecrements(patch, granted, clientGifts = patch.claimed_gifts) {
+  const total = granted.reduce((s, d) => s + d.count, 0);
+  const gifts = Array.isArray(clientGifts) ? grantedGiftEntries(clientGifts, granted).entries : [];
+  const names = (gifts.length ? gifts : granted.map((d) => ({ giftName: d.prizeIdentifier, quantity: d.count })))
     .map((g) => {
       const n = String(g.giftName || g.name || giftKey(g));
       const q = Number(g.quantity || 1);
@@ -560,11 +568,85 @@ function trimPatchToDecrements(patch, granted) {
   return patch;
 }
 
+/** Removes the claim-state fields from the client patch and returns them. */
+function takeClientClaimState(patch) {
+  const hints = {};
+  for (const key of CLAIM_STATE_KEYS) {
+    if (key in patch) hints[key] = patch[key];
+    delete patch[key];
+  }
+  return hints;
+}
+
+function storedRemaining(receipt) {
+  const raw = receipt && receipt.remaining_chances;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The receipt has been through a claim. A stored chance count above 0 keeps a multi-chance receipt open. */
+function claimStarted(receipt) {
+  return !!receipt && (receipt.claimedAt != null || receipt.game_played === true);
+}
+
+function receiptAlreadyClaimed(receipt) {
+  if (!claimStarted(receipt)) return false;
+  const left = storedRemaining(receipt);
+  return !(left != null && left > 0);
+}
+
+/**
+ * Chances left after this call. A claim call uses one chance, and the receipt
+ * never stays open past its unit limit. The client's own count can only close
+ * the receipt earlier, never keep it open.
+ */
+function remainingAfterClaim({ event, receipt, createdReceipt, limit, claimedPieces, clientRemaining }) {
+  let prev = createdReceipt || !claimStarted(receipt) ? null : storedRemaining(receipt);
+  if (prev == null) {
+    const earned = Number(receipt && receipt.chances_earned);
+    prev = Number.isFinite(earned) && earned > 0 ? Math.floor(earned) : 1;
+  }
+  let next = Math.max(0, Math.floor(prev) - 1);
+  if (Number.isFinite(limit)) {
+    next = Math.min(next, Math.ceil(Math.max(0, limit - claimedPieces) / piecesPerOffer(event)));
+  }
+  const hint = clientRemaining == null || clientRemaining === "" ? NaN : Number(clientRemaining);
+  if (Number.isFinite(hint)) next = Math.min(next, Math.max(0, Math.floor(hint)));
+  return next;
+}
+
+/**
+ * claimed_gifts after this call: the gifts already on the receipt plus what
+ * this call granted. Labels come from the client entries that match a grant;
+ * any granted unit without one is described from its stock row.
+ */
+function claimedGiftsAfterClaim(receipt, createdReceipt, clientGifts, granted, stockRows) {
+  const prior = !createdReceipt && claimStarted(receipt) && Array.isArray(receipt.claimed_gifts)
+    ? receipt.claimed_gifts : [];
+  const { entries, left } = grantedGiftEntries(clientGifts, granted);
+  granted.forEach((d, i) => {
+    const n = left.get(d.prizeIdentifier) || 0;
+    if (n <= 0) return;
+    left.set(d.prizeIdentifier, 0);
+    const row = stockRows[i] || {};
+    entries.push({
+      giftId: String(row.giftId || ""),
+      giftName: String(row.name || d.prizeIdentifier),
+      quantity: n,
+      unitValue: Number(d.unitValue != null ? d.unitValue : row.unitValue) || 0,
+      isVoucher: d.isVoucher === true || row.giftType === "voucher",
+    });
+  });
+  return prior.concat(entries);
+}
+
 async function applyCampaignPrizeClaim(db, input) {
   const eventId = String((input && input.eventId) || "").trim();
   const receiptId = String((input && input.receiptId) || "").trim();
   let decrements = sanitizeDecrements((input && input.decrements) || []);
   const patch = sanitizePatch(input && input.receiptPatch);
+  const clientClaim = takeClientClaimState(patch);
   const actor = input.actor || {};
   const staff = actor.staff === true;
   const partner = actor.partner === true;
@@ -575,7 +657,8 @@ async function applyCampaignPrizeClaim(db, input) {
   if (!eventId || eventId.length > 128) {
     throw new HttpsError("invalid-argument", "eventId is required.");
   }
-  if (decrements.length === 0 && Object.keys(patch).length === 0 && !input.receiptCreate) {
+  if (decrements.length === 0 && Object.keys(patch).length === 0 && Object.keys(clientClaim).length === 0 &&
+      !input.receiptCreate) {
     throw new HttpsError("invalid-argument", "Nothing to claim.");
   }
   if (!staff && !partner && !anonymous && !system) {
@@ -590,7 +673,7 @@ async function applyCampaignPrizeClaim(db, input) {
 
   const patchKeys = Object.keys(patch);
   const confirmOnly = decrements.length === 0 && !input.receiptCreate && patchKeys.length > 0 &&
-    patchKeys.every((k) => CONFIRM_PATCH_KEYS.has(k));
+    Object.keys(clientClaim).length === 0 && patchKeys.every((k) => CONFIRM_PATCH_KEYS.has(k));
   if (confirmOnly) {
     if (!receiptId) throw new HttpsError("invalid-argument", "A receipt id is required.");
     if ("handed_over_confirmed" in patch) patch.handed_over_confirmed = true;
@@ -641,14 +724,8 @@ async function applyCampaignPrizeClaim(db, input) {
           if (receipt.game_played !== true) {
             throw new HttpsError("failed-precondition", "لم يتم صرف هدية هذه الفاتورة بعد.");
           }
-        } else if (anonymous || partner || system) {
-          const played = receipt.game_played === true;
-          const remaining = Number(
-            receipt.remaining_chances != null ? receipt.remaining_chances : (receipt.chances_earned || 1),
-          );
-          if (played && remaining <= 0) {
-            throw new HttpsError("failed-precondition", "This receipt was already claimed.");
-          }
+        } else if (!staff && receiptAlreadyClaimed(receipt)) {
+          throw new HttpsError("failed-precondition", "This receipt was already claimed.", { reason: ALREADY_CLAIMED });
         }
       }
     }
@@ -710,9 +787,11 @@ async function applyCampaignPrizeClaim(db, input) {
     // A consuming ladder already accepted an exact round list, so this trim
     // does not run for it and cannot replace claimed_gifts.
     let trim = null;
+    let limit = Infinity;
+    let already = 0;
     if (receipt && decrements.length > 0 && !consumingLedger) {
-      const limit = receiptUnitLimit(event, receipt, patch, serverUnits);
-      const already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
+      limit = receiptUnitLimit(event, receipt, patch, serverUnits);
+      already = createdReceipt ? 0 : claimedUnits(receipt.claimed_gifts);
       const requested = decrements.reduce((s, d) => s + Number(d.count || 0), 0);
       if (Number.isFinite(limit) && already + requested > limit) {
         const allowed = Math.max(0, limit - already);
@@ -721,7 +800,7 @@ async function applyCampaignPrizeClaim(db, input) {
             { reason: "unit_cap_exhausted", limit, requested, already });
         }
         decrements = trimDecrementsToLimit(decrements, allowed, event.allocatedPrizes);
-        trimPatchToDecrements(patch, decrements);
+        trimPatchToDecrements(patch, decrements, clientClaim.claimed_gifts);
         trim = { limit, requested, granted: allowed, already };
       }
     }
@@ -762,6 +841,7 @@ async function applyCampaignPrizeClaim(db, input) {
       if (codeBranch) patch.branch_id = codeBranch;
     }
     const applied = [];
+    const stockRows = [];
     for (const decrement of decrements) {
       const hint = Object.assign({}, receipt || {});
       for (const k of ["branch_id", "branch_detected"]) {
@@ -800,6 +880,7 @@ async function applyCampaignPrizeClaim(db, input) {
         throw new HttpsError("failed-precondition", "Not enough prize stock remaining.");
       }
       rows[index].remainingQuantity = remaining - decrement.count;
+      stockRows.push(rows[index]);
       applied.push({
         prizeIdentifier: decrement.prizeIdentifier,
         count: decrement.count,
@@ -816,6 +897,22 @@ async function applyCampaignPrizeClaim(db, input) {
     }
     const pooledSources = applied.filter((a) => a.stockEventId !== eventId)
       .map((a) => ({ prizeIdentifier: a.prizeIdentifier, count: a.count, stockEventId: a.stockEventId }));
+    if (receipt && decrements.length > 0) {
+      if (!consumingLedger) {
+        const grantedPieces = decrements.reduce((s, d) => s + d.count, 0);
+        patch.claimed_gifts = claimedGiftsAfterClaim(receipt, createdReceipt, clientClaim.claimed_gifts, decrements, stockRows);
+        patch.remaining_chances = remainingAfterClaim({
+          event, receipt, createdReceipt, limit,
+          claimedPieces: already + grantedPieces,
+          clientRemaining: clientClaim.remaining_chances,
+        });
+      }
+      patch.game_played = true;
+      if (createdReceipt || receipt.claimedAt == null) {
+        patch.claimedAt = admin.firestore.FieldValue.serverTimestamp();
+        patch.claimedBy = String(actor.uid || (staff ? "staff" : "unknown")).slice(0, 128);
+      }
+    }
     if (receiptRef && (createdReceipt || Object.keys(patch).length > 0)) {
       const payload = createdReceipt
         ? Object.assign({}, receipt, patch)

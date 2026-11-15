@@ -53,6 +53,24 @@ void main() {
     expect(AppErrorHandler.claimFailureMessage(e), AppErrorHandler.claimEligibilityMessages['campaign_inactive']);
   });
 
+  test('already_claimed: Arabic message, copy rules, and the retry treats it as done', () {
+    final forbidden = RegExp(r'[\u0660-\u0669\u06F0-\u06F9]|إيصال|الإيصال|ايصال');
+    for (final reason in ['already_claimed', 'unit_cap_exhausted']) {
+      final e = _rejection(reason, message: 'This receipt was already claimed.');
+      final text = AppErrorHandler.claimFailureMessage(e);
+      expect(text, AppErrorHandler.claimStateMessages[reason], reason: reason);
+      expect(text, contains('الفاتورة'), reason: reason);
+      expect(forbidden.hasMatch(text), isFalse, reason: reason);
+      expect(AppErrorHandler.isAlreadyClaimedError(e), isTrue, reason: reason);
+      expect(AppErrorHandler.isAlreadyClaimedError(_rejection(reason)), isTrue, reason: reason);
+    }
+    expect(AppErrorHandler.isAlreadyClaimedError(_rejection('min_spend_not_met')), isFalse);
+    expect(
+      AppErrorHandler.isAlreadyClaimedError(FirebaseFunctionsException(code: 'failed-precondition', message: 'This receipt was already claimed.')),
+      isTrue,
+    );
+  });
+
   test('an unknown reason falls back to the generic claim mapping', () {
     final e = _rejection('something_new', message: 'Receipt not found.');
     expect(AppErrorHandler.claimFailureMessage(e), 'الفاتورة غير موجودة.');

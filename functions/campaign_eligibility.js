@@ -9,18 +9,24 @@
  *      (whole Africa/Cairo calendar days, end day inclusive, like the client);
  *   2. required products are present on the invoice lines;
  *   3. the minimum spend is met, counted ONLY over the campaign's own
- *      products (explicit barcode / catalog name / brand token), never the
- *      invoice total and never other brands of the same company;
+ *      products, never the invoice total and never other brands of the same
+ *      company. On the exclusive path this is the upload page's rule: an
+ *      explicit barcode / catalog name / brand token, or a line the page
+ *      flagged as the company's (isTargetCompany) that does not name a brand
+ *      outside the campaign. The consuming path counts explicit lines only,
+ *      like the page;
  *   4. the gift count the invoice earns (`serverUnits`). It reuses the
  *      exclusive-ladder recompute (top tier plus the remainder offer, which
  *      also applies when the campaign hands out one gift per invoice).
  *
- * A line whose product cannot be matched explicitly is never guessed into the
- * campaign. A receipt that cannot be verified is rejected with a reason code,
+ * The server never guesses which product an ambiguous line is: an unflagged
+ * line counts only on an explicit match, and a flagged one only on the
+ * page's own flag. A receipt that cannot be verified is rejected with a reason code,
  * so the caller throws before it writes anything.
  */
 const { explicitMember, netLine, norm } = require("./consuming_spend_ladder");
 const { exclusiveLadderUnits, grossLine, reaches, withinMax } = require("./exclusive_spend_ladder");
+const { namesBrandOutsideCampaign } = require("./known_brands");
 
 const CAIRO_TZ = "Africa/Cairo";
 const HOUR_MS = 3600 * 1000;
@@ -279,12 +285,49 @@ function scopeOf(event) {
   const rules = Array.isArray(event && event.promotionalRules) ? event.promotionalRules.filter(Boolean) : [];
   const required = nonEmpty(event && event.requiredProducts);
   const scopedRules = rules.filter(ruleHasScope);
-  return { rules, required, scopedRules, hasScope: scopedRules.length > 0 || required.length > 0 };
+  const texts = required.slice();
+  for (const rule of scopedRules) {
+    texts.push(...nonEmpty(rule.requiredBrands), ...nonEmpty(rule.selectedProductNames));
+    const trigger = String(rule.triggerProduct || "").trim();
+    if (trigger) texts.push(trigger);
+  }
+  // Products named only by barcode: a line with another barcode is another product.
+  const barcodeScoped = required.length === 0 && scopedRules.length > 0 && scopedRules.every((rule) =>
+    nonEmpty(rule.selectedBarcodes).length > 0 && nonEmpty(rule.requiredBrands).length === 0);
+  return { rules, required, scopedRules, texts, barcodeScoped, hasScope: scopedRules.length > 0 || required.length > 0 };
 }
 
 function memberOfScope(line, scope) {
   return scope.scopedRules.some((rule) => explicitMember(line, rule)) ||
     (scope.required.length > 0 && requiredProductMatches(line, scope.required));
+}
+
+/**
+ * A line the upload page counts as the company's without an explicit match:
+ * the stored company flag. It is left out when the line is identifiably
+ * something else: a brand the campaign does not cover, a barcode outside a
+ * barcode-only campaign, or no readable name at all. The server never
+ * decides a line's product itself.
+ */
+function pageCompanyLine(line, scope) {
+  if (line.isTargetCompany !== true || !/[\p{L}\p{N}]/u.test(norm(line.name))) return false;
+  if (scope.barcodeScoped && String(line.barcode || "").trim() && !memberOfScope(line, scope)) return false;
+  return !namesBrandOutsideCampaign(line.name, scope.texts);
+}
+
+/**
+ * Lines a spend rule counts, as PromotionalRuleMatcher does: explicit members,
+ * plus page-counted company lines for a by_spend rule unless the line
+ * strictly belongs to another scoped spend rule. In the strict receipt the
+ * flag already means "page-counted".
+ */
+function spendRuleMembers(lines, rule, scope) {
+  return lines.filter((line) => {
+    if (explicitMember(line, rule)) return true;
+    if (line.isTargetCompany !== true || rule.conditionType !== "by_spend") return false;
+    return !(ruleHasScope(rule) && scope.scopedRules.some((other) =>
+      other !== rule && isSpendRule(other) && explicitMember(line, other)));
+  });
 }
 
 function effectiveMin(rule) {
@@ -315,16 +358,16 @@ function exclusiveUnits(event, strictReceipt, scope) {
     if (scope.rules.some((rule) => !ruleHasScope(rule) || isComboRule(rule))) return null;
     let total = 0;
     for (const rule of scope.rules) {
-      const members = lines.filter((line) => explicitMember(line, rule));
       const multiply = allowMulti && rule.allowMultipliers !== false;
       if (isSpendRule(rule)) {
-        const spend = sum(members, grossLine);
+        const spend = sum(spendRuleMembers(lines, rule, scope), grossLine);
         if (!reaches(rule, spend) || !withinMax(rule, spend)) continue;
         const min = Number(rule.minSpend);
         const tolerance = Math.max(0, Number(rule.discountTolerance) || 0);
         total += multiply ? Math.max(1, Math.floor((spend + tolerance) / min)) : 1;
       } else {
         const minQty = Math.max(1, Math.floor(Number(rule.minQuantity) || 1));
+        const members = lines.filter((line) => explicitMember(line, rule));
         // Twin-pack lines count as two pieces on the client; never below that.
         const pieces = sum(members, (line) => (Number(line.quantity) > 0 ? Math.floor(Number(line.quantity)) : 1) * 2);
         if (pieces < minQty) continue;
@@ -338,7 +381,7 @@ function exclusiveUnits(event, strictReceipt, scope) {
   if (!allowMulti) return 1;
   const basis = String(event.multiplierBasis || "both");
   if (basis !== "spend" || !(min > 0)) return null;
-  const members = lines.filter((line) => memberOfScope(line, scope) || (!scope.hasScope && line.isTargetCompany === true));
+  const members = lines.filter((line) => memberOfScope(line, scope) || line.isTargetCompany === true);
   return Math.max(1, Math.floor(sum(members, grossLine) / min));
 }
 
@@ -409,11 +452,14 @@ function evaluateClaimEligibility({ event, receipt, nowMs, system }) {
   }
 
   const lineSpend = consuming ? netLine : grossLine;
-  // Ambiguous lines are never guessed: the company flag counts only for a
-  // campaign (or a rule) that names no brand or product at all.
+  // Product presence needs an explicit match; the company flag alone proves it
+  // only for a campaign (or a rule) that names no brand or product at all.
+  // The spend total also counts the lines the page counts (pageCompanyLine).
   const flagCounts = !scope.hasScope || rules.some((rule) => !ruleHasScope(rule));
   const isMember = (line) => memberOfScope(line, scope) || (flagCounts && line.isTargetCompany === true);
   const members = lines.filter(isMember);
+  const pageCounts = (line) => !consuming && scope.hasScope && pageCompanyLine(line, scope);
+  const spendMembers = lines.filter((line) => isMember(line) || pageCounts(line));
 
   if (scope.hasScope && members.length === 0) {
     return fail(
@@ -427,7 +473,7 @@ function evaluateClaimEligibility({ event, receipt, nowMs, system }) {
   if (rules.length === 0) threshold = minimumSpend;
   else if (spendOnly) threshold = minPositive([minimumSpend, ...rules.map(effectiveMin)]);
   if (threshold > 0) {
-    const counted = sum(members, lineSpend);
+    const counted = sum(spendMembers, lineSpend);
     if (counted + 0.005 < threshold) {
       return fail(
         REASONS.MIN_SPEND_NOT_MET,
@@ -440,7 +486,7 @@ function evaluateClaimEligibility({ event, receipt, nowMs, system }) {
   if (consuming) return { ok: true, serverUnits: null };
 
   const strictReceipt = Object.assign({}, rec, {
-    extracted_products: lines.map((line) => Object.assign({}, line, scope.hasScope ? { isTargetCompany: false } : {})),
+    extracted_products: lines.map((line) => Object.assign({}, line, scope.hasScope ? { isTargetCompany: pageCounts(line) } : {})),
   });
   const units = exclusiveUnits(ev, strictReceipt, scope);
   if (units === 0) {

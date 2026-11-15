@@ -106,11 +106,20 @@ test("min spend counts only the campaign brand, never the invoice total or other
   assert.strictEqual(check(campaign(), receipt([brandLine(160), otherBrandLine(5)])).serverUnits, 1);
 });
 
-test("min spend: a line the AI flagged as the company's but that matches no campaign product is not counted", () => {
-  const flaggedOnly = { name: "منتج غير واضح", price: 700, quantity: 1, isTargetCompany: true, barcode: "" };
-  const verdict = check(campaign(), receipt([brandLine(100), flaggedOnly]));
-  assert.strictEqual(verdict.code, REASONS.MIN_SPEND_NOT_MET);
-  assert.strictEqual(verdict.details.counted, 100);
+test("min spend: a company-flagged line counts like on the page unless it is identifiably another product", () => {
+  const flagged = (extra) => Object.assign({ name: "منظف متعدد الاستخدام", price: 70, quantity: 1, isTargetCompany: true, barcode: "" }, extra);
+  assert.strictEqual(check(campaign(), receipt([brandLine(100), flagged()])).ok, true);
+  const cases = [
+    [flagged({ isTargetCompany: false }), "not flagged"],
+    [flagged({ barcode: "5000000000001" }), "barcode outside a barcode-only campaign"],
+    [flagged({ name: "كلوركس مبيض" }), "names another brand"],
+    [flagged({ name: "؟" }), "no readable name"],
+  ];
+  for (const [line, why] of cases) {
+    const verdict = check(campaign(), receipt([brandLine(100), line]));
+    assert.strictEqual(verdict.code, REASONS.MIN_SPEND_NOT_MET, why);
+    assert.strictEqual(verdict.details.counted, 100, why);
+  }
 });
 
 test("min spend: campaign-level minimum without rules uses the company flag only when no product is named", () => {
