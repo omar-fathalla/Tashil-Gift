@@ -1,4 +1,5 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("./admin_sdk");
 const { verifyReceiptImage } = require("./receipt_verification");
@@ -10,6 +11,7 @@ const {
   manageWhatsappSenderLink,
 } = require("./whatsapp_webhook_admin");
 const { handleSharePreview, SHARE_PREVIEW_MAX_INSTANCES } = require("./share_preview");
+const { autoCloseExpiredCampaigns } = require("./auto_close_campaigns");
 
 // Firebase Secrets (set via: firebase functions:secrets:set NAME)
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -352,6 +354,24 @@ exports.wahaWebhook = onRequest({
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
   });
 });
+
+/**
+ * Daily end-date auto-close (Cairo 00:10, right after the day-after-end cutoff).
+ * Closes campaigns whose end date has passed; never reacts to stock levels.
+ */
+exports.autoCloseExpiredCampaigns = onSchedule(
+  {
+    region: "us-central1",
+    schedule: "10 0 * * *",
+    timeZone: "Africa/Cairo",
+    memory: "256MiB",
+    timeoutSeconds: 120,
+    retryCount: 0,
+  },
+  async () => {
+    await autoCloseExpiredCampaigns(db);
+  },
+);
 
 exports.updateWhatsappWebhookConfig = updateWhatsappWebhookConfig;
 exports.manageWhatsappSenderLink = manageWhatsappSenderLink;
