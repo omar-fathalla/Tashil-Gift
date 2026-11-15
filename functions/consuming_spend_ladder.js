@@ -321,6 +321,7 @@ function verifyConsumingDecrements(event, receipt, decrements) {
 }
 
 module.exports = {
+  norm,
   netLine,
   explicitMember,
   roundsFromRules,
