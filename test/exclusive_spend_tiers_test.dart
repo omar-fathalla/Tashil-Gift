@@ -50,7 +50,8 @@ void main() {
       [350.0, {'rule_2': 1}],
       [449.0, {'rule_2': 1}],
       [450.0, {'rule_3': 1}],
-      [899.0, {'rule_3': 1}],
+      // 899 - 450 = 449 remainder reaches the 350 tier once.
+      [899.0, {'rule_3': 1, 'rule_2': 1}],
       [900.0, {'rule_3': 2}],
     ]) {
       test('${c[0]} EGP -> ${c[1]}', () => expect(award(galaxy, g(c[0] as double)), c[1]));

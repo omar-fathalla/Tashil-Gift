@@ -1,5 +1,6 @@
 import '../../features/admin/domain/event_model.dart';
 import 'ai_receipt_service.dart';
+import 'receipt_deduplication_helper.dart';
 
 /// Fields both the customer upload and the validation desk write after analysis.
 /// Image URLs, customer names, and timestamps stay with the screen that saved them.
@@ -27,6 +28,7 @@ Map<String, dynamic> acceptedReceiptCore({
   final invoiceNet = spendLadderMode == 'consuming' ? totals.invoiceNet : result.targetCompanyTotal;
   return {
     'receipt_number': result.receiptNumber.trim(),
+    ...ReceiptDeduplicationHelper.componentFields(result.receiptNumber),
     'is_valid': true,
     'status': 'accepted',
     'rejection_reason': null,

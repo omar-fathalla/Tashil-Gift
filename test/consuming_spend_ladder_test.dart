@@ -116,10 +116,10 @@ void main() {
     expect(roundTiers([line(492), line(240), line(294), line(294), line(82), ambiguous]), [500, 500, 350]);
   });
 
-  test('cap 2 keeps the two higher tiers and exclusive mode does not consume downward', () {
+  test('cap 2 keeps the two higher tiers; exclusive mode adds one remainder tier only', () {
     final products = [line(1402)];
     expect(roundTiers(products, cap: 2), [500, 500]);
-    expect(award(products, mode: 'exclusive'), {'tier-500': 2});
+    expect(award(products, mode: 'exclusive'), {'tier-500': 2, 'tier-350': 1});
   });
 
   test('a net price is not discounted twice and quantity stays on one pool', () {

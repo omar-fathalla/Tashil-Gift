@@ -44,9 +44,9 @@ void main() {
     ]), {'rule_3': 1});
   });
 
-  test('1100 -> two 100 vouchers only (exclusive tiers: no lower-tier gift from remainder)', () {
+  test('1100 -> two 100 vouchers + one Snickers from the 200 remainder', () {
     expect(award([
       {'name': 'جلاكسى جواهر شوكو', 'price': 1100, 'quantity': 1, 'isTargetCompany': true, 'barcode': '6221134031478', 'totalPrice': 1100},
-    ]), {'rule_3': 2});
+    ]), {'rule_3': 2, 'rule_1': 1});
   });
 }

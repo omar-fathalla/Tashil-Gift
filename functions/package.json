@@ -12,9 +12,13 @@
     "lru-cache": "^6.0.0",
     "lru-memoizer": "^2.3.0"
   },
+  "devDependencies": {
+    "minimatch": "6.2.0",
+    "re2": "1.26.1"
+  },
   "private": true,
   "scripts": {
     "bootstrap:super-admin": "node scripts/bootstrap-super-admin.js",
-    "test": "node --test test/rate_limit.test.js test/waha_webhook.test.js test/receipt_verification.test.js test/whatsapp_webhook_admin.test.js test/partner_portal.test.js test/branch_allocations.test.js test/prize_branch_resolution.test.js test/list_branch_receipts.test.js test/receipt_duplicate_exact.test.js test/shared_prize_pool.test.js test/receipt_replace.test.js test/receipt_unit_cap.test.js test/winner_whatsapp_message.test.js test/consuming_spend_ladder.test.js test/consuming_claim_ledger.test.js && node test/gemini_gateway_test.js"
+    "test": "node --test test/share_preview.test.js test/hosting_cache_headers.test.js test/rate_limit.test.js test/waha_webhook.test.js test/receipt_verification.test.js test/whatsapp_webhook_admin.test.js test/partner_portal.test.js test/branch_allocations.test.js test/prize_branch_resolution.test.js test/list_branch_receipts.test.js test/receipt_duplicate_exact.test.js test/shared_prize_pool.test.js test/receipt_replace.test.js test/receipt_unit_cap.test.js test/winner_whatsapp_message.test.js test/consuming_spend_ladder.test.js test/consuming_claim_ledger.test.js test/exclusive_spend_ladder.test.js test/receipt_duplicate_components.test.js && node test/gemini_gateway_test.js"
   }
 }

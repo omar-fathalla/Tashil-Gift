@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../../core/services/firebase_service.dart';
 import '../../../../core/services/ai_receipt_service.dart';
+import '../../../../core/services/receipt_deduplication_helper.dart';
 import '../../../../core/services/company_products_service.dart';
 import '../../../../core/services/retail_chains_service.dart';
 import '../../../../core/localization/app_strings.dart';
@@ -3199,6 +3200,7 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         'target_company_total': eligibleSpend,
         'total_value': totalSpend,
         if (result.receiptNumber.isNotEmpty) 'receipt_number': result.receiptNumber,
+        ...ReceiptDeduplicationHelper.componentFields(result.receiptNumber),
         if (result.storeChainDetected.isNotEmpty) 'store_chain_detected': result.storeChainDetected,
         if (result.branchDetected.isNotEmpty) 'branch_detected': result.branchDetected,
         'canonical_branch': canonical,

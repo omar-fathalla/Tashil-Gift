@@ -1,5 +1,6 @@
 const { consumeRateLimit, RateLimitError } = require("./rate_limit");
 const crypto = require("node:crypto");
+const { componentReceiptNumbers } = require("./receipt_duplicate_check");
 
 const TOKEN_HEADER = "x-webhook-token";
 const HMAC_HEADER = "x-webhook-hmac";
@@ -594,6 +595,7 @@ async function handleWahaWebhook(req, res, deps) {
         event_id: link.campaignId,
         companySlug: link.companySlug || "",
         receipt_number: receiptNumber,
+        component_receipt_numbers: componentReceiptNumbers(receiptNumber),
         customerPhone: phone,
         submittedByUid: `whatsapp:${phone}`,
         source: "waha_webhook",

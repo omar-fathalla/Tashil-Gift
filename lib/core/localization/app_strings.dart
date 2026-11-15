@@ -3136,6 +3136,170 @@ class AppStrings {
   String get filterSegmentWinners => _t(ar: 'الفائزون بجوائز', en: 'Prize Winners', hi: 'विजेता ग्राहक');
   String get filterSegmentTopSpenders => _t(ar: 'الأعلى إنفاقاً (VIP)', en: 'Top Spenders (VIP)', hi: 'शीर्ष खरीदार (वीआईपी)');
   String get filterSegmentRepeat => _t(ar: 'المتسوقون المتكررون', en: 'Repeat Shoppers', hi: 'बार-बार आने वाले ग्राहक');
+  String get filterSegmentCompanySupervisors => _t(
+    ar: 'مشرفين الشركات',
+    en: 'Company Supervisors',
+    hi: 'कंपनी पर्यवेक्षक',
+  );
+  String get companySupervisorName => _t(ar: 'اسم الشخص', en: 'Name', hi: 'नाम');
+  String get companySupervisorMobile => _t(ar: 'رقم الموبايل', en: 'Mobile', hi: 'मोबाइल');
+  String get companySupervisorAlternate => _t(ar: 'اسم بديل', en: 'Alternate name', hi: 'वैकल्पिक नाम');
+  String get companySupervisorSearchPlaceholder => _t(
+    ar: 'بحث بالاسم أو رقم الموبايل...',
+    en: 'Search by name or mobile...',
+    hi: 'नाम या मोबाइल से खोजें...',
+  );
+  String get companySupervisorsEmpty => _t(
+    ar: 'لا يوجد مشرفون مطابقون. يمكن تحديث القائمة من ملف Excel.',
+    en: 'No matching supervisors. Update the list from an Excel file.',
+    hi: 'कोई मेल खाता पर्यवेक्षक नहीं। सूची को एक्सेल से अपडेट करें।',
+  );
+  String get companySupervisorsLoading => _t(
+    ar: 'جاري تحميل مشرفين الشركات',
+    en: 'Loading company supervisors',
+    hi: 'कंपनी पर्यवेक्षक लोड हो रहे हैं',
+  );
+  String get companySupervisorsLoadError => _t(
+    ar: 'تعذر تحميل قائمة مشرفين الشركات',
+    en: 'Could not load company supervisors',
+    hi: 'कंपनी पर्यवेक्षकों की सूची लोड नहीं हो सकी',
+  );
+  String get importCompanySupervisors => _t(
+    ar: 'تحديث قائمة المشرفين',
+    en: 'Update supervisor list',
+    hi: 'पर्यवेक्षक सूची अपडेट करें',
+  );
+  String get importCompanySupervisorsHelp => _t(
+    ar: 'ارفع ملف Excel بعمودي رقم الموبايل واسم الشخص. الرقم المكرر يُحفظ مرة واحدة، ويُحفظ الاسم الأطول كاسم أساسي والاسم الآخر كاسم بديل.',
+    en: 'Upload an Excel file with mobile and name columns. A repeated mobile is stored once: the longer name is kept and the other name is stored as an alternate.',
+    hi: 'मोबाइल और नाम कॉलम वाली एक्सेल फ़ाइल अपलोड करें। दोहराया मोबाइल एक बार रखा जाता है: लंबा नाम मुख्य रहता है और दूसरा नाम वैकल्पिक रहता है।',
+  );
+  String companySupervisorsImportSummary(int rows, int unique, int duplicates) => _t(
+    ar: 'صفوف الملف: $rows • أرقام فريدة: $unique • صفوف مكررة دُمجت: $duplicates',
+    en: 'File rows: $rows • Unique mobiles: $unique • Duplicate rows merged: $duplicates',
+    hi: 'फ़ाइल पंक्तियाँ: $rows • अद्वितीय मोबाइल: $unique • मिली हुई दोहराई पंक्तियाँ: $duplicates',
+  );
+  String companySupervisorsInvalidRows(int count) => _t(
+    ar: 'صفوف غير صالحة تم تجاهلها: $count',
+    en: 'Invalid rows skipped: $count',
+    hi: 'अमान्य पंक्तियाँ छोड़ी गईं: $count',
+  );
+  String get companySupervisorsDuplicateTitle => _t(
+    ar: 'الأرقام المكررة والاسم المحفوظ',
+    en: 'Duplicate mobiles and the kept name',
+    hi: 'दोहराए मोबाइल और रखा गया नाम',
+  );
+  String get companySupervisorsReplaceMissing => _t(
+    ar: 'حذف الأرقام غير الموجودة في هذا الملف',
+    en: 'Delete mobiles that are not in this file',
+    hi: 'इस फ़ाइल में न होने वाले मोबाइल हटाएँ',
+  );
+  String get companySupervisorsSaveList => _t(ar: 'حفظ القائمة', en: 'Save list', hi: 'सूची सहेजें');
+  String get companySupervisorsSaveFailed => _t(
+    ar: 'تعذر حفظ قائمة المشرفين',
+    en: 'Could not save the supervisor list',
+    hi: 'पर्यवेक्षक सूची सहेजी नहीं जा सकी',
+  );
+  String selectedSupervisorsCount(int count) => _t(
+    ar: 'تم تحديد $count مشرف',
+    en: '$count supervisors selected',
+    hi: '$count पर्यवेक्षक चयनित',
+  );
+  String companySupervisorsSaved(int count) => _t(
+    ar: 'تم حفظ $count مشرف في القائمة',
+    en: 'Saved $count supervisors',
+    hi: '$count पर्यवेक्षक सहेजे गए',
+  );
+  String showingSupervisorsRange(int start, int end, int total) => _t(
+    ar: 'عرض $start إلى $end من إجمالي $total مشرف',
+    en: 'Showing $start to $end of $total supervisors',
+    hi: 'कुल $total में से $start से $end पर्यवेक्षक दिखाए जा रहे हैं',
+  );
+  String get pdfAttachmentHint => _t(
+    ar: 'رابط ينتهي بـ PDF يُرسل كمستند مرفق مع نص الرسالة',
+    en: 'A link ending in PDF is sent as a document attachment with the message',
+    hi: 'PDF पर समाप्त होने वाला लिंक संदेश के साथ दस्तावेज़ अनुलग्नक के रूप में भेजा जाता है',
+  );
+  String get pdfAttachmentReady => _t(
+    ar: 'سيتم إرسال ملف PDF كمرفق',
+    en: 'The PDF will be sent as an attachment',
+    hi: 'PDF अनुलग्नक के रूप में भेजा जाएगा',
+  );
+  String get campaignMediaPickFile => _t(
+    ar: 'اختيار ملف من الجهاز',
+    en: 'Choose a file from this device',
+    hi: 'इस डिवाइस से फ़ाइल चुनें',
+  );
+  String get campaignMediaPickHint => _t(
+    ar: 'ارفع ملف PDF أو صورة JPG أو PNG أو WEBP. يُحفظ الملف ثم يُرسل مع الرسالة.',
+    en: 'Upload a PDF or a JPG, PNG, or WEBP image. The file is saved, then sent with the message.',
+    hi: 'PDF या JPG, PNG, WEBP छवि अपलोड करें। फ़ाइल सहेजी जाती है, फिर संदेश के साथ भेजी जाती है।',
+  );
+  String get campaignMediaReplace => _t(
+    ar: 'استبدال الملف',
+    en: 'Replace file',
+    hi: 'फ़ाइल बदलें',
+  );
+  String get campaignMediaClear => _t(
+    ar: 'إزالة الملف',
+    en: 'Remove file',
+    hi: 'फ़ाइल हटाएँ',
+  );
+  String get campaignMediaReady => _t(
+    ar: 'الملف جاهز للإرسال',
+    en: 'The file is ready to send',
+    hi: 'फ़ाइल भेजने के लिए तैयार है',
+  );
+  String get campaignMediaUploading => _t(
+    ar: 'جاري حفظ الملف',
+    en: 'Saving the file',
+    hi: 'फ़ाइल सहेजी जा रही है',
+  );
+  String get campaignMediaUploadFailed => _t(
+    ar: 'تعذر حفظ الملف. حاول مرة أخرى.',
+    en: 'Could not save the file. Try again.',
+    hi: 'फ़ाइल सहेजी नहीं जा सकी। फिर कोशिश करें।',
+  );
+  String get campaignMediaReadFailed => _t(
+    ar: 'تعذر قراءة الملف من الجهاز',
+    en: 'Could not read the file from this device',
+    hi: 'इस डिवाइस से फ़ाइल नहीं पढ़ी जा सकी',
+  );
+  String get campaignMediaTypeRejected => _t(
+    ar: 'يُقبل فقط ملف PDF أو صورة JPG أو PNG أو WEBP',
+    en: 'Only a PDF or a JPG, PNG, or WEBP image is accepted',
+    hi: 'केवल PDF या JPG, PNG, WEBP छवि स्वीकार है',
+  );
+  String get campaignMediaUnauthorized => _t(
+    ar: 'رفع الملف متاح لمدير النظام فقط',
+    en: 'Only a system admin can upload this file',
+    hi: 'यह फ़ाइल केवल सिस्टम व्यवस्थापक अपलोड कर सकता है',
+  );
+  String get campaignMediaEmpty => _t(
+    ar: 'الملف فارغ',
+    en: 'The file is empty',
+    hi: 'फ़ाइल खाली है',
+  );
+  String get campaignMediaTooLarge => _t(
+    ar: 'حجم الملف أكبر من 20 ميجابايت',
+    en: 'The file is larger than 20 MB',
+    hi: 'फ़ाइल 20 एमबी से बड़ी है',
+  );
+  String get campaignMediaUrlFallback => _t(
+    ar: 'أو الصق رابط ملف جاهز إن كان محفوظاً في مكان آخر',
+    en: 'Or paste a link to a file you already have',
+    hi: 'या किसी तैयार फ़ाइल का लिंक चिपकाएँ',
+  );
+  String get campaignMediaRequired => _t(
+    ar: 'أضف ملفاً أو رابط بوستر أولاً',
+    en: 'Add a file or a poster link first',
+    hi: 'पहले एक फ़ाइल या पोस्टर लिंक जोड़ें',
+  );
+  String get campaignMediaUploadedWins => _t(
+    ar: 'سيُرسل الملف المرفوع مع الرسالة. الرابط يُستخدم فقط بعد إزالة الملف.',
+    en: 'The uploaded file is sent with the message. The link is used only after you remove the file.',
+    hi: 'अपलोड की गई फ़ाइल संदेश के साथ भेजी जाती है। लिंक तभी उपयोग होता है जब फ़ाइल हटा दी जाए।',
+  );
   String get searchCustomerPlaceholder => _t(ar: 'بحث بالاسم أو رقم الهاتف أو الفرع...', en: 'Search by name, phone, or branch...', hi: 'नाम, फोन या शाखा द्वारा खोजें...');
   String get deselectAllCustomers => _t(ar: 'إلغاء تحديد الكل', en: 'Deselect All', hi: 'सभी अचयनित करें');
   String get selectAllCustomers => _t(ar: 'تحديد كافة العملاء', en: 'Select All Customers', hi: 'सभी ग्राहकों का चयन करें');

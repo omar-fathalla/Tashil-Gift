@@ -22,6 +22,7 @@ class CustomerCampaignContact {
   final String lastBranch;
   final DateTime? lastVisitDate;
   final String? sourceTag;
+  final List<String> alternateNames;
   ContactDispatchStatus status;
   bool? isWhatsAppActive;
 
@@ -37,6 +38,7 @@ class CustomerCampaignContact {
     required this.lastBranch,
     this.lastVisitDate,
     this.sourceTag,
+    this.alternateNames = const [],
     this.status = ContactDispatchStatus.pending,
     this.isWhatsAppActive,
   });
@@ -55,6 +57,10 @@ class CustomerCampaignContact {
     sb.write(' ');
     for (final b in branches) {
       sb.write(b.toLowerCase());
+      sb.write(' ');
+    }
+    for (final alternate in alternateNames) {
+      sb.write(alternate.toLowerCase().toEnglishDigits());
       sb.write(' ');
     }
     return sb.toString();
@@ -86,6 +92,8 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
   final AppStrings strings;
   final bool isAr;
   final String? attachedMediaUrl;
+  final String? attachedMediaFileName;
+  final String? attachedMediaMimeType;
   final String? pollTitle;
   final List<String>? pollOptions;
   final bool multiplePollAnswers;
@@ -100,6 +108,8 @@ class WhatsappCampaignDispatcherDialog extends StatefulWidget {
     required this.strings,
     required this.isAr,
     this.attachedMediaUrl,
+    this.attachedMediaFileName,
+    this.attachedMediaMimeType,
     this.pollTitle,
     this.pollOptions,
     this.multiplePollAnswers = false,
@@ -236,6 +246,8 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
         companyName: widget.companyName,
         campaignName: widget.campaignName,
         attachedMediaUrl: widget.attachedMediaUrl,
+        attachedMediaFileName: widget.attachedMediaFileName,
+        attachedMediaMimeType: widget.attachedMediaMimeType,
         pollTitle: widget.pollTitle,
         pollOptions: widget.pollOptions,
         multiplePollAnswers: widget.multiplePollAnswers,

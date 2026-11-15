@@ -17,7 +17,7 @@ const {
   getDocs,
   serverTimestamp,
 } = require("firebase/firestore");
-const { ref, uploadBytes, getBytes } = require("firebase/storage");
+const { ref, uploadBytes, getBytes, listAll, deleteObject, updateMetadata } = require("firebase/storage");
 
 const PROJECT_ID = "demo-tashil-gift";
 const RULES_DIR = path.resolve(__dirname, "..");
@@ -241,6 +241,37 @@ describe("staff and partner claims", () => {
     }
   });
 
+  function supervisorPayload(overrides = {}) {
+    return {
+      name: "مشرف تجريبي Test Supervisor",
+      alternateNames: ["اسم بديل"],
+      mobile: "01099999997",
+      cleanPhone: "201099999997",
+      source: "excel_import",
+      audience: "company_supervisors",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+
+  test("company supervisors are readable and writable only by staff", async () => {
+    const ref = (db) => doc(db, "company_supervisors/01099999997");
+    await assertSucceeds(setDoc(ref(admin()), supervisorPayload()));
+    await assertSucceeds(getDoc(ref(admin())));
+    await assertSucceeds(getDocs(collection(superAdmin(), "company_supervisors")));
+    await assertSucceeds(updateDoc(ref(superAdmin()), { name: "مشرف تجريبي Test Supervisor" }));
+    await assertFails(setDoc(ref(admin()), supervisorPayload({ mobile: "01000000000" })));
+    await assertFails(setDoc(ref(partner()), supervisorPayload()));
+    await assertFails(getDoc(ref(partner())));
+    await assertFails(getDoc(ref(partnerOps())));
+    await assertFails(getDocs(collection(anon(), "company_supervisors")));
+    await assertFails(getDoc(ref(anon())));
+    const publicDb = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(publicDb, "company_supervisors/01099999997")));
+    await assertSucceeds(deleteDoc(ref(admin())));
+  });
+
   test("unauthenticated clients cannot read or write", async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, "events/camp-1")));
@@ -307,5 +338,137 @@ describe("storage rules", () => {
     await assertSucceeds(uploadBytes(ref(staff.storage(), "company_logos/x.png"), jpeg, {
       contentType: "image/png",
     }));
+  });
+});
+
+describe("whatsapp campaign media storage", () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  const adminPath = "whatsapp_campaign_media/admin-1/1731440000000_offer.pdf";
+
+  function asAdmin() {
+    return contextFor("admin-1", { role: "admin" });
+  }
+
+  function asSuper() {
+    return contextFor("super-1", { role: "super_admin" });
+  }
+
+  function asPartner() {
+    return contextFor("partner-1", {
+      role: "partner",
+      companySlug: "acme",
+      partnerAccess: "read",
+    });
+  }
+
+  function asAnon() {
+    return contextFor("rep-1", {
+      firebase: { sign_in_provider: "anonymous", identities: {} },
+    });
+  }
+
+  test("admin and super_admin can upload a PDF or image under their own uid", async () => {
+    await assertSucceeds(uploadBytes(ref(asAdmin().storage(), adminPath), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertSucceeds(uploadBytes(
+      ref(asSuper().storage(), "whatsapp_campaign_media/super-1/1731440000001_poster.jpg"),
+      jpeg,
+      {
+        contentType: "image/jpeg",
+        customMetadata: { uploaderUid: "super-1" },
+      },
+    ));
+    await assertSucceeds(uploadBytes(
+      ref(asAdmin().storage(), "whatsapp_campaign_media/admin-1/1731440000002_poster.png"),
+      jpeg,
+      {
+        contentType: "image/png",
+        customMetadata: { uploaderUid: "admin-1" },
+      },
+    ));
+    await assertSucceeds(uploadBytes(
+      ref(asAdmin().storage(), "whatsapp_campaign_media/admin-1/1731440000003_poster.webp"),
+      jpeg,
+      {
+        contentType: "image/webp",
+        customMetadata: { uploaderUid: "admin-1" },
+      },
+    ));
+  });
+
+  test("partners, anonymous users, and the public cannot upload, read, or list", async () => {
+    await assertSucceeds(uploadBytes(ref(asAdmin().storage(), adminPath), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+
+    await assertFails(uploadBytes(ref(asPartner().storage(), "whatsapp_campaign_media/partner-1/1_offer.pdf"), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "partner-1" },
+    }));
+    await assertFails(uploadBytes(ref(asAnon().storage(), "whatsapp_campaign_media/rep-1/1_offer.pdf"), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "rep-1" },
+    }));
+    const guest = testEnv.unauthenticatedContext();
+    await assertFails(uploadBytes(ref(guest.storage(), adminPath), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+
+    await assertFails(getBytes(ref(asPartner().storage(), adminPath)));
+    await assertFails(getBytes(ref(asAnon().storage(), adminPath)));
+    await assertFails(getBytes(ref(guest.storage(), adminPath)));
+    await assertSucceeds(getBytes(ref(asSuper().storage(), adminPath)));
+
+    await assertFails(listAll(ref(asAdmin().storage(), "whatsapp_campaign_media")));
+    await assertFails(listAll(ref(asAdmin().storage(), "whatsapp_campaign_media/admin-1")));
+    await assertFails(listAll(ref(guest.storage(), "whatsapp_campaign_media")));
+    await assertFails(listAll(ref(asPartner().storage(), "whatsapp_campaign_media")));
+  });
+
+  test("rejects another uid, a bad type, a missing owner, and overwrites", async () => {
+    const admin = asAdmin();
+    await assertFails(uploadBytes(
+      ref(admin.storage(), "whatsapp_campaign_media/super-1/1_offer.pdf"),
+      pdf,
+      {
+        contentType: "application/pdf",
+        customMetadata: { uploaderUid: "admin-1" },
+      },
+    ));
+    await assertFails(uploadBytes(ref(admin.storage(), adminPath), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "someone-else" },
+    }));
+    await assertFails(uploadBytes(ref(admin.storage(), adminPath), pdf, {
+      contentType: "text/plain",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertFails(uploadBytes(ref(admin.storage(), "whatsapp_campaign_media/admin-1/1_notes.txt"), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertFails(uploadBytes(ref(admin.storage(), "whatsapp_campaign_media/admin-1/1_anim.gif"), jpeg, {
+      contentType: "image/gif",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertFails(uploadBytes(ref(admin.storage(), "company_logos/offer.pdf"), pdf, {
+      contentType: "application/pdf",
+    }));
+
+    await assertSucceeds(uploadBytes(ref(admin.storage(), adminPath), pdf, {
+      contentType: "application/pdf",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertFails(updateMetadata(ref(admin.storage(), adminPath), {
+      contentType: "text/plain",
+      customMetadata: { uploaderUid: "admin-1" },
+    }));
+    await assertSucceeds(deleteObject(ref(admin.storage(), adminPath)));
+    await assertFails(deleteObject(ref(asPartner().storage(), adminPath)));
   });
 });
