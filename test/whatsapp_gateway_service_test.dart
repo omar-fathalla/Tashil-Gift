@@ -419,8 +419,105 @@ void main() {
         lastEvent = event;
       }
 
-      expect(lastEvent?.isCompleted, isTrue);
-      expect(contact.status, equals(ContactDispatchStatus.failed));
+      // 403 = no permission: the circuit breaker stops the batch instead of
+      // marking every remaining contact as failed.
+      expect(lastEvent?.isHalted, isTrue);
+      expect(contact.status, equals(ContactDispatchStatus.pending));
+    });
+
+    CustomerCampaignContact makeContact(String id, String phone) => CustomerCampaignContact(
+          id: id,
+          name: 'عميل $id',
+          rawPhone: phone,
+          cleanPhone: '2$phone',
+          totalSpend: 100,
+          totalInvoices: 1,
+          prizesWon: [],
+          branches: ['الفرع الرئيسي'],
+          lastBranch: 'الفرع الرئيسي',
+          status: ContactDispatchStatus.pending,
+        );
+
+    const breakerConfig = WhatsAppGatewayConfigModel(
+      provider: WhatsAppGatewayProvider.waha,
+      instanceId: 'default',
+      apiToken: 'test-waha-token',
+      customEndpointUrl: 'https://proxy.example/waha',
+      delayBetweenMessagesSeconds: 0,
+    );
+
+    test('sendBatchStream halts on the first 422 when the session is not WORKING', () async {
+      var sendCalls = 0;
+      final mockClient = MockClient((request) async {
+        if (request.url.path.endsWith('/api/sessions/default')) {
+          return http.Response('{"name":"default","status":"FAILED","me":null}', 200);
+        }
+        if (request.url.path.contains('check-exists')) {
+          return http.Response('{"numberExists":true,"chatId":"x@c.us"}', 200);
+        }
+        if (request.url.path.endsWith('/sendText')) sendCalls++;
+        return http.Response('{"message":"Session status is not as expected"}', 422);
+      });
+      final service = WhatsAppGatewayService(wahaAuthHeadersBuilder: () async => {'Authorization': 'Bearer t'});
+      final a = makeContact('a', '01011111111');
+      final b = makeContact('b', '01022222222');
+      final events = <BatchProgressEvent>[];
+      await for (final e in service.sendBatchStream(
+        config: breakerConfig,
+        contacts: [a, b],
+        template: 'مرحبا',
+        companyName: 'الشركة',
+        campaignName: 'الحملة',
+        client: mockClient,
+      )) {
+        events.add(e);
+      }
+      expect(sendCalls, 1);
+      expect(events.last.isHalted, isTrue);
+      expect(events.last.haltReason, contains('FAILED'));
+      expect(a.status, ContactDispatchStatus.pending);
+      expect(b.status, ContactDispatchStatus.pending);
+    });
+
+    test('sendBatchStream keeps going when the session is still WORKING', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path.endsWith('/api/sessions/default')) {
+          return http.Response('{"name":"default","status":"WORKING"}', 200);
+        }
+        if (request.url.path.contains('check-exists')) {
+          return http.Response('{"numberExists":true,"chatId":"x@c.us"}', 200);
+        }
+        return http.Response('{"message":"bad request"}', 400);
+      });
+      final service = WhatsAppGatewayService(wahaAuthHeadersBuilder: () async => {'Authorization': 'Bearer t'});
+      final a = makeContact('a', '01011111111');
+      final b = makeContact('b', '01022222222');
+      BatchProgressEvent? last;
+      await for (final e in service.sendBatchStream(
+        config: breakerConfig,
+        contacts: [a, b],
+        template: 'مرحبا',
+        companyName: 'الشركة',
+        campaignName: 'الحملة',
+        client: mockClient,
+      )) {
+        last = e;
+      }
+      expect(last?.isHalted, isFalse);
+      expect(last?.isCompleted, isTrue);
+      expect(a.status, ContactDispatchStatus.failed);
+      expect(b.status, ContactDispatchStatus.failed);
+    });
+
+    test('parseWahaSessionStatus reads the session object and WAHA 422 messages', () {
+      expect(WhatsAppGatewayService.parseWahaSessionStatus('{"status":"failed"}'), 'FAILED');
+      expect(
+        WhatsAppGatewayService.parseWahaSessionStatus(
+            '{"statusCode":422,"message":"Can get QR code only in SCAN_QR_CODE status. The current status is \'FAILED\'"}'),
+        'FAILED',
+      );
+      expect(WhatsAppGatewayService.parseWahaSessionStatus('{"name":"default","status":"STOPPED"}'), 'STOPPED');
+      expect(WhatsAppGatewayService.parseWahaSessionStatus('not json'), isNull);
     });
   });
 }

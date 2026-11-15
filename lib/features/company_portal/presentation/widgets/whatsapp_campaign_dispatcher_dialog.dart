@@ -255,6 +255,17 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
       )) {
         if (!mounted) break;
 
+        if (event.isHalted) {
+          setState(() {
+            _isAutoCancelled = true;
+            _isAutoPaused = false;
+            _autoProcessedCount = event.currentIndex;
+            _currentAutoStatus = event.statusMessage;
+          });
+          _showDispatchHaltedWarning(event);
+          break;
+        }
+
         // Handle pause wait
         while (_isAutoPaused && !_isAutoCancelled) {
           await Future.delayed(const Duration(milliseconds: 300));
@@ -293,6 +304,41 @@ class _WhatsappCampaignDispatcherDialogState extends State<WhatsappCampaignDispa
         });
       }
     }
+  }
+
+  void _showDispatchHaltedWarning(BatchProgressEvent event) {
+    if (!mounted) return;
+    final cs = Theme.of(context).colorScheme;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: cs.error),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.isAr ? 'تم إيقاف الإرسال تلقائياً' : 'Sending stopped automatically',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          widget.isAr
+              ? '${event.statusMessage}\n\nتم الإرسال بنجاح: ${event.successCount} من ${event.totalContacts}.'
+              : 'Stopped after ${event.successCount} of ${event.totalContacts} successful messages: ${event.haltReason ?? ''}',
+          style: GoogleFonts.cairo(fontSize: 13),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(widget.isAr ? 'حسناً' : 'OK', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _pauseResumeAutoDispatch() {

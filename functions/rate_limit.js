@@ -19,6 +19,13 @@ const LIMITS = {
     { name: "min", windowMs: MINUTE, max: 30 },
     { name: "day", windowMs: DAY, max: 500 },
   ],
+  // wahaProxy session status / QR / screenshot / restart-start-stop-logout calls.
+  // Kept separate from sending so the pairing dialog's polling can never lock an
+  // admin out of restarting the session (and vice versa).
+  wahaControl: [
+    { name: "min", windowMs: MINUTE, max: 60 },
+    { name: "day", windowMs: DAY, max: 3000 },
+  ],
   // Server-side receipt duplicate checks (checkReceiptDuplicate callable).
   receiptCheck: [
     { name: "min", windowMs: MINUTE, max: 30 },

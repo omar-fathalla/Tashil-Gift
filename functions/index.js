@@ -6,6 +6,7 @@ const { verifyReceiptImage } = require("./receipt_verification");
 const { applyCampaignPrizeClaim } = require("./security_functions");
 const { handleWahaWebhook } = require("./waha_webhook");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
+const { wahaRateLimitScope } = require("./waha_rate_scope");
 const {
   updateWhatsappWebhookConfig,
   manageWhatsappSenderLink,
@@ -234,7 +235,8 @@ exports.wahaProxy = onRequest(
     }
 
     try {
-      await consumeRateLimit({ db, scope: "waha", key: clientKey({ uid: authed.uid, rawRequest: req }) });
+      const scope = wahaRateLimitScope(req.method, req.url || "/");
+      await consumeRateLimit({ db, scope, key: clientKey({ uid: authed.uid, rawRequest: req }) });
     } catch (err) {
       if (err instanceof RateLimitError) {
         res.set("Retry-After", String(err.retryAfterSec));
