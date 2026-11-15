@@ -1121,6 +1121,46 @@ class EventModel {
     return result;
   }
 
+  /// Firestore keys the campaign editor is allowed to overwrite.
+  /// An edit copies every other persisted field from the campaign being
+  /// edited, so a control this screen does not show cannot be reset.
+  static const Set<String> campaignEditorOwnedFields = {
+    'eventName',
+    'targetCompany',
+    'companySlug',
+    'companyLogoUrl',
+    'minimumSpend',
+    'requiredProducts',
+    'customPrompt',
+    'welcomeTitle',
+    'welcomeMessage',
+    'termsAndConditions',
+    'startDate',
+    'endDate',
+    'gameType',
+    'allocatedPrizes',
+    'retailChainId',
+    'retailChainName',
+    'branchIds',
+    'branchNames',
+    'isAllBranches',
+    'allowMultipleChances',
+    'multiplierBasis',
+    'maxChancesPerReceipt',
+    'promotionalIdea',
+    'aiValidationSummary',
+    'promotionalRules',
+    'requireVoucherSerials',
+    'voucherSerialMode',
+    'allowComplementaryReceipts',
+    'enableWhatsAppWinnerNotification',
+    'hasCustomAgencyCredentials',
+    'customAgencyUsername',
+    'customAgencyPassword',
+    'customAgencyCredentialVersion',
+  };
+
+  /// Create payload. [createdAt] is a server timestamp when the model has none.
   Map<String, dynamic> toFirestore() {
     return {
       'eventName': eventName,
@@ -1163,6 +1203,25 @@ class EventModel {
       'customAgencyPassword': customAgencyPassword,
       'customAgencyCredentialVersion': customAgencyCredentialVersion,
     };
+  }
+
+  /// Edit payload. Form-owned keys come from this draft. Every other field,
+  /// including [spendLadderMode] and the portal toggles, stays as stored on
+  /// [existing]. [createdAt] is omitted so an edit cannot move the campaign
+  /// in createdAt ordering. [updatedAt] and [updatedBy] record the write.
+  Map<String, dynamic> toEditFirestore({
+    required EventModel existing,
+    required String updatedBy,
+  }) {
+    final payload = existing.toFirestore()..remove('createdAt');
+    final edited = toFirestore()..remove('createdAt');
+    for (final key in campaignEditorOwnedFields) {
+      if (edited.containsKey(key)) payload[key] = edited[key];
+    }
+    payload.remove('createdAt');
+    payload['updatedAt'] = FieldValue.serverTimestamp();
+    payload['updatedBy'] = updatedBy;
+    return payload;
   }
 
   EventModel copyWith({
