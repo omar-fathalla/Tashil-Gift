@@ -1789,6 +1789,28 @@ class AiDirectivesSeedData {
           tags: ['spend-ladder', 'exclusive-tiers', 'remainder', 'combined-receipts', 'dedup', 'air-88'],
           lastUpdated: '2026-11-14',
         ),
+        AiDirective(
+          id: 'AIR-89',
+          code: 'SERVER_MIN_SPEND_PAGE_ALIGNED_LINE_MATCHING_STANDARD',
+          orderIndex: 89,
+          category: AiDirectiveCategory.promotionalRules,
+          titleAr: 'معيار توحيد حساب الحد الأدنى للإنفاق بين الخادم وصفحة الفاتورة',
+          titleEn: 'Server Min-Spend Page-Aligned Line Matching Standard',
+          descriptionAr:
+              'يحسب الخادم الحد الأدنى للإنفاق من نفس سطور منتجات الحملة التي تعرضها صفحة الفاتورة: السطور المطابقة لمنتجات أو ماركات الحملة، بالإضافة إلى السطور التي علّمها الذكاء الاصطناعي كمنتجات الشركة حتى لو اختلف تهجئة اسمها (مثل «جالسى» بدل «جلاسي»). لا يُحسب أبداً سطر لماركة أخرى أو سطر غير معلَّم أو إجمالي الفاتورة، ولا يُخمَّن منتج سطر غامض.',
+          descriptionEn:
+              'The server counts min-spend from the same campaign lines the receipt page shows: lines matching the campaign products or brands, plus lines the AI flagged as the company\'s even when OCR misspelled the brand (e.g. «جالسى» for جلاسي). It never counts another brand, an unflagged line, or the invoice total, and never guesses an ambiguous line\'s product.',
+          logicAr:
+              '1. السطر المعلَّم isTargetCompany يُحسب في قواعد الإنفاق إذا كان له اسم مقروء.\n2. يُستبعد إذا ذكر ماركة معروفة لا تغطيها الحملة (كلوريل في حملة جلاسي/سبيد، كلوركس، إلخ).\n3. في الحملات المحددة بالباركود فقط يُستبعد السطر الذي يحمل باركوداً خارج الحملة.\n4. يُستبعد السطر المطابق بدقة لقاعدة إنفاق أخرى، ووضع الشرائح المستهلكة يحسب المطابقات الصريحة فقط كما في الصفحة.',
+          logicEn:
+              '1. A flagged isTargetCompany line with a readable name counts toward spend rules.\n2. It is excluded when it names a known brand the campaign does not cover (كلوريل in a Glassy/Speed campaign, Clorox, etc.).\n3. In barcode-only campaigns a line carrying a barcode outside the campaign is excluded.\n4. Lines strictly matching another spend rule are excluded, and consuming ladders count explicit matches only, like the page.',
+          exampleInput:
+              'حد أدنى 330 ج.م، سطور سبيد وجلاسي بـ 329 ج.م، وسطر «جالسى ملمع زجاج» 55 ج.م معلَّم كمنتج الشركة بدون باركود.',
+          exampleOutput:
+              'الصفحة والخادم يحسبان 384 ج.م وتُقبل الفاتورة. لو كان السطر «كلوريل مبيض» أو غير معلَّم يبقى الإجمالي 329 ج.م وتُرفض الفاتورة.',
+          tags: ['min-spend', 'server-eligibility', 'ocr-brand-variants', 'page-alignment', 'air-89'],
+          lastUpdated: '2026-11-15',
+        ),
       ];
 }
 

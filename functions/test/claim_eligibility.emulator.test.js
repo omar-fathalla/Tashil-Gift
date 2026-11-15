@@ -103,6 +103,35 @@ test("eligible claim decrements stock exactly once", { skip: !RUN }, async () =>
   assert.strictEqual(stored.allocatedPrizes[0].remainingQuantity, 4);
 });
 
+test("Edku min spend: a page-flagged misspelled brand line counts, another brand does not", { skip: !RUN }, async () => {
+  const edku = () => campaign({ promotionalRules: [{
+    id: "t150", conditionType: "by_spend", minSpend: 330, requiredBrands: ["سبيد", "جلاسي"],
+    linkedGifts: [{ giftId: "g150", giftName: "قسيمة 150", quantity: 1 }],
+  }] });
+  const brandLines = (extra) => [
+    { name: "سبيد منظف ارضيات 1 لتر", price: 65, quantity: 3, isTargetCompany: true },
+    { name: "جلاسي منظف زجاج 500 مل", price: 134, quantity: 1, isTargetCompany: true },
+    Object.assign({ name: "جالسى ملمع زجاج", price: 55, quantity: 1, isTargetCompany: true, barcode: "" }, extra),
+    { name: "ارز الضحى 5 كيلو", price: 210, quantity: 1, isTargetCompany: false },
+  ];
+  const receipt = (eventId, extra) => ({
+    campaignId: eventId, submittedByUid: "rep1", extracted_products: brandLines(extra),
+    timestamp: admin.firestore.Timestamp.now(), chances_earned: 1, branch_id: "b1", total_value: 594,
+  });
+
+  await seed("E_edku", edku(), "R_edku", receipt("E_edku"));
+  assert.strictEqual((await claim("E_edku", "R_edku", "rep1")).ok, true);
+  assert.strictEqual((await db.collection("events").doc("E_edku").get()).data().allocatedPrizes[0].remainingQuantity, 4);
+
+  await seed("E_edku_other", edku(), "R_edku_other", receipt("E_edku_other", { name: "كلوريل مبيض 1 لتر" }));
+  const before = await snapshotOf("E_edku_other", "R_edku_other");
+  await assert.rejects(claim("E_edku_other", "R_edku_other", "rep1"), (err) => {
+    assert.strictEqual(err.details && err.details.reason, "min_spend_not_met");
+    return true;
+  });
+  assert.strictEqual(await snapshotOf("E_edku_other", "R_edku_other"), before);
+});
+
 async function anonymousToken() {
   const res = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ returnSecureToken: true }),
