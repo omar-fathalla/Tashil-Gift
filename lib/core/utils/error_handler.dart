@@ -139,10 +139,49 @@ class AppErrorHandler {
   /// dispensed (safe to treat a retried auto-claim as done).
   static bool isAlreadyClaimedError(dynamic error) {
     if (error is FirebaseFunctionsException) {
-      final m = (error.message ?? '').toLowerCase();
-      return error.code == 'failed-precondition' && m.contains('already claimed');
+      if (error.code != 'failed-precondition') return false;
+      if (claimStateMessages.containsKey(claimRejectionReason(error))) return true;
+      return (error.message ?? '').toLowerCase().contains('already claimed');
     }
     return error.toString().toLowerCase().contains('already claimed');
+  }
+
+  /// Reason codes the server sends in `details.reason` when it refuses a gift
+  /// claim because the campaign conditions are not met. Each one rejects the
+  /// claim before any stock or receipt write.
+  static const Map<String, String> claimEligibilityMessages = {
+    'campaign_inactive': 'الحملة غير نشطة حالياً، لا يمكن صرف هدية هذه الفاتورة.',
+    'campaign_not_started': 'الحملة لم تبدأ بعد، لا يمكن صرف هدية هذه الفاتورة.',
+    'campaign_ended': 'انتهت الحملة، لا يمكن صرف هدية هذه الفاتورة.',
+    'receipt_date_outside_campaign':
+        'تاريخ الشراء في الفاتورة خارج فترة الحملة، ولم يُصرف أي مخزون.',
+    'receipt_lines_missing':
+        'تعذر التحقق من شروط الحملة لأن أصناف الفاتورة غير محفوظة. يرجى إعادة رفع الفاتورة من المندوب، ولم يُصرف أي مخزون.',
+    'required_products_missing':
+        'الفاتورة لا تحتوي على أي من منتجات الحملة المطلوبة، ولم يُصرف أي مخزون.',
+    'min_spend_not_met':
+        'قيمة مشتريات منتجات الحملة في الفاتورة أقل من الحد الأدنى المطلوب، ولم يُصرف أي مخزون.',
+    'no_eligible_gift':
+        'الفاتورة لا تستوفي شروط أي عرض في الحملة، لذلك لا تُصرف هدية.',
+  };
+
+  /// Reason codes for a receipt whose gift the server already dispensed.
+  /// The claim is refused before any stock or receipt write.
+  static const Map<String, String> claimStateMessages = {
+    'already_claimed': 'تم صرف هدية هذه الفاتورة من قبل، ولا يمكن صرفها مرة أخرى.',
+    'unit_cap_exhausted': 'تم صرف كل الهدايا المستحقة لهذه الفاتورة من قبل.',
+  };
+
+  /// The server's machine-readable rejection reason, or null.
+  static String? claimRejectionReason(dynamic error) {
+    if (error is FirebaseFunctionsException) {
+      final details = error.details;
+      if (details is Map) {
+        final reason = details['reason'];
+        if (reason is String && reason.isNotEmpty) return reason;
+      }
+    }
+    return null;
   }
 
   /// Real Arabic reason for a failed gift claim (server English messages
@@ -151,6 +190,9 @@ class AppErrorHandler {
     if (error is FirebaseFunctionsException) {
       final msg = (error.message ?? '').trim();
       if (RegExp(r'[\u0600-\u06FF]').hasMatch(msg)) return msg;
+      final reason = claimRejectionReason(error);
+      final known = claimEligibilityMessages[reason] ?? claimStateMessages[reason];
+      if (known != null) return known;
       final m = msg.toLowerCase();
       if (m.contains('already claimed')) return 'تم صرف هدية هذه الفاتورة من قبل.';
       if (m.contains('not enough prize stock')) return 'رصيد الهدايا في هذا الفرع لا يكفي. يرجى تغذية الرصيد ثم إعادة المحاولة.';

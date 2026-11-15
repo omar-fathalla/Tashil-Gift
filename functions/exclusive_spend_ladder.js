@@ -112,4 +112,4 @@ function exclusiveLadderUnits(event, receipt) {
   return units;
 }
 
-module.exports = { exclusiveLadderUnits, poolUnits };
+module.exports = { exclusiveLadderUnits, poolUnits, grossLine, reaches, withinMax };
