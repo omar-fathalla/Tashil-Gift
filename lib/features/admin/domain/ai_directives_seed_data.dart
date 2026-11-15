@@ -1789,7 +1789,7 @@ class AiDirectivesSeedData {
           tags: ['spend-ladder', 'exclusive-tiers', 'remainder', 'combined-receipts', 'dedup', 'air-88'],
           lastUpdated: '2026-11-14',
         ),
-        AiDirective(
+        const AiDirectiveModel(
           id: 'AIR-89',
           code: 'SERVER_MIN_SPEND_PAGE_ALIGNED_LINE_MATCHING_STANDARD',
           orderIndex: 89,
