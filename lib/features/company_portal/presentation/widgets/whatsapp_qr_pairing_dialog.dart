@@ -263,7 +263,7 @@ class _WhatsAppQrPairingDialogState extends State<WhatsAppQrPairingDialog> {
     });
 
     var outcome = await _service.controlSession(widget.config, 'restart');
-    if (!outcome.ok && !outcome.isNetworkError && outcome.statusCode != 401 && outcome.statusCode != 403) {
+    if (!outcome.ok && !outcome.isNetworkError && !outcome.isAuthError && outcome.statusCode != 401 && outcome.statusCode != 403) {
       // e.g. the session was STOPPED or missing on the server: start it instead.
       final started = await _service.controlSession(widget.config, 'start');
       if (started.ok) outcome = started;

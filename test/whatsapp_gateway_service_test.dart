@@ -509,6 +509,41 @@ void main() {
       expect(b.status, ContactDispatchStatus.failed);
     });
 
+    test('web endpoint: our own hosts always resolve to the page origin', () {
+      final gift = Uri.parse('https://gift.sw-point.com/admin');
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('https://tashil-gift.web.app/waha', gift),
+          'https://gift.sw-point.com/waha');
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('', gift), 'https://gift.sw-point.com/waha');
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('http://76.13.14.23:3000', gift),
+          'https://gift.sw-point.com/waha');
+      expect(
+          WhatsAppGatewayService.resolveWebSameOriginEndpoint(
+              'https://tashil-gift.firebaseapp.com/waha', Uri.parse('https://tashil-gift.web.app/')),
+          'https://tashil-gift.web.app/waha');
+      // A genuinely external endpoint is left alone.
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('https://example.org/waha', gift), isNull);
+      // Local dev (http) keeps the old behaviour.
+      expect(
+          WhatsAppGatewayService.resolveWebSameOriginEndpoint(
+              'https://tashil-gift.web.app/waha', Uri.parse('http://localhost:5000/')),
+          isNull);
+    });
+
+    test('a token failure is reported as an auth error, not a network error', () async {
+      final service = WhatsAppGatewayService(wahaAuthHeadersBuilder: () async => throw StateError('token refresh failed'));
+      final o = await service.fetchSessionStatusDetailed(breakerConfig,
+          client: MockClient((_) async => http.Response('{"status":"WORKING"}', 200)));
+      expect(o.ok, isFalse);
+      expect(o.isAuthError, isTrue);
+      expect(o.isNetworkError, isFalse);
+      expect(WhatsAppGatewayService.describeWahaFailureAr(o), contains('token refresh failed'));
+    });
+
+    test('network failures carry the technical detail', () {
+      const o = WahaCallOutcome(ok: false, isNetworkError: true, error: 'ClientException: Failed to fetch, uri=https://x/waha');
+      expect(WhatsAppGatewayService.describeWahaFailureAr(o), contains('Failed to fetch'));
+    });
+
     test('parseWahaSessionStatus reads the session object and WAHA 422 messages', () {
       expect(WhatsAppGatewayService.parseWahaSessionStatus('{"status":"failed"}'), 'FAILED');
       expect(
