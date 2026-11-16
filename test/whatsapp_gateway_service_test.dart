@@ -520,13 +520,36 @@ void main() {
           WhatsAppGatewayService.resolveWebSameOriginEndpoint(
               'https://tashil-gift.firebaseapp.com/waha', Uri.parse('https://tashil-gift.web.app/')),
           'https://tashil-gift.web.app/waha');
-      // A genuinely external endpoint is left alone.
-      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('https://example.org/waha', gift), isNull);
+      // Any saved endpoint, even an external one, is ignored on HTTPS web pages.
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('https://example.org/waha', gift),
+          'https://gift.sw-point.com/waha');
+      expect(WhatsAppGatewayService.resolveWebSameOriginEndpoint('https://waha.sw-point.com', gift),
+          'https://gift.sw-point.com/waha');
       // Local dev (http) keeps the old behaviour.
       expect(
           WhatsAppGatewayService.resolveWebSameOriginEndpoint(
               'https://tashil-gift.web.app/waha', Uri.parse('http://localhost:5000/')),
           isNull);
+    });
+
+    test('local cache never keeps a WAHA endpoint on web; other cases unchanged', () {
+      const stale = WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.waha,
+        instanceId: 'default',
+        apiToken: '',
+        customEndpointUrl: 'https://tashil-gift.web.app/waha',
+      );
+      final webClean = WhatsAppGatewayService.sanitizeForLocalCache(stale, isWeb: true);
+      expect(webClean.customEndpointUrl, '');
+      expect(webClean.instanceId, 'default');
+      expect(identical(WhatsAppGatewayService.sanitizeForLocalCache(stale, isWeb: false), stale), isTrue);
+      const custom = WhatsAppGatewayConfigModel(
+        provider: WhatsAppGatewayProvider.custom,
+        instanceId: '',
+        apiToken: '',
+        customEndpointUrl: 'https://example.org/send',
+      );
+      expect(identical(WhatsAppGatewayService.sanitizeForLocalCache(custom, isWeb: true), custom), isTrue);
     });
 
     test('a token failure is reported as an auth error, not a network error', () async {
