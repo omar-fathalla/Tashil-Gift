@@ -329,31 +329,45 @@ class WhatsAppGatewayService {
     'www.gift.sw-point.com',
   };
 
-  /// Web: prefer the page's own origin (`<origin>/waha`) whenever the configured
-  /// endpoint is empty, plain HTTP, or another of our own hosting domains. A
-  /// same-origin call needs no CORS preflight and is not a "third-party" request,
-  /// so privacy/ad-block extensions and cross-site rules cannot drop it.
+  /// Web (HTTPS): WAHA is always reached through the page's own origin
+  /// (`<origin>/waha`, a Hosting rewrite to wahaProxy). Any endpoint saved in
+  /// settings or browser storage is ignored: the proxy is the only sanctioned
+  /// path (the browser never holds the WAHA key), and a same-origin call needs no
+  /// CORS preflight and cannot be dropped as a cross-site request. Returns null
+  /// for plain-HTTP pages (local development), which keep the old resolution.
   static String? resolveWebSameOriginEndpoint(String raw, Uri base) {
     if (base.scheme != 'https') return null;
-    if (raw.isEmpty || raw.startsWith('http://')) return '${base.origin}/waha';
-    final parsed = Uri.tryParse(raw);
-    if (parsed != null && kOwnProxyHosts.contains(parsed.host.toLowerCase()) &&
-        kOwnProxyHosts.contains(base.host.toLowerCase())) {
-      return '${base.origin}/waha';
-    }
-    return null;
+    return '${base.origin}/waha';
   }
 
   static String resolveEndpoint(WhatsAppGatewayConfigModel config) {
     final raw = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (kIsWeb) {
-      final sameOrigin = resolveWebSameOriginEndpoint(raw, Uri.base);
-      if (sameOrigin != null) return sameOrigin;
+      if (config.provider == WhatsAppGatewayProvider.waha) {
+        final sameOrigin = resolveWebSameOriginEndpoint(raw, Uri.base);
+        if (sameOrigin != null) return sameOrigin;
+      }
+      if (Uri.base.scheme == 'https' && (raw.isEmpty || raw.startsWith('http://'))) {
+        return '${Uri.base.origin}/waha';
+      }
     }
     if (raw.isEmpty || raw.startsWith('http://')) {
       return kDefaultWahaProxyBase;
     }
     return raw;
+  }
+
+  /// Browser-storage copy of the config: on web, a WAHA endpoint is never kept
+  /// locally (it is always the page origin), so a stale value saved on one domain
+  /// cannot redirect calls. Firestore keeps whatever the admin saved.
+  static WhatsAppGatewayConfigModel sanitizeForLocalCache(
+    WhatsAppGatewayConfigModel config, {
+    bool isWeb = kIsWeb,
+  }) {
+    if (isWeb && config.provider == WhatsAppGatewayProvider.waha && config.customEndpointUrl.isNotEmpty) {
+      return config.copyWith(customEndpointUrl: '');
+    }
+    return config;
   }
 
   /// Loads configuration from Local Storage with Firestore fallback
@@ -364,7 +378,13 @@ class WhatsAppGatewayService {
       final localJson = prefs.getString(key);
 
       if (localJson != null && localJson.isNotEmpty) {
-        return WhatsAppGatewayConfigModel.fromJson(localJson);
+        final local = WhatsAppGatewayConfigModel.fromJson(localJson);
+        final clean = sanitizeForLocalCache(local);
+        if (!identical(clean, local)) {
+          // Overwrite the stale stored endpoint so it can never come back.
+          await prefs.setString(key, clean.toJson());
+        }
+        return clean;
       }
 
       // Fallback: Check Firestore company document
@@ -373,8 +393,8 @@ class WhatsAppGatewayService {
         if (doc.exists && doc.data() != null && doc.data()!.containsKey('whatsappGatewayConfig')) {
           final configMap = doc.data()!['whatsappGatewayConfig'] as Map<String, dynamic>?;
           if (configMap != null) {
-            final config = WhatsAppGatewayConfigModel.fromMap(configMap);
-            // Cache locally
+            final config = sanitizeForLocalCache(WhatsAppGatewayConfigModel.fromMap(configMap));
+            // Cache locally (endpoint stripped on web)
             await prefs.setString(key, config.toJson());
             return config;
           }
@@ -399,7 +419,7 @@ class WhatsAppGatewayService {
     try {
       final key = '$_prefsKeyPrefix${companySlug ?? "global"}';
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(key, config.toJson());
+      await prefs.setString(key, sanitizeForLocalCache(config).toJson());
 
       // Save to Firestore company document for persistence across team members
       if (companySlug != null && companySlug.isNotEmpty) {
@@ -520,7 +540,7 @@ class WhatsAppGatewayService {
       return WhatsAppGatewayConnectionStatus(
         isConnected: false,
         statusDetails: isFetchError
-            ? 'تعذر الاتصال بالخادم (${config.customEndpointUrl.isNotEmpty ? config.customEndpointUrl : config.instanceId}): يرجى التحقق من عمل الخادم وصحة المفتاح.'
+            ? 'تعذر الاتصال بالخادم (${resolveEndpoint(config)}): يرجى التحقق من عمل الخادم وصحة المفتاح.'
             : 'تعذر الوصول للمزود: $e',
       );
     } finally {
@@ -966,7 +986,7 @@ class WhatsAppGatewayService {
       final errorStr = e.toString();
       if (errorStr.contains('Failed to fetch') || errorStr.contains('XMLHttpRequest') || errorStr.contains('ClientException')) {
         return WhatsAppGatewayResult.failure(
-          error: 'تعذر الاتصال بخادم الواتساب (${config.customEndpointUrl.isNotEmpty ? config.customEndpointUrl : config.instanceId}): يرجى التحقق من اتصال السيرفر وصحة الإعدادات.',
+          error: 'تعذر الاتصال بخادم الواتساب (${resolveEndpoint(config)}): يرجى التحقق من اتصال السيرفر وصحة الإعدادات.',
         );
       }
       return WhatsAppGatewayResult.failure(error: 'فشل الاتصال: $e');
