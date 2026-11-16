@@ -198,6 +198,7 @@ class WahaCallOutcome {
   final String? sessionStatus;
   final String? error;
   final bool isNetworkError;
+  final bool isAuthError;
   final Uint8List? bytes;
   final Map<String, dynamic>? details;
 
@@ -207,6 +208,7 @@ class WahaCallOutcome {
     this.sessionStatus,
     this.error,
     this.isNetworkError = false,
+    this.isAuthError = false,
     this.bytes,
     this.details,
   });
@@ -319,13 +321,34 @@ class WhatsAppGatewayService {
   /// Resolves the effective API endpoint for WAHA / Gateway requests.
   /// Prefers the HTTPS Cloud proxy so the browser/app never talks to the raw HTTP WAHA host
   /// and never needs a baked-in API token.
+  /// Our own Firebase Hosting origins: every one of them rewrites /waha/** to wahaProxy.
+  static const Set<String> kOwnProxyHosts = {
+    'tashil-gift.web.app',
+    'tashil-gift.firebaseapp.com',
+    'gift.sw-point.com',
+    'www.gift.sw-point.com',
+  };
+
+  /// Web: prefer the page's own origin (`<origin>/waha`) whenever the configured
+  /// endpoint is empty, plain HTTP, or another of our own hosting domains. A
+  /// same-origin call needs no CORS preflight and is not a "third-party" request,
+  /// so privacy/ad-block extensions and cross-site rules cannot drop it.
+  static String? resolveWebSameOriginEndpoint(String raw, Uri base) {
+    if (base.scheme != 'https') return null;
+    if (raw.isEmpty || raw.startsWith('http://')) return '${base.origin}/waha';
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && kOwnProxyHosts.contains(parsed.host.toLowerCase()) &&
+        kOwnProxyHosts.contains(base.host.toLowerCase())) {
+      return '${base.origin}/waha';
+    }
+    return null;
+  }
+
   static String resolveEndpoint(WhatsAppGatewayConfigModel config) {
     final raw = config.customEndpointUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (kIsWeb) {
-      final isHttps = Uri.base.scheme == 'https';
-      if (isHttps && (raw.startsWith('http://') || raw.isEmpty)) {
-        return '${Uri.base.origin}/waha';
-      }
+      final sameOrigin = resolveWebSameOriginEndpoint(raw, Uri.base);
+      if (sameOrigin != null) return sameOrigin;
     }
     if (raw.isEmpty || raw.startsWith('http://')) {
       return kDefaultWahaProxyBase;
@@ -1440,8 +1463,11 @@ class WhatsAppGatewayService {
 
   /// Arabic explanation of a failed proxy/WAHA HTTP call.
   static String describeWahaFailureAr(WahaCallOutcome o) {
+    if (o.isAuthError) {
+      return 'تعذر تجهيز بيانات تسجيل الدخول للطلب. حدّث الصفحة وسجّل الدخول مرة أخرى. (التفاصيل: ${_shortDetail(o.error)})';
+    }
     if (o.isNetworkError) {
-      return 'تعذر الوصول إلى خادم الواتساب من المتصفح (انقطاع إنترنت أو انتهاء المهلة). تأكد من الاتصال ثم أعد المحاولة.';
+      return 'تعذر الوصول إلى خادم الواتساب من المتصفح (انقطاع إنترنت أو انتهاء المهلة أو إضافة في المتصفح تحجب الطلب). جرّب نافذة التصفح المتخفي أو أوقف إضافات حجب الإعلانات لهذا الموقع. (التفاصيل: ${_shortDetail(o.error)})';
     }
     switch (o.statusCode) {
       case 401:
@@ -1463,6 +1489,22 @@ class WhatsAppGatewayService {
     return o.error ?? 'خطأ غير معروف.';
   }
 
+  static String _shortDetail(String? e) {
+    final t = (e ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return t.length > 160 ? '${t.substring(0, 160)}…' : t;
+  }
+
+  /// Builds proxy headers, turning a token failure into an explicit auth outcome
+  /// instead of letting it look like a network error.
+  Future<({Map<String, String>? headers, WahaCallOutcome? failure})> _wahaHeadersOrFailure() async {
+    try {
+      return (headers: await buildWahaProxyHeaders(), failure: null);
+    } catch (e) {
+      debugPrint('WAHA proxy auth headers failed: $e');
+      return (headers: null, failure: WahaCallOutcome(ok: false, error: e.toString(), isAuthError: true));
+    }
+  }
+
   /// GET /api/sessions/{session} with the real status and failure reason.
   Future<WahaCallOutcome> fetchSessionStatusDetailed(WhatsAppGatewayConfigModel config, {http.Client? client}) async {
     if (config.provider != WhatsAppGatewayProvider.waha) {
@@ -1472,7 +1514,9 @@ class WhatsAppGatewayService {
     try {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
-      final headers = await buildWahaProxyHeaders();
+      final auth = await _wahaHeadersOrFailure();
+      if (auth.failure != null) return auth.failure!;
+      final headers = auth.headers!;
       final response = await httpClient
           .get(Uri.parse('$endpoint/api/sessions/$session'), headers: headers)
           .timeout(const Duration(seconds: 10));
@@ -1485,6 +1529,7 @@ class WhatsAppGatewayService {
         error: response.statusCode == 200 ? null : response.body,
       );
     } catch (e) {
+      debugPrint('WAHA proxy call failed: $e');
       return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
     } finally {
       if (client == null) httpClient.close();
@@ -1500,7 +1545,9 @@ class WhatsAppGatewayService {
     try {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
-      final headers = await buildWahaProxyHeaders();
+      final auth = await _wahaHeadersOrFailure();
+      if (auth.failure != null) return auth.failure!;
+      final headers = auth.headers!;
       final response = await httpClient
           .get(Uri.parse('$endpoint/api/$session/auth/qr'), headers: headers)
           .timeout(const Duration(seconds: 12));
@@ -1514,6 +1561,7 @@ class WhatsAppGatewayService {
         error: response.body,
       );
     } catch (e) {
+      debugPrint('WAHA proxy call failed: $e');
       return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
     } finally {
       if (client == null) httpClient.close();
@@ -1534,7 +1582,9 @@ class WhatsAppGatewayService {
     try {
       final endpoint = resolveEndpoint(config);
       final session = config.instanceId.trim().isEmpty ? 'default' : config.instanceId.trim();
-      final headers = await buildWahaProxyHeaders();
+      final auth = await _wahaHeadersOrFailure();
+      if (auth.failure != null) return auth.failure!;
+      final headers = auth.headers!;
       final response = await httpClient
           .post(Uri.parse('$endpoint/api/sessions/$session/$action'), headers: headers)
           .timeout(const Duration(seconds: 30));
@@ -1546,6 +1596,7 @@ class WhatsAppGatewayService {
         error: ok ? null : response.body,
       );
     } catch (e) {
+      debugPrint('WAHA proxy call failed: $e');
       return WahaCallOutcome(ok: false, error: e.toString(), isNetworkError: _looksLikeNetworkError(e));
     } finally {
       if (client == null) httpClient.close();
