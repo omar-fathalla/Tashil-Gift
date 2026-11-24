@@ -17,6 +17,7 @@ import '../../admin/domain/event_model.dart';
 import '../../admin/domain/campaign_stock_integrity.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../domain/campaign_stock_settlement_model.dart';
+import '../domain/branch_claim_tally.dart';
 
 /// Branch Stock Balances Screen (شاشة تغذية وإدارة أرصدة الفروع)
 /// Central hub where Company Manager sets, bulk distributes, increases, and syncs
@@ -1136,7 +1137,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     }
 
     // Build quick transaction disbursed map: branchName -> (giftKey / normGiftName / normGiftId -> int count)
-    final Map<String, Map<String, int>> txBranchDisbursedMap = {};
+    final Map<String, BranchClaimTally> txBranchDisbursedMap = {};
     for (final doc in txDocs) {
       final data = doc.data() as Map<String, dynamic>;
 
@@ -1185,7 +1186,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       }
       if (matchedBranch == null) continue;
 
-      final branchGiftsMap = txBranchDisbursedMap.putIfAbsent(matchedBranch, () => {});
+      final branchTally = txBranchDisbursedMap.putIfAbsent(matchedBranch, () => BranchClaimTally());
 
       // 1. claimed_gifts
       final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
@@ -1197,12 +1198,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             final gId = (cgMap['giftId'] ?? cgMap['gift_id'] ?? '').toString().trim().toLowerCase();
             final qty = ((cgMap['quantity'] ?? cgMap['count'] ?? 1) as num).toInt();
 
-            if (gId.isNotEmpty) {
-              branchGiftsMap[gId] = (branchGiftsMap[gId] ?? 0) + qty;
-            }
-            if (gName.isNotEmpty) {
-              branchGiftsMap[gName] = (branchGiftsMap[gName] ?? 0) + qty;
-            }
+            branchTally.addEntry(giftId: gId, giftName: gName, qty: qty);
           }
         }
       } else {
@@ -1216,12 +1212,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               final gId = (lgMap['giftId'] ?? lgMap['gift_id'] ?? '').toString().trim().toLowerCase();
               final qty = ((lgMap['quantity'] ?? 1) as num).toInt();
 
-              if (gId.isNotEmpty) {
-                branchGiftsMap[gId] = (branchGiftsMap[gId] ?? 0) + qty;
-              }
-              if (gName.isNotEmpty) {
-                branchGiftsMap[gName] = (branchGiftsMap[gName] ?? 0) + qty;
-              }
+              branchTally.addEntry(giftId: gId, giftName: gName, qty: qty);
             }
           }
         }
@@ -1231,24 +1222,27 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         for (final p in prizesWon) {
           final pName = p.toString().trim().toLowerCase();
           if (pName.isNotEmpty) {
-            branchGiftsMap[pName] = (branchGiftsMap[pName] ?? 0) + 1;
+            branchTally.addLegacyKey(pName, 1);
           }
         }
 
         // 4. prize_won (String)
         final prizeWon = (data['prize_won'] ?? data['prizeName'] ?? '').toString().trim().toLowerCase();
         if (prizeWon.isNotEmpty && prizeWon != 'null' && prizeWon != 'لم يفز') {
-          branchGiftsMap[prizeWon] = (branchGiftsMap[prizeWon] ?? 0) + 1;
+          branchTally.addLegacyKey(prizeWon, 1);
         }
 
         // 5. voucher_value
         final vVal = (data['voucher_value'] ?? data['voucherValue'] as num?)?.toDouble() ?? 0.0;
         if (vVal > 0) {
           final vKey = 'voucher_${vVal.toInt()}';
-          branchGiftsMap[vKey] = (branchGiftsMap[vKey] ?? 0) + 1;
+          branchTally.addLegacyKey(vKey, 1);
         }
       }
     }
+
+    final knownGiftIds = {for (final g in effectiveGifts) if (g.id.trim().isNotEmpty) g.id};
+    final knownGiftNames = {for (final g in effectiveGifts) if (g.giftName.trim().isNotEmpty) g.giftName};
 
     // 2. Pre-populate controllers & compute overall live metrics
     int totalAllocatedStock = 0;
@@ -1278,26 +1272,17 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             }
           }
 
-          final branchGifts = txBranchDisbursedMap[branchName] ?? {};
-          int txClaimed = 0;
-          if (normGiftId.isNotEmpty && branchGifts.containsKey(normGiftId)) {
-            txClaimed += branchGifts[normGiftId]!;
-          } else if (normGiftName.isNotEmpty && branchGifts.containsKey(normGiftName)) {
-            txClaimed += branchGifts[normGiftName]!;
-          } else {
-            // Partial matching for gift name or voucher denomination
-            for (final entry in branchGifts.entries) {
-              final k = entry.key;
-              if (k == normGiftName || k.contains(normGiftName) || normGiftName.contains(k)) {
-                txClaimed += entry.value;
-              } else if (gift.isVoucher) {
-                final denom = gift.unitValue.toInt();
-                if (k.contains('$denom') || k == 'voucher_$denom') {
-                  txClaimed += entry.value;
-                }
-              }
-            }
-          }
+          // Each claimed gift counts once: by giftId, or by name for entries
+          // saved without one (older app versions).
+          final txClaimed = txBranchDisbursedMap[branchName]?.claimedFor(
+                giftId: gift.id,
+                giftName: gift.giftName,
+                isVoucher: gift.isVoucher,
+                unitValue: gift.unitValue,
+                knownGiftIds: knownGiftIds,
+                knownGiftNames: knownGiftNames,
+              ) ??
+              0;
 
           _claimedCache[cellKey] = txClaimed;
           _storedRemainingCache[cellKey] = CampaignStockIntegrity.storedRemaining(
