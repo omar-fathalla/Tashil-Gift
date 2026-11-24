@@ -1,0 +1,91 @@
+# dev: checks on every PR into dev and every push to dev, then a Firebase
+# Hosting PREVIEW channel. Only Hosting files go to the channel; it uses the
+# PRODUCTION Firestore, Auth, Storage and Cloud Functions of tashil-gift.
+#   push to dev        -> channel "dev"     (always the exact dev SHA, for User Test)
+#   pull request to dev -> channel "pr-<N>" (that PR's head)
+name: dev-preview
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  preview:
+    needs: checks
+    # Secrets are not available to PRs from forks; skip instead of failing.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CHANNEL: ${{ github.event_name == 'push' && 'dev' || format('pr-{0}', github.event.pull_request.number) }}
+      FIREBASE_TOOLS_VERSION: 15.37.0
+    steps:
+      - name: Checkout (firebase.json)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+          persist-credentials: false
+
+      - name: Download web build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-build-${{ needs.checks.outputs.sha }}
+          path: build/web
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Write deploy credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT }}
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy Hosting preview channel (expires in 7 days)
+        id: deploy
+        run: |
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" hosting:channel:deploy "$CHANNEL" \
+            --project tashil-gift --expires 7d --non-interactive --json > "$RUNNER_TEMP/channel.json"
+          cat "$RUNNER_TEMP/channel.json"
+          url=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); r=d['result']; print(next(iter(r.values()))['url'])" "$RUNNER_TEMP/channel.json")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the preview serves this build
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: |
+          live=$(curl -fsS "$URL/version.json?t=$GITHUB_RUN_ID")
+          echo "$live"
+          got=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(f\"{d['version']}+{d['build_number']}\")" "$live")
+          [ "$got" = "$VERSION" ] || { echo "::error::preview serves $got, expected $VERSION"; exit 1; }
+          {
+            echo "### Hosting preview \`$CHANNEL\`"
+            echo "- URL: $URL"
+            echo "- Commit: \`${{ needs.checks.outputs.sha }}\`"
+            echo "- App version: $VERSION"
+            echo "- Expires: 7 days after this deploy"
+            echo "- Uses the **production** Firestore, Auth, Storage and Cloud Functions."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove deploy credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json" "$RUNNER_TEMP/channel.json"

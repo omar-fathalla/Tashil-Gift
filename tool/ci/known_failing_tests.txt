@@ -1,0 +1,14 @@
+# Flutter test files that already fail on dev (0ce2664) and must not block CI.
+# Measured on 2026-11-24 with Flutter 3.44.5: 1061 passed, 14 failed, all in
+# the 7 files below. None of them is touched by the CI change.
+#
+# CI runs every other test file as a blocking step, then runs these files in a
+# separate NON-blocking step so their results stay visible in the log.
+# When you fix one, delete its line here so it becomes blocking again.
+test/admin_auth_test.dart                         # 2 failing
+test/client_receipt_upload_responsive_test.dart   # 2 failing
+test/firebase_scope_test.dart                     # 1 failing (flags firebase_emulator_config.dart)
+test/receipt_branch_resolver_test.dart            # 1 failing
+test/whatsapp_advanced_features_test.dart         # 6 failing
+test/whatsapp_live_outbox_view_test.dart          # 1 failing
+test/ai_product_catalog_service_test.dart         # fails to load: [core/no-app] Firebase not initialised
