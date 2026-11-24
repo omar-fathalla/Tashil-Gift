@@ -1,0 +1,118 @@
+# Reusable checks: analyze, Flutter tests, functions tests, web build, version
+# check. Uploads the built web app as an artifact so the deploy job ships
+# exactly what was tested.
+name: checks
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref (SHA, tag or branch) to check and build.
+        type: string
+        required: true
+      run_tests:
+        description: Run Flutter and functions tests (analyze and build always run).
+        type: boolean
+        default: true
+    outputs:
+      sha:
+        description: Full commit SHA that was checked and built.
+        value: ${{ jobs.checks.outputs.sha }}
+      version:
+        description: App version X.Y.Z+N of the build.
+        value: ${{ jobs.checks.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout ${{ inputs.ref }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # CI scripts come from the commit that holds this workflow, so an older
+      # ref (rollback) that predates tool/ci/ can still be checked and built.
+      - name: Checkout CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: _ci
+          persist-credentials: false
+          sparse-checkout: |
+            tool/ci
+            .fvmrc
+
+      - name: Resolve SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter version from .fvmrc
+        id: flutter
+        run: |
+          f=.fvmrc; [ -f "$f" ] || f=_ci/.fvmrc
+          v=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['flutter'])" "$f")
+          echo "Flutter $v (from $f)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.flutter.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Version check (pubspec, app_version_config, web/version.json)
+        run: python3 _ci/tool/ci/check_version.py
+
+      - name: flutter analyze (infos never fail; errors and new warnings do)
+        run: bash _ci/tool/ci/analyze.sh _ci/tool/ci/analyze_baseline.txt
+
+      - name: flutter test (blocking, all files except the known-failing list)
+        if: inputs.run_tests
+        run: bash _ci/tool/ci/flutter_test.sh blocking _ci/tool/ci/known_failing_tests.txt
+
+      - name: flutter test (known-failing files, not blocking)
+        if: inputs.run_tests
+        run: bash _ci/tool/ci/flutter_test.sh known _ci/tool/ci/known_failing_tests.txt
+
+      - name: Set up Node 22
+        if: inputs.run_tests
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: functions npm ci + npm test
+        if: inputs.run_tests
+        working-directory: functions
+        run: |
+          npm ci
+          npm test
+
+      - name: flutter build web --release
+        run: flutter build web --release
+
+      - name: Version check on the build
+        id: version
+        run: python3 _ci/tool/ci/check_version.py --built build/web | tee /dev/stderr | grep '^version=' >> "$GITHUB_OUTPUT"
+
+      - name: Upload web build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-build-${{ steps.sha.outputs.sha }}
+          path: build/web
+          if-no-files-found: error
+          retention-days: 7
