@@ -145,4 +145,48 @@ void main() {
       isNull,
     );
   });
+
+  group('row matching runs in passes (new branch row listed first)', () {
+    test('matchRows: an existing branch keeps its own stored row', () {
+      expect(
+        CampaignEditSave.matchRows([_row(100, 40)], [_row(200, 200, branch: 'b0'), _row(100, 50)]),
+        [-1, 0],
+      );
+    });
+
+    test('[b0 200, b1 100] with stored b1 100/40: b1 stays 100/40, b0 new 200/200', () {
+      final out = CampaignEditSave.mergeAllocationsForEdit(
+        opened: [_row(100, 50)],
+        draft: [_row(200, 0, branch: 'b0'), _row(100, 50)],
+        currentRaw: [_row(100, 40).toMap()],
+      )!;
+      expect(out.length, 2);
+      expect(out[0]['branchId'], 'b0');
+      expect(out[0]['allocatedQuantity'], 200);
+      expect(out[0]['remainingQuantity'], 200);
+      expect(out[1]['branchId'], 'b1');
+      expect(out[1]['allocatedQuantity'], 100);
+      expect(out[1]['remainingQuantity'], 40, reason: 'the 60 handed out at b1 are kept');
+    });
+
+    test('[b0 30, b1, b2] saves without a rejection and keeps b1/b2 as stored', () {
+      final out = CampaignEditSave.mergeAllocationsForEdit(
+        opened: [_row(100, 50), _row(20, 20, branch: 'b2')],
+        draft: [_row(30, 0, branch: 'b0'), _row(100, 50), _row(20, 20, branch: 'b2')],
+        currentRaw: [_row(100, 40).toMap(), _row(20, 18, branch: 'b2').toMap()],
+      )!;
+      expect(out.map((r) => r['branchId']), ['b0', 'b1', 'b2']);
+      expect(out.map((r) => r['remainingQuantity']), [30, 40, 18]);
+    });
+
+    test('a general row still falls back to the stored row of its gift', () {
+      final out = CampaignEditSave.mergeAllocationsForEdit(
+        opened: [_row(100, 50)],
+        draft: [_row(120, 0, branch: '')],
+        currentRaw: [_row(100, 40).toMap()],
+      )!;
+      expect(out.length, 1);
+      expect(out[0]['remainingQuantity'], 60); // 40 + 20, consumed 60 kept
+    });
+  });
 }

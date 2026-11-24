@@ -41,26 +41,50 @@ class CampaignEditSave {
     return c < 0 ? 0 : c;
   }
 
-  /// Index in [list] of the row the editor treats as [draft]'s original.
-  /// Exact row identity first, then the page's resolveAllocatedPrize rule
-  /// (gift id/name + branch), then its gift-only fallback. Each stored row
-  /// is used once, so two draft rows never share one stored row.
-  static int matchRow(List<AllocatedPrize> list, AllocatedPrize draft, Set<int> used) {
-    final key = draft.giftId;
-    final dKey = _rowKey(draft);
-    for (var i = 0; i < list.length; i++) {
-      if (!used.contains(i) && _rowKey(list[i]) == dKey) return i;
+  static bool _sameGift(AllocatedPrize stored, AllocatedPrize draft) =>
+      stored.giftId == draft.giftId || stored.name == draft.giftId;
+
+  static bool _isGeneral(AllocatedPrize p) => p.branchId.isEmpty && p.branchName.trim().isEmpty;
+
+  static bool _sameBranch(AllocatedPrize stored, AllocatedPrize draft) =>
+      stored.branchId == draft.branchId ||
+      (draft.branchName.trim().isNotEmpty && stored.branchName.trim() == draft.branchName.trim());
+
+  /// For each row of [drafts], the index in [list] of the stored row the editor
+  /// treats as its original, or -1 for a new row. Each stored row is matched at
+  /// most once. Matching runs in passes over ALL draft rows, so a new branch
+  /// row listed first can never take an existing branch's row:
+  ///  1. exact identity (gift id/name + branch id/name);
+  ///  2. the page's resolveAllocatedPrize rule (same gift, same branch, or the
+  ///     draft row is general);
+  ///  3. gift-only fallback, only for general rows or rows whose gift has no
+  ///     stored row at their own branch.
+  static List<int> matchRows(List<AllocatedPrize> list, List<AllocatedPrize> drafts) {
+    final result = List<int>.filled(drafts.length, -1);
+    final used = <int>{};
+
+    void pass(bool Function(AllocatedPrize stored, AllocatedPrize draft) accepts,
+        {bool Function(AllocatedPrize draft)? eligible}) {
+      for (var j = 0; j < drafts.length; j++) {
+        if (result[j] >= 0) continue;
+        final d = drafts[j];
+        if (eligible != null && !eligible(d)) continue;
+        for (var i = 0; i < list.length; i++) {
+          if (used.contains(i) || !accepts(list[i], d)) continue;
+          result[j] = i;
+          used.add(i);
+          break;
+        }
+      }
     }
-    bool sameGift(AllocatedPrize p) => p.giftId == key || p.name == key;
-    for (var i = 0; i < list.length; i++) {
-      final p = list[i];
-      if (used.contains(i) || !sameGift(p)) continue;
-      if (draft.branchId.isEmpty || p.branchId == draft.branchId || p.branchName == draft.branchName) return i;
-    }
-    for (var i = 0; i < list.length; i++) {
-      if (!used.contains(i) && sameGift(list[i])) return i;
-    }
-    return -1;
+
+    pass((p, d) => _rowKey(p) == _rowKey(d));
+    pass((p, d) => _sameGift(p, d) && (d.branchId.isEmpty || _sameBranch(p, d)));
+    pass(
+      _sameGift,
+      eligible: (d) => _isGeneral(d) || !list.any((p) => _sameGift(p, d) && _sameBranch(p, d)),
+    );
+    return result;
   }
 
   static String _label(AllocatedPrize p) {
@@ -82,14 +106,13 @@ class CampaignEditSave {
     final draftRows = _dedupe(draft);
 
     // 1. What did the admin change compared with the copy they opened?
-    final usedOpened = <int>{};
-    final openedOf = <int>[];
+    final openedOf = matchRows(opened, draftRows);
+    final usedOpened = {for (final o in openedOf) if (o >= 0) o};
     var changed = false;
-    for (final d in draftRows) {
-      final o = matchRow(opened, d, usedOpened);
-      openedOf.add(o);
+    for (var j = 0; j < draftRows.length; j++) {
+      final o = openedOf[j];
+      final d = draftRows[j];
       if (o >= 0) {
-        usedOpened.add(o);
         if (opened[o].allocatedQuantity != d.allocatedQuantity) changed = true;
       } else if (d.allocatedQuantity > 0) {
         changed = true;
@@ -104,17 +127,17 @@ class CampaignEditSave {
 
     // 2. Rebuild from the stored rows read in the transaction.
     final current = currentRaw.map(AllocatedPrize.fromMap).toList();
-    final usedCurrent = <int>{};
+    final currentOf = matchRows(current, draftRows);
+    final usedCurrent = {for (final c in currentOf) if (c >= 0) c};
     final out = <Map<String, dynamic>>[];
     final problems = <String>[];
     for (var j = 0; j < draftRows.length; j++) {
       final d = draftRows[j];
-      final c = matchRow(current, d, usedCurrent);
+      final c = currentOf[j];
       if (c < 0) {
         out.add(d.copyWith(remainingQuantity: d.allocatedQuantity).toMap());
         continue;
       }
-      usedCurrent.add(c);
       final cur = current[c];
       final o = openedOf[j];
       final untouched = o >= 0 && opened[o].allocatedQuantity == d.allocatedQuantity;
