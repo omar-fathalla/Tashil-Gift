@@ -14,8 +14,10 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/campaign_stock_integrity.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../domain/campaign_stock_settlement_model.dart';
+import '../domain/branch_claim_tally.dart';
 
 /// Branch Stock Balances Screen (شاشة تغذية وإدارة أرصدة الفروع)
 /// Central hub where Company Manager sets, bulk distributes, increases, and syncs
@@ -114,6 +116,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   // Controllers map: key = "${eventId}_${branchName}_${giftKey}"
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, int> _claimedCache = {};
+  /// Stored remainingQuantity per cell (what claims are checked against), null = no row.
+  final Map<String, int?> _storedRemainingCache = {};
 
   @override
   void initState() {
@@ -1041,7 +1045,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           (r.linkedGiftId != null && r.linkedGiftId == gift.id) ||
           r.linkedGifts.any((lg) =>
               (lg.giftId.isNotEmpty && lg.giftId == gift.id) ||
-              lg.giftName.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))) {
+              lg.giftName.trim().toLowerCase() == gift.giftName.trim().toLowerCase()) ||
+          r.rewardOptions.any((o) => o.giftId.isNotEmpty && o.giftId == gift.id))) {
         return ev;
       }
     }
@@ -1109,6 +1114,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           if (lg.giftId.isNotEmpty) campaignGiftKeys.add(lg.giftId.toLowerCase().trim());
           if (lg.giftName.isNotEmpty) campaignGiftKeys.add(lg.giftName.toLowerCase().trim());
         }
+        // Tier reward options are what the claim actually draws from.
+        for (final o in r.rewardOptions) {
+          if (o.giftId.isNotEmpty) campaignGiftKeys.add(o.giftId.toLowerCase().trim());
+          if (o.giftName.isNotEmpty) campaignGiftKeys.add(o.giftName.toLowerCase().trim());
+        }
       }
 
       if (campaignGiftKeys.isNotEmpty) {
@@ -1127,7 +1137,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
     }
 
     // Build quick transaction disbursed map: branchName -> (giftKey / normGiftName / normGiftId -> int count)
-    final Map<String, Map<String, int>> txBranchDisbursedMap = {};
+    final Map<String, BranchClaimTally> txBranchDisbursedMap = {};
     for (final doc in txDocs) {
       final data = doc.data() as Map<String, dynamic>;
 
@@ -1176,7 +1186,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
       }
       if (matchedBranch == null) continue;
 
-      final branchGiftsMap = txBranchDisbursedMap.putIfAbsent(matchedBranch, () => {});
+      final branchTally = txBranchDisbursedMap.putIfAbsent(matchedBranch, () => BranchClaimTally());
 
       // 1. claimed_gifts
       final claimedGifts = (data['claimed_gifts'] as List?) ?? [];
@@ -1188,12 +1198,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             final gId = (cgMap['giftId'] ?? cgMap['gift_id'] ?? '').toString().trim().toLowerCase();
             final qty = ((cgMap['quantity'] ?? cgMap['count'] ?? 1) as num).toInt();
 
-            if (gId.isNotEmpty) {
-              branchGiftsMap[gId] = (branchGiftsMap[gId] ?? 0) + qty;
-            }
-            if (gName.isNotEmpty) {
-              branchGiftsMap[gName] = (branchGiftsMap[gName] ?? 0) + qty;
-            }
+            branchTally.addEntry(giftId: gId, giftName: gName, qty: qty);
           }
         }
       } else {
@@ -1207,12 +1212,7 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
               final gId = (lgMap['giftId'] ?? lgMap['gift_id'] ?? '').toString().trim().toLowerCase();
               final qty = ((lgMap['quantity'] ?? 1) as num).toInt();
 
-              if (gId.isNotEmpty) {
-                branchGiftsMap[gId] = (branchGiftsMap[gId] ?? 0) + qty;
-              }
-              if (gName.isNotEmpty) {
-                branchGiftsMap[gName] = (branchGiftsMap[gName] ?? 0) + qty;
-              }
+              branchTally.addEntry(giftId: gId, giftName: gName, qty: qty);
             }
           }
         }
@@ -1222,24 +1222,27 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         for (final p in prizesWon) {
           final pName = p.toString().trim().toLowerCase();
           if (pName.isNotEmpty) {
-            branchGiftsMap[pName] = (branchGiftsMap[pName] ?? 0) + 1;
+            branchTally.addLegacyKey(pName, 1);
           }
         }
 
         // 4. prize_won (String)
         final prizeWon = (data['prize_won'] ?? data['prizeName'] ?? '').toString().trim().toLowerCase();
         if (prizeWon.isNotEmpty && prizeWon != 'null' && prizeWon != 'لم يفز') {
-          branchGiftsMap[prizeWon] = (branchGiftsMap[prizeWon] ?? 0) + 1;
+          branchTally.addLegacyKey(prizeWon, 1);
         }
 
         // 5. voucher_value
         final vVal = (data['voucher_value'] ?? data['voucherValue'] as num?)?.toDouble() ?? 0.0;
         if (vVal > 0) {
           final vKey = 'voucher_${vVal.toInt()}';
-          branchGiftsMap[vKey] = (branchGiftsMap[vKey] ?? 0) + 1;
+          branchTally.addLegacyKey(vKey, 1);
         }
       }
     }
+
+    final knownGiftIds = {for (final g in effectiveGifts) if (g.id.trim().isNotEmpty) g.id};
+    final knownGiftNames = {for (final g in effectiveGifts) if (g.giftName.trim().isNotEmpty) g.giftName};
 
     // 2. Pre-populate controllers & compute overall live metrics
     int totalAllocatedStock = 0;
@@ -1269,28 +1272,30 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             }
           }
 
-          final branchGifts = txBranchDisbursedMap[branchName] ?? {};
-          int txClaimed = 0;
-          if (normGiftId.isNotEmpty && branchGifts.containsKey(normGiftId)) {
-            txClaimed += branchGifts[normGiftId]!;
-          } else if (normGiftName.isNotEmpty && branchGifts.containsKey(normGiftName)) {
-            txClaimed += branchGifts[normGiftName]!;
-          } else {
-            // Partial matching for gift name or voucher denomination
-            for (final entry in branchGifts.entries) {
-              final k = entry.key;
-              if (k == normGiftName || k.contains(normGiftName) || normGiftName.contains(k)) {
-                txClaimed += entry.value;
-              } else if (gift.isVoucher) {
-                final denom = gift.unitValue.toInt();
-                if (k.contains('$denom') || k == 'voucher_$denom') {
-                  txClaimed += entry.value;
-                }
-              }
-            }
-          }
+          // Each claimed gift counts once: by giftId, or by name for entries
+          // saved without one (older app versions).
+          final txClaimed = txBranchDisbursedMap[branchName]?.claimedFor(
+                giftId: gift.id,
+                giftName: gift.giftName,
+                isVoucher: gift.isVoucher,
+                unitValue: gift.unitValue,
+                knownGiftIds: knownGiftIds,
+                knownGiftNames: knownGiftNames,
+              ) ??
+              0;
 
           _claimedCache[cellKey] = txClaimed;
+          _storedRemainingCache[cellKey] = CampaignStockIntegrity.storedRemaining(
+            prizes: event.allocatedPrizes,
+            giftId: gift.id,
+            giftName: gift.giftName,
+            branchMatches: (p) {
+              final pBranch = p.branchName.trim().toLowerCase();
+              return _matchesBranchName(p.branchName, branchName) ||
+                  pBranch == branchName.toLowerCase() ||
+                  (branchName == (isAr ? 'كافة الفروع / عام' : 'All Branches') && pBranch.isEmpty);
+            },
+          );
 
           final initialAlloc = matchedPrize?.allocatedQuantity ?? 0;
           final controller = _getOrCreateController(cellKey, initialAlloc);
@@ -2997,6 +3002,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             0;
         final currentAlloc = controller.text.trim().toIntOrNull() ?? 0;
         final remaining = (currentAlloc - claimed).clamp(0, currentAlloc);
+        // Claims check the stored remainingQuantity, not this computed number.
+        final storedRem = _storedRemainingCache.containsKey(cellKey)
+            ? _storedRemainingCache[cellKey]
+            : _storedRemainingCache['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'];
+        final stockMismatch = _selectedSettlement == null &&
+            CampaignStockIntegrity.remainingMismatch(computed: remaining, stored: storedRem);
 
         branchAllocatedSum += currentAlloc;
         branchClaimedSum += claimed;
@@ -3102,6 +3113,44 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     ],
                   ),
                 ),
+                if (storedRem != null) ...[
+                  const SizedBox(height: 4),
+                  Tooltip(
+                    message: stockMismatch
+                        ? (isAr
+                            ? 'الرصيد المحفوظ الذي يُفحص عند الصرف ($storedRem) لا يساوي الباقي المحسوب من الفواتير ($remaining).'
+                            : 'Stored remaining used by claims ($storedRem) differs from the computed remaining ($remaining).')
+                        : (isAr ? 'الرصيد المحفوظ الذي يُفحص عند الصرف' : 'Stored remaining used by claims'),
+                    child: Container(
+                      key: ValueKey('stored_remaining_$cellKey'),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: stockMismatch ? colorScheme.errorContainer : colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: stockMismatch ? colorScheme.error : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (stockMismatch) ...[
+                            Icon(Icons.warning_amber_rounded, size: 12, color: colorScheme.onErrorContainer),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            '${isAr ? 'محفوظ:' : 'stored:'} $storedRem',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10,
+                              color: stockMismatch ? colorScheme.onErrorContainer : colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
