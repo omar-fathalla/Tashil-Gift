@@ -47,9 +47,12 @@ jobs:
           ref: ${{ github.sha }}
           path: _ci
           persist-credentials: false
+          # Non-cone mode: only these paths, not the root files (a second
+          # pubspec.yaml under _ci/ would be picked up by flutter analyze).
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            tool/ci
-            .fvmrc
+            /tool/ci/
+            /.fvmrc
 
       - name: Resolve SHA
         id: sha
