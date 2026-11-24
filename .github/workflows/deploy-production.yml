@@ -1,0 +1,144 @@
+# production: push to main (merged release PR) or a manual rollback.
+# Runs the same checks, then deploys hosting + functions + Firestore rules to
+# tashil-gift. Never Firestore indexes, never --force. The "production"
+# environment lets the owner require his own approval before the deploy job.
+#
+# Rollback: Actions -> deploy-production -> Run workflow, ref = a previous SHA
+# or tag (e.g. 8a57c48), allow_older_version = true.
+name: deploy-production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or tag to deploy (rollback), e.g. 8a57c48
+        type: string
+        required: true
+      allow_older_version:
+        description: Allow a version that is not newer than the live one (rollback)
+        type: boolean
+        default: false
+      run_tests:
+        description: Run Flutter and functions tests (analyze and build always run)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+      run_tests: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: https://tashil-gift.web.app
+    env:
+      FIREBASE_TOOLS_VERSION: 15.37.0
+      ALLOW_OLDER: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_older_version }}
+    steps:
+      - name: Checkout ${{ needs.checks.outputs.sha }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+          persist-credentials: false
+
+      - name: Checkout CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: _ci
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tool/ci/
+
+      - name: Download web build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-build-${{ needs.checks.outputs.sha }}
+          path: build/web
+
+      - name: Version must be newer than the live site (unless rollback)
+        run: |
+          if [ "$ALLOW_OLDER" = "true" ]; then
+            echo "::warning::Rollback: deploying ${{ needs.checks.outputs.version }} without the newer-than-live check."
+            python3 _ci/tool/ci/check_version.py --built build/web
+          else
+            python3 _ci/tool/ci/check_version.py --built build/web --newer-than https://tashil-gift.web.app/version.json
+          fi
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: functions npm ci (needed to read the function definitions)
+        working-directory: functions
+        run: npm ci
+
+      - name: Write deploy credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT }}
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+
+      - name: Record the release being replaced (rollback info)
+        run: |
+          {
+            echo "### Before deploy"
+            echo "- Live version.json: \`$(curl -fsS "https://tashil-gift.web.app/version.json?t=$GITHUB_RUN_ID" | tr -d '\n')\`"
+            echo "- Previous Hosting release: Firebase console -> Hosting -> Release history (it can be rolled back from there too)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Non-interactive: firebase-tools stops instead of deleting functions
+      # that are no longer in the source. No --force, no indexes.
+      - name: firebase deploy (hosting, functions, firestore:rules)
+        run: |
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --project tashil-gift \
+            --only hosting,functions,firestore:rules \
+            --non-interactive \
+            --message "GitHub Actions ${{ needs.checks.outputs.version }} ${{ needs.checks.outputs.sha }} run ${{ github.run_id }}"
+
+      - name: Verify the live version
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            live=$(curl -fsS "https://tashil-gift.web.app/version.json?t=$GITHUB_RUN_ID-$i" || true)
+            got=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(f\"{d['version']}+{d['build_number']}\")" "$live" 2>/dev/null || true)
+            [ "$got" = "$VERSION" ] && break
+            sleep 10
+          done
+          echo "live=$got expected=$VERSION"
+          [ "$got" = "$VERSION" ] || { echo "::error::live version.json is $got, expected $VERSION"; exit 1; }
+          {
+            echo "### Deployed to production"
+            echo "- Version: $VERSION"
+            echo "- Commit: \`${{ needs.checks.outputs.sha }}\`"
+            echo "- Live: https://tashil-gift.web.app"
+            echo "- Firebase console: https://console.firebase.google.com/project/tashil-gift/overview"
+            echo "- Rollback: run this workflow manually with the previous main SHA and allow_older_version = true."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove deploy credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json"
