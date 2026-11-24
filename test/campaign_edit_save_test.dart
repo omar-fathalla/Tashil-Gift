@@ -189,4 +189,43 @@ void main() {
       expect(out[0]['remainingQuantity'], 60); // 40 + 20, consumed 60 kept
     });
   });
+
+  group('save() result path: rejection is recorded, then thrown after the transaction', () {
+    test('below-consumed edit: plan returns no patch and does not throw', () {
+      final attempt = CampaignEditAttempt(
+        draft: _campaign(prizes: [_row(55, 5)]),
+        opened: opened,
+        updatedBy: 'admin1',
+      );
+      final patch = attempt.plan(_stored()); // stored 100/40, consumed 60
+      expect(patch, isNull, reason: 'nothing is written');
+      expect(attempt.rejection, contains('أقل من المصروف فعلاً 60'));
+      expect(
+        attempt.throwIfRejected,
+        throwsA(isA<CampaignEditRejected>().having((e) => e.message, 'message', contains('لم يتغير أي شيء في الحملة'))),
+      );
+    });
+
+    test('missing campaign is a rejection, not an exception in the handler', () {
+      final attempt = CampaignEditAttempt(draft: _campaign(), opened: opened, updatedBy: 'admin1');
+      expect(attempt.plan(null), isNull);
+      expect(attempt.rejection, contains('الحملة غير موجودة'));
+      expect(attempt.throwIfRejected, throwsA(isA<CampaignEditRejected>()));
+    });
+
+    test('a retried attempt that succeeds clears the earlier rejection', () {
+      final attempt = CampaignEditAttempt(
+        draft: _campaign(prizes: [_row(55, 5)]),
+        opened: opened,
+        updatedBy: 'admin1',
+      );
+      expect(attempt.plan(_stored()), isNull);
+      // Retry sees a stored row with only 50 handed out: 55 is now allowed.
+      final patch = attempt.plan(_stored(total: 100, remaining: 50));
+      expect(patch, isNotNull);
+      expect(_remaining(patch!), 5);
+      expect(attempt.rejection, isNull);
+      attempt.throwIfRejected(); // does not throw
+    });
+  });
 }

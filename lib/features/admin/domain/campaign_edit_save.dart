@@ -231,20 +231,72 @@ class CampaignEditSave {
 
   /// Runs the edit as one transaction on the stored campaign. No silent
   /// success: offline / timeout / rejection all throw to the caller.
+  ///
+  /// A rejection is never thrown inside the transaction handler: on web,
+  /// FlutterFire wraps a Dart error thrown there into a JS error, so the
+  /// caller would lose the [CampaignEditRejected] type and its Arabic message.
+  /// The handler records the outcome in a [CampaignEditAttempt] instead
+  /// (runTransaction also returns null on web, so the result cannot be the
+  /// handler's return value), and the rejection is thrown after the
+  /// transaction has finished.
   static Future<void> save({
     required FirebaseFirestore firestore,
     required EventModel draft,
     required EventModel opened,
     required String updatedBy,
-  }) {
+  }) async {
     final ref = firestore.collection('events').doc(opened.id);
-    return firestore.runTransaction<void>((tx) async {
+    final attempt = CampaignEditAttempt(draft: draft, opened: opened, updatedBy: updatedBy);
+    await firestore.runTransaction<void>((tx) async {
       final snap = await tx.get(ref);
-      final data = snap.data();
-      if (!snap.exists || data == null) {
-        throw const CampaignEditRejected('الحملة غير موجودة أو تم حذفها، ولم يتم حفظ التعديل.');
-      }
-      tx.update(ref, buildEditPatch(draft: draft, opened: opened, currentData: data, updatedBy: updatedBy));
+      final patch = attempt.plan(snap.exists ? snap.data() : null);
+      if (patch != null) tx.update(ref, patch);
     }, timeout: const Duration(seconds: 30));
+    attempt.throwIfRejected();
+  }
+}
+
+/// Outcome of one transaction attempt of [CampaignEditSave.save]: either the
+/// update() payload or the Arabic rejection message, never an exception
+/// thrown inside the transaction handler.
+class CampaignEditAttempt {
+  final EventModel draft;
+  final EventModel opened;
+  final String updatedBy;
+  String? _rejection;
+
+  CampaignEditAttempt({required this.draft, required this.opened, required this.updatedBy});
+
+  /// Rejection message of the latest attempt, or null if it can be written.
+  String? get rejection => _rejection;
+
+  /// Patch to write for the stored campaign [currentData] (null when the
+  /// document is missing), or null when the edit is rejected. Each call
+  /// replaces the previous outcome, so a retried transaction reports only
+  /// its last attempt.
+  Map<String, dynamic>? plan(Map<String, dynamic>? currentData) {
+    _rejection = null;
+    if (currentData == null) {
+      _rejection = 'الحملة غير موجودة أو تم حذفها، ولم يتم حفظ التعديل.';
+      return null;
+    }
+    try {
+      return CampaignEditSave.buildEditPatch(
+        draft: draft,
+        opened: opened,
+        currentData: currentData,
+        updatedBy: updatedBy,
+      );
+    } on CampaignEditRejected catch (e) {
+      _rejection = e.message;
+      return null;
+    }
+  }
+
+  /// Throws [CampaignEditRejected] outside the transaction if the latest
+  /// attempt was rejected.
+  void throwIfRejected() {
+    final message = _rejection;
+    if (message != null) throw CampaignEditRejected(message);
   }
 }
