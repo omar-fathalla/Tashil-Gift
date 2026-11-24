@@ -302,6 +302,9 @@ function planConsumingClaim(event, receipt, decrements) {
       isVoucher: gift.isVoucher,
       branchId: requests[i].decrement.branchId || "",
       gameType: requests[i].decrement.gameType || "chooseGift",
+      // The tier option's giftId is authoritative for the stock row too.
+      giftName: gift.giftName,
+      ladder: true,
     });
   }
   const claimed = existing.concat(added);

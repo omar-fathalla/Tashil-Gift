@@ -22,6 +22,7 @@ import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../../../core/services/partner_portal_auth_service.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
+import '../domain/campaign_stock_integrity.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
 import 'widgets/portal_credentials_dialog.dart';
@@ -4290,6 +4291,25 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         spendLadderMode: widget.eventToEdit?.spendLadderMode ?? 'exclusive',
         createdAt: widget.eventToEdit?.createdAt,
       );
+
+      // TG-2: a tier option must point at a stock row of the same gift and
+      // value, otherwise every claim of it fails as "no stock".
+      final stockError = CampaignStockIntegrity.tierOptionStockError(
+        rules: event.promotionalRules,
+        prizes: [...event.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
+      );
+      if (stockError != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(stockError, style: GoogleFonts.cairo()),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 10),
+            ),
+          );
+        }
+        return;
+      }
 
       String createdEventId = widget.eventToEdit?.id ?? '';
       if (widget.eventToEdit == null) {

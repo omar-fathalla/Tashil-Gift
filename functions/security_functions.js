@@ -235,6 +235,159 @@ function resolvePrizeIndexForDecrement(prizes, decrement, receipt) {
   return { index, branchId, fromStoreCode: !!codeBranch };
 }
 
+const VOUCHER_NAME_RE = /فواتشر|فوتشر|فاوتشر|قسيمة|قسائم|voucher|coupon/i;
+
+function branchLabelOf(row, fallback) {
+  const r = row || {};
+  return String(r.branchName || r.branchId || fallback || "").trim() || "عام";
+}
+
+/** Face value a stock row represents (unitValue, else the number in a voucher name). */
+function rowVoucherValue(row) {
+  const r = row || {};
+  const v = Number(r.unitValue || 0);
+  if (v > 0) return v;
+  const name = String(r.name || "");
+  if (String(r.giftType || "") === "voucher" || VOUCHER_NAME_RE.test(name)) {
+    return extractNumbers(normalizePrizeText(name))[0] || 0;
+  }
+  return 0;
+}
+
+/**
+ * True when the stock row clearly is a different gift than the ladder option
+ * asked for (e.g. tier option "voucher 150" bound to the "voucher 25" giftId).
+ * Only voucher face values are compared; a product row is never flagged.
+ */
+function ladderRowConflicts(row, decrement) {
+  const rowVal = rowVoucherValue(row);
+  if (!(rowVal > 0)) return false;
+  let reqVal = Number(decrement.unitValue || 0);
+  if (!(reqVal > 0)) {
+    const label = String(decrement.giftName || "");
+    if (VOUCHER_NAME_RE.test(label)) reqVal = extractNumbers(normalizePrizeText(label))[0] || 0;
+  }
+  return reqVal > 0 && Math.abs(reqVal - rowVal) >= 0.01;
+}
+
+function misconfiguredError(row, decrement, branchId) {
+  const r = row || {};
+  const giftName = String(decrement.giftName || decrement.prizeIdentifier || "").trim();
+  const reqVal = Number(decrement.unitValue || 0);
+  const rowVal = rowVoucherValue(r);
+  const branch = branchLabelOf(r, branchId);
+  return new HttpsError(
+    "failed-precondition",
+    `إعداد الحملة غير صحيح: الهدية "${giftName}"${reqVal > 0 ? ` (${reqVal} جنيه)` : ""} مربوطة برصيد "${String(r.name || "").trim()}"${rowVal > 0 ? ` (${rowVal} جنيه)` : ""} في فرع "${branch}". صحّح ربط الهدية في قواعد الحملة ثم أعد المحاولة، ولم يُصرف أي مخزون.`,
+    {
+      reason: "campaign_misconfigured",
+      giftId: String(decrement.prizeIdentifier || ""),
+      giftName,
+      requestedValue: reqVal,
+      stockRowName: String(r.name || ""),
+      stockRowValue: rowVal,
+      branch,
+    },
+  );
+}
+
+function insufficientStockError(row, decrement, branchId, remaining) {
+  const r = row || {};
+  const giftName = String(r.name || decrement.giftName || decrement.prizeIdentifier || "").trim();
+  const branch = branchLabelOf(r, branchId || decrement.branchId);
+  return new HttpsError(
+    "failed-precondition",
+    `Not enough prize stock remaining for "${giftName}" at branch "${branch}" (stored remaining ${remaining}, requested ${decrement.count}).`,
+    { reason: "insufficient_stock", giftName, branch, remaining, requested: decrement.count },
+  );
+}
+
+/**
+ * Stock row for one consuming-ladder decrement. The tier option's giftId is
+ * the authority: only rows with that same giftId are candidates, and the row
+ * must be the receipt branch's row (or a general, branchless row). Scoring by
+ * name / value is never allowed to pick a different gift, and a giftId row
+ * whose voucher value contradicts the option is a misconfiguration, not an
+ * empty stock. Rows stored without any giftId keep the legacy matcher.
+ */
+function resolveLadderStockRow(prizes, decrement, receipt) {
+  const rec = receipt || {};
+  const rows = Array.isArray(prizes) ? prizes : [];
+  const gid = String(decrement.prizeIdentifier || "").trim();
+  const codeBranch = branchIdFromStoreCode(rows, rec);
+  let branchId = codeBranch;
+  if (!branchId) branchId = String(decrement.branchId || "").trim();
+  if (!branchId) branchId = String(rec.branch_id || "").trim();
+  if (!branchId) branchId = String(rec.branch_detected || rec.branch || "").trim();
+  const fromStoreCode = !!codeBranch;
+
+  const same = [];
+  rows.forEach((p, i) => {
+    if (gid && String((p && p.giftId) || "").trim() === gid) same.push(i);
+  });
+  if (same.length === 0) {
+    // No row carries this giftId. Only legacy rows without a giftId may still
+    // match by name/value; rows of other gifts are never candidates.
+    const legacyIdx = [];
+    rows.forEach((p, i) => { if (p && !String(p.giftId || "").trim()) legacyIdx.push(i); });
+    if (legacyIdx.length === 0) return { index: -1, branchId, fromStoreCode };
+    const res = resolvePrizeIndexForDecrement(legacyIdx.map((i) => rows[i]), decrement, rec);
+    if (res.index === -1) return res;
+    const index = legacyIdx[res.index];
+    if (ladderRowConflicts(rows[index], decrement)) throw misconfiguredError(rows[index], decrement, res.branchId);
+    return Object.assign({}, res, { index });
+  }
+
+  const branchNorm = normalizePrizeText(branchId);
+  const isExact = (p) => !!branchId && (
+    String(p.branchId || "").trim() === branchId ||
+    String(p.branchName || "").trim() === branchId ||
+    (!!branchNorm && normalizePrizeText(p.branchName) === branchNorm));
+  const isGeneral = (p) => !String(p.branchId || "").trim() && !String(p.branchName || "").trim();
+  // A row whose value agrees with the option wins over a contradicting one,
+  // then the row with more stock (duplicate rows of one gift + branch).
+  const byStock = (a, b) => (ladderRowConflicts(rows[a], decrement) ? 1 : 0) - (ladderRowConflicts(rows[b], decrement) ? 1 : 0) ||
+    Number(rows[b].remainingQuantity || 0) - Number(rows[a].remainingQuantity || 0);
+
+  let index = -1;
+  if (branchId) {
+    const exact = same.filter((i) => isExact(rows[i])).sort(byStock);
+    // Same tolerance the legacy scorer gave branch names ("فرع X (القاهرة)").
+    const loose = same.filter((i) => {
+      const n = normalizePrizeText(rows[i].branchName);
+      return !!branchNorm && !!n && n.includes(branchNorm);
+    }).sort(byStock);
+    const general = same.filter((i) => isGeneral(rows[i])).sort(byStock);
+    if (exact.length) index = exact[0];
+    else if (loose.length === 1) index = loose[0];
+    else if (general.length) index = general[0];
+  } else {
+    const general = same.filter((i) => isGeneral(rows[i])).sort(byStock);
+    const branchKeys = new Set(same.map((i) => String(rows[i].branchId || rows[i].branchName || "").trim()).filter(Boolean));
+    if (general.length) index = general[0];
+    else if (branchKeys.size === 1) index = same.slice().sort(byStock)[0];
+    else {
+      throw new HttpsError(
+        "failed-precondition",
+        "تعذر تحديد فرع الفاتورة لخصم الهدية (أكثر من فرع يحمل نفس الهدية). يرجى اختيار الفرع ثم إعادة المحاولة.",
+      );
+    }
+  }
+
+  if (index === -1) {
+    // The receipt branch has no row of this gift. If the gift's rows elsewhere
+    // already contradict the option, say so instead of "no branch stock".
+    if (same.every((i) => ladderRowConflicts(rows[i], decrement))) {
+      throw misconfiguredError(rows[same[0]], decrement, branchId);
+    }
+    return { index: -1, branchId, fromStoreCode, noBranchStock: true };
+  }
+  if (ladderRowConflicts(rows[index], decrement)) {
+    throw misconfiguredError(rows[index], decrement, branchId);
+  }
+  return { index, branchId, fromStoreCode };
+}
+
 /**
  * Company-shared stock pool (2.0.148+206).
  * When a campaign has no stock row for a gift, the claim draws from a row of
@@ -847,7 +1000,9 @@ async function applyCampaignPrizeClaim(db, input) {
       for (const k of ["branch_id", "branch_detected"]) {
         if (typeof patch[k] === "string" && patch[k].trim()) hint[k] = patch[k];
       }
-      const resolved = resolvePrizeIndexForDecrement(prizes, decrement, hint);
+      const resolved = decrement.ladder === true
+        ? resolveLadderStockRow(prizes, decrement, hint)
+        : resolvePrizeIndexForDecrement(prizes, decrement, hint);
       let index = resolved.index;
       let rows = prizes;
       let sourceEventId = eventId;
@@ -857,6 +1012,9 @@ async function applyCampaignPrizeClaim(db, input) {
         const hit = findSharedPoolRow(sibs, decrement, resolved.branchId);
         if (hit) {
           const sib = sibs.find((x) => x.eventId === hit.eventId);
+          if (decrement.ladder === true && ladderRowConflicts(sib.prizes[hit.index], decrement)) {
+            throw misconfiguredError(sib.prizes[hit.index], decrement, resolved.branchId);
+          }
           rows = sib.prizes;
           index = hit.index;
           sourceEventId = sib.eventId;
@@ -877,7 +1035,7 @@ async function applyCampaignPrizeClaim(db, input) {
       }
       const remaining = Number(rows[index].remainingQuantity || 0);
       if (remaining < decrement.count) {
-        throw new HttpsError("failed-precondition", "Not enough prize stock remaining.");
+        throw insufficientStockError(rows[index], decrement, resolved.branchId, remaining);
       }
       rows[index].remainingQuantity = remaining - decrement.count;
       stockRows.push(rows[index]);
@@ -1015,7 +1173,7 @@ async function decrementCampaignPrizeImpl(request) {
 
 // Non-enumerable so index.js Object.assign does not expose it as a function group.
 Object.defineProperty(exports, "_testing", {
-  value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
+  value: { NO_BRANCH_STOCK_MESSAGE, findBestPrizeMatchIndex, resolvePrizeIndexForDecrement, resolveLadderStockRow, ladderRowConflicts, storeCodeFromReceiptNumber, branchIdFromStoreCode, findSharedPoolRow, sharedPoolEnabled, applyCampaignPrizeClaim, receiptUnitLimit,
     piecesPerOffer, claimedUnits, recordClaimFailure, trimDecrementsToLimit, trimPatchToDecrements, planConsumingClaim },
   enumerable: false,
 });

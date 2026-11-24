@@ -14,6 +14,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/widgets/m3_button_groups.dart';
 import '../../../core/services/company_gifts_service.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/campaign_stock_integrity.dart';
 import '../../admin/domain/company_gift_model.dart';
 import '../domain/campaign_stock_settlement_model.dart';
 
@@ -114,6 +115,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
   // Controllers map: key = "${eventId}_${branchName}_${giftKey}"
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, int> _claimedCache = {};
+  /// Stored remainingQuantity per cell (what claims are checked against), null = no row.
+  final Map<String, int?> _storedRemainingCache = {};
 
   @override
   void initState() {
@@ -1041,7 +1044,8 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           (r.linkedGiftId != null && r.linkedGiftId == gift.id) ||
           r.linkedGifts.any((lg) =>
               (lg.giftId.isNotEmpty && lg.giftId == gift.id) ||
-              lg.giftName.trim().toLowerCase() == gift.giftName.trim().toLowerCase()))) {
+              lg.giftName.trim().toLowerCase() == gift.giftName.trim().toLowerCase()) ||
+          r.rewardOptions.any((o) => o.giftId.isNotEmpty && o.giftId == gift.id))) {
         return ev;
       }
     }
@@ -1108,6 +1112,11 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
         for (final lg in r.linkedGifts) {
           if (lg.giftId.isNotEmpty) campaignGiftKeys.add(lg.giftId.toLowerCase().trim());
           if (lg.giftName.isNotEmpty) campaignGiftKeys.add(lg.giftName.toLowerCase().trim());
+        }
+        // Tier reward options are what the claim actually draws from.
+        for (final o in r.rewardOptions) {
+          if (o.giftId.isNotEmpty) campaignGiftKeys.add(o.giftId.toLowerCase().trim());
+          if (o.giftName.isNotEmpty) campaignGiftKeys.add(o.giftName.toLowerCase().trim());
         }
       }
 
@@ -1291,6 +1300,17 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
           }
 
           _claimedCache[cellKey] = txClaimed;
+          _storedRemainingCache[cellKey] = CampaignStockIntegrity.storedRemaining(
+            prizes: event.allocatedPrizes,
+            giftId: gift.id,
+            giftName: gift.giftName,
+            branchMatches: (p) {
+              final pBranch = p.branchName.trim().toLowerCase();
+              return _matchesBranchName(p.branchName, branchName) ||
+                  pBranch == branchName.toLowerCase() ||
+                  (branchName == (isAr ? 'كافة الفروع / عام' : 'All Branches') && pBranch.isEmpty);
+            },
+          );
 
           final initialAlloc = matchedPrize?.allocatedQuantity ?? 0;
           final controller = _getOrCreateController(cellKey, initialAlloc);
@@ -2997,6 +3017,12 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
             0;
         final currentAlloc = controller.text.trim().toIntOrNull() ?? 0;
         final remaining = (currentAlloc - claimed).clamp(0, currentAlloc);
+        // Claims check the stored remainingQuantity, not this computed number.
+        final storedRem = _storedRemainingCache.containsKey(cellKey)
+            ? _storedRemainingCache[cellKey]
+            : _storedRemainingCache['${primaryEvent?.id ?? ''}_${branchName}_$giftKey'];
+        final stockMismatch = _selectedSettlement == null &&
+            CampaignStockIntegrity.remainingMismatch(computed: remaining, stored: storedRem);
 
         branchAllocatedSum += currentAlloc;
         branchClaimedSum += claimed;
@@ -3102,6 +3128,44 @@ class _BranchStockBalancesScreenState extends ConsumerState<BranchStockBalancesS
                     ],
                   ),
                 ),
+                if (storedRem != null) ...[
+                  const SizedBox(height: 4),
+                  Tooltip(
+                    message: stockMismatch
+                        ? (isAr
+                            ? 'الرصيد المحفوظ الذي يُفحص عند الصرف ($storedRem) لا يساوي الباقي المحسوب من الفواتير ($remaining).'
+                            : 'Stored remaining used by claims ($storedRem) differs from the computed remaining ($remaining).')
+                        : (isAr ? 'الرصيد المحفوظ الذي يُفحص عند الصرف' : 'Stored remaining used by claims'),
+                    child: Container(
+                      key: ValueKey('stored_remaining_$cellKey'),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: stockMismatch ? colorScheme.errorContainer : colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: stockMismatch ? colorScheme.error : colorScheme.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (stockMismatch) ...[
+                            Icon(Icons.warning_amber_rounded, size: 12, color: colorScheme.onErrorContainer),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            '${isAr ? 'محفوظ:' : 'stored:'} $storedRem',
+                            style: GoogleFonts.cairo(
+                              fontSize: 10,
+                              color: stockMismatch ? colorScheme.onErrorContainer : colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

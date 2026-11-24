@@ -172,6 +172,27 @@ class AppErrorHandler {
     'unit_cap_exhausted': 'تم صرف كل الهدايا المستحقة لهذه الفاتورة من قبل.',
   };
 
+  /// Stock-row problems reported by the claim transaction (no stock written).
+  static const Map<String, String> claimStockMessages = {
+    'campaign_misconfigured':
+        'إعداد الحملة غير صحيح: الهدية المختارة مربوطة برصيد هدية أخرى. يرجى تصحيح ربط الهدية في قواعد الحملة، ولم يُصرف أي مخزون.',
+    'insufficient_stock': 'رصيد الهدايا في هذا الفرع لا يكفي. يرجى تغذية الرصيد ثم إعادة المحاولة.',
+  };
+
+  /// Arabic insufficient-stock message naming the gift, branch and stored remaining.
+  static String insufficientStockMessage(Map details) {
+    final gift = (details['giftName'] ?? '').toString().trim();
+    final branch = (details['branch'] ?? '').toString().trim();
+    final remaining = details['remaining'];
+    final parts = <String>[
+      'رصيد الهدايا لا يكفي',
+      if (gift.isNotEmpty) 'للهدية "$gift"',
+      if (branch.isNotEmpty) 'في فرع "$branch"',
+    ];
+    final left = remaining is num ? ' (الرصيد المحفوظ: ${remaining.toInt()})' : '';
+    return '${parts.join(' ')}$left. يرجى تغذية الرصيد ثم إعادة المحاولة.';
+  }
+
   /// The server's machine-readable rejection reason, or null.
   static String? claimRejectionReason(dynamic error) {
     if (error is FirebaseFunctionsException) {
@@ -189,9 +210,13 @@ class AppErrorHandler {
   static String claimFailureMessage(dynamic error) {
     if (error is FirebaseFunctionsException) {
       final msg = (error.message ?? '').trim();
+      // Checked first: the English stock message embeds Arabic gift/branch names.
+      if (claimRejectionReason(error) == 'insufficient_stock' && error.details is Map) {
+        return insufficientStockMessage(error.details as Map);
+      }
       if (RegExp(r'[\u0600-\u06FF]').hasMatch(msg)) return msg;
       final reason = claimRejectionReason(error);
-      final known = claimEligibilityMessages[reason] ?? claimStateMessages[reason];
+      final known = claimEligibilityMessages[reason] ?? claimStateMessages[reason] ?? claimStockMessages[reason];
       if (known != null) return known;
       final m = msg.toLowerCase();
       if (m.contains('already claimed')) return 'تم صرف هدية هذه الفاتورة من قبل.';
