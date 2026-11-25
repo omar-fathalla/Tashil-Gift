@@ -162,7 +162,7 @@ void main() {
       expect(find.text('AI Speed KPI ⚡'), findsNothing);
 
       // 2. Verify top header Preview Client App button is removed
-      expect(find.widgetWithText(FilledButton, 'معاينة تطبيق العميل / البروموتر'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'معاينة تطبيق العميل / المندوب'), findsNothing);
 
       // 3. Verify standalone Outlined Logout button is replaced
       expect(find.byType(OutlinedButton), findsNothing);

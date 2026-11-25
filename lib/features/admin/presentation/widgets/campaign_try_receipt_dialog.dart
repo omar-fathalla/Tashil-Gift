@@ -93,10 +93,11 @@ class _CampaignTryReceiptDialogState extends State<CampaignTryReceiptDialog> {
       if (!mounted) return;
       setState(() => _error = e.code == 'not-found' && (e.message ?? '').isEmpty
           ? 'خدمة التجربة مش متاحة لسه على السيرفر.'
-          : (e.message ?? e.code));
+          : ((e.message ?? '').isNotEmpty ? e.message! : 'تعذر تشغيل التجربة، حاول تاني.'));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'تعذر تشغيل التجربة: $e');
+      debugPrint('C-05 dry run failed: $e');
+      setState(() => _error = 'تعذر تشغيل التجربة، حاول تاني.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -138,7 +139,6 @@ class _CampaignTryReceiptDialogState extends State<CampaignTryReceiptDialog> {
           'تجربة فقط: لم يُخصم أي رصيد ولم تُسجَّل أي فاتورة أو جائزة.${r.campaignActive ? '' : ' (الحملة نفسها مش مفعّلة حاليًا؛ التجربة اعتبرتها مفعّلة.)'}',
           style: tt.bodySmall?.copyWith(color: good ? cs.onPrimaryContainer : cs.onErrorContainer),
         ),
-        if (r.code != null) Text('الكود: ${r.code}', style: tt.bodySmall?.copyWith(color: cs.onErrorContainer)),
       ]),
     );
   }
