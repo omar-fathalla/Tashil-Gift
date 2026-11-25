@@ -10,6 +10,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { planConsumingClaim } = require("./consuming_spend_ladder");
 const { exclusiveLadderUnits } = require("./exclusive_spend_ladder");
 const { evaluateClaimEligibility, ELIGIBILITY_REASONS, REASONS } = require("./campaign_eligibility");
+const { withCampaignContent, CampaignContentUnavailable } = require("./campaign_content");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -887,7 +888,20 @@ async function applyCampaignPrizeClaim(db, input) {
     // the stored campaign and receipt before any stock is touched.
     let serverUnits = null;
     if (receipt && decrements.length > 0 && !confirmOnly && !staff) {
-      const verdict = evaluateClaimEligibility({ event, receipt, nowMs, system });
+      // TAG-62: a large campaign's product list is in events/{id}/content
+      // (read in this transaction, before any write). Missing content fails
+      // closed: no gift without the product check.
+      let checkedEvent;
+      try {
+        checkedEvent = await withCampaignContent(db, eventId, event, { tx, prompt: false });
+      } catch (e) {
+        if (e instanceof CampaignContentUnavailable) {
+          throw new HttpsError("failed-precondition", "تعذر قراءة منتجات الحملة حالياً. حاول تاني بعد شوية.",
+            { reason: "campaign_content_unavailable" });
+        }
+        throw e;
+      }
+      const verdict = evaluateClaimEligibility({ event: checkedEvent, receipt, nowMs, system });
       if (!verdict.ok) {
         throw new HttpsError("failed-precondition", verdict.message, Object.assign({ reason: verdict.code }, verdict.details));
       }
