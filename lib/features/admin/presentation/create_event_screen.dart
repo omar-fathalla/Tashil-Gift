@@ -27,12 +27,14 @@ import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
 import '../domain/campaign_activation_review.dart';
 import '../domain/campaign_wording.dart';
+import '../domain/campaign_save_confirmation.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
 import 'widgets/portal_credentials_dialog.dart';
 import 'widgets/smart_branch_batch_importer_dialog.dart';
 import 'widgets/campaign_activation_summary_dialog.dart';
 import 'widgets/campaign_try_receipt_dialog.dart';
+import 'widgets/campaign_save_pending_banner.dart';
 
 
 class CreateEventScreen extends ConsumerStatefulWidget {
@@ -208,6 +210,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   /// C-05: id of the draft in event_drafts this editor saves to, once saved.
   String? _draftId;
+
+  // N-01: stable new-campaign id + the save waiting for server confirmation.
+  final CampaignSaveFlow _saveFlow = CampaignSaveFlow();
+  EventModel? _pendingSavedEvent;
+  bool _verifyingSave = false;
+  String? _verifyMessage;
 
   @override
   void initState() {
@@ -451,20 +459,29 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   setDialogState(() => isSaving = true);
                   try {
                     final chain = RetailChainModel(id: slug, name: name, slug: slug);
-                    await ref.read(retailChainsServiceProvider).addRetailChain(chain);
-                    if (mounted) {
-                      setState(() {
-                        if (!_selectedRetailChainIds.contains(slug)) {
-                          _selectedRetailChainIds.add(slug);
-                          _selectedRetailChainNames.add(name);
-                          _chainIsAllBranchesMap[slug] = true;
-                          _chainSelectedBranchIdsMap[slug] = {};
-                          _chainSelectedBranchNamesMap[slug] = {};
-                        }
-                      });
-                      _loadBranchesForChain(slug);
+                    Future<void> selectChain() async {
+                      if (mounted) {
+                        setState(() {
+                          if (!_selectedRetailChainIds.contains(slug)) {
+                            _selectedRetailChainIds.add(slug);
+                            _selectedRetailChainNames.add(name);
+                            _chainIsAllBranchesMap[slug] = true;
+                            _chainSelectedBranchIdsMap[slug] = {};
+                            _chainSelectedBranchNamesMap[slug] = {};
+                          }
+                        });
+                        _loadBranchesForChain(slug);
+                      }
+                      if (ctx.mounted) Navigator.pop(ctx);
                     }
-                    if (ctx.mounted) Navigator.pop(ctx);
+                    try {
+                      // N-01: selected only after the server confirmed it.
+                      await ref.read(retailChainsServiceProvider).addRetailChain(chain, confirmWrite: true);
+                    } on WriteNotConfirmedException catch (e) {
+                      if (ctx.mounted) _showUnconfirmedChainBranchSnack(ctx, e, selectChain);
+                      return;
+                    }
+                    await selectChain();
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -623,14 +640,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       city: cityCtrl.text.trim(),
                       branchCode: codeCtrl.text.trim(),
                     );
-                    await ref.read(retailChainsServiceProvider).addBranch(branch);
-                    if (mounted) {
-                      await _loadBranchesForChain(effectiveChainId);
-                      setState(() {
-                        _chainSelectedBranchNamesMap.putIfAbsent(effectiveChainId, () => {}).add(branchName);
-                      });
+                    Future<void> selectBranch() async {
+                      if (mounted) {
+                        await _loadBranchesForChain(effectiveChainId);
+                        setState(() {
+                          _chainSelectedBranchNamesMap.putIfAbsent(effectiveChainId, () => {}).add(branchName);
+                        });
+                      }
+                      if (ctx.mounted) Navigator.pop(ctx);
                     }
-                    if (ctx.mounted) Navigator.pop(ctx);
+                    try {
+                      // N-01: selected only after the server confirmed it.
+                      await ref.read(retailChainsServiceProvider).addBranch(branch, confirmWrite: true);
+                    } on WriteNotConfirmedException catch (e) {
+                      if (ctx.mounted) _showUnconfirmedChainBranchSnack(ctx, e, selectBranch);
+                      return;
+                    }
+                    await selectBranch();
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -4390,59 +4416,52 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final finalLogoUrl = await _uploadLogoIfNeeded(_formSlug);
       final event = _eventFromForm(logoUrl: finalLogoUrl);
 
-      String createdEventId = widget.eventToEdit?.id ?? '';
-      if (widget.eventToEdit == null) {
-        final docRef = await firestore.collection('events').add(event.toFirestore()).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => firestore.collection('events').doc(),
-        );
-        createdEventId = docRef.id;
-      } else {
-        final updatedBy = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
-        // C-02: transaction on the stored campaign; only changed fields are
-        // written and stock rows are merged from fresh data. Failures throw.
-        await CampaignEditSave.save(
-          firestore: firestore,
-          draft: event,
-          opened: widget.eventToEdit!,
-          updatedBy: updatedBy,
-        );
-      }
+      // N-01: the id is chosen once, before the write, and the create is a
+      // set() on it, so a retry rewrites the same campaign (no duplicate) and
+      // the links always point at the real id. Nothing counts as saved until
+      // the server confirmed the write.
+      final isNew = widget.eventToEdit == null;
+      final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+      final eventId = isNew
+          ? _saveFlow.newCampaignId(() => firestore.collection('events').doc().id)
+          : widget.eventToEdit!.id;
+      final target = PendingCampaignSave(
+        eventId: eventId,
+        isNew: isNew,
+        updatedBy: uid,
+        startedAt: DateTime.now(),
+      );
+      final outcome = await _saveFlow.run(
+        target: target,
+        write: isNew
+            ? () => firestore.collection('events').doc(eventId).set(event.toFirestore())
+            // C-02: transaction on the stored campaign; only changed fields
+            // are written and stock rows are merged from fresh data.
+            : () => CampaignEditSave.save(
+                  firestore: firestore,
+                  draft: event,
+                  opened: widget.eventToEdit!,
+                  updatedBy: uid,
+                ),
+      );
 
-      if (createdEventId.isNotEmpty) {
-        await ref.read(partnerPortalAuthServiceProvider).saveCampaignAgencyOverride(
-              eventId: createdEventId,
-              companySlug: event.companySlug,
-              hasCustomAgencyCredentials: event.hasCustomAgencyCredentials,
-              customAgencyUsername: event.customAgencyUsername,
-              customAgencyPassword: event.customAgencyPassword,
-            );
-      }
-
-      // C-05: the campaign is published, so its draft is no longer needed.
-      final draftId = _draftId;
-      if (draftId != null) {
-        try {
-          await CampaignDraftStore(firestore).delete(draftId);
-          _draftId = null;
-        } catch (e) {
-          // The campaign is saved; a leftover draft can be deleted from the list.
-          debugPrint('C-05: draft $draftId not deleted after publish: $e');
+      if (outcome == CampaignSaveOutcome.unconfirmed) {
+        if (mounted) {
+          setState(() {
+            _pendingSavedEvent = event;
+            _verifyMessage = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(CampaignSaveTexts.unconfirmedTitle, style: GoogleFonts.cairo()),
+              duration: const Duration(seconds: 6),
+            ),
+          );
         }
+        return;
       }
 
-      // Synchronize company master inventory in Firestore
-      await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
-
-      if (mounted) {
-        await _showCampaignSuccessLinksDialog(context, event, createdEventId);
-        if (!mounted) return;
-        if (widget.onSaved != null) {
-          widget.onSaved!();
-        } else if (Navigator.canPop(context)) {
-          Navigator.of(context).pop();
-        }
-      }
+      await _finishConfirmedSave(event, eventId);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4460,6 +4479,125 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// N-01: steps that run only after the server confirmed the campaign:
+  /// agency override, draft cleanup, gift stock sync, then the success
+  /// message with the links and QR.
+  Future<void> _finishConfirmedSave(EventModel event, String eventId) async {
+    final firestore = ref.read(firestoreProvider);
+    if (mounted) {
+      setState(() {
+        _pendingSavedEvent = null;
+        _verifyMessage = null;
+      });
+    }
+
+    await ref.read(partnerPortalAuthServiceProvider).saveCampaignAgencyOverride(
+          eventId: eventId,
+          companySlug: event.companySlug,
+          hasCustomAgencyCredentials: event.hasCustomAgencyCredentials,
+          customAgencyUsername: event.customAgencyUsername,
+          customAgencyPassword: event.customAgencyPassword,
+        );
+
+    // C-05: the campaign is active, so its draft is no longer needed.
+    final draftId = _draftId;
+    if (draftId != null) {
+      try {
+        await CampaignDraftStore(firestore).delete(draftId);
+        _draftId = null;
+      } catch (e) {
+        // The campaign is saved; a leftover draft can be deleted from the list.
+        debugPrint('C-05: draft $draftId not deleted after publish: $e');
+      }
+    }
+
+    // Synchronize company master inventory in Firestore
+    await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
+
+    if (mounted) {
+      await _showCampaignSuccessLinksDialog(context, event, eventId);
+      if (!mounted) return;
+      if (widget.onSaved != null) {
+        widget.onSaved!();
+      } else if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  /// N-01: «تحقق» reads the campaign from the server (not the cache) and
+  /// shows success only when the server copy proves the save.
+  Future<void> _verifyPendingSave() async {
+    final event = _pendingSavedEvent;
+    final pending = _saveFlow.pending;
+    if (event == null || pending == null) return;
+    setState(() {
+      _verifyingSave = true;
+      _verifyMessage = null;
+    });
+    final firestore = ref.read(firestoreProvider);
+    final result = await _saveFlow.verify(
+      (id) => readCampaignDocFromServer(firestore.collection('events').doc(id)),
+    );
+    if (!mounted) return;
+    setState(() => _verifyingSave = false);
+    switch (result) {
+      case CampaignVerifyResult.confirmed:
+        setState(() => _isLoading = true);
+        try {
+          await _finishConfirmedSave(event, pending.eventId);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'الحملة اتحفظت، بس حصلت مشكلة في الخطوات اللي بعد الحفظ')),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      case CampaignVerifyResult.notYet:
+        setState(() => _verifyMessage = CampaignSaveTexts.notYet);
+      case CampaignVerifyResult.failed:
+        setState(() => _verifyMessage = CampaignSaveTexts.verifyFailed);
+    }
+  }
+
+  /// N-01: a quick-added chain/branch that the server has not confirmed yet.
+  /// «تحقق» reads it from the server and runs [onConfirmed] only if it exists.
+  void _showUnconfirmedChainBranchSnack(
+    BuildContext ctx,
+    WriteNotConfirmedException e,
+    Future<void> Function() onConfirmed,
+  ) {
+    final messenger = ScaffoldMessenger.of(ctx);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(CampaignSaveTexts.chainBranchUnconfirmed, style: GoogleFonts.cairo()),
+        duration: const Duration(seconds: 20),
+        action: SnackBarAction(
+          label: CampaignSaveTexts.verifyButton,
+          onPressed: () async {
+            try {
+              final data = await readCampaignDocFromServer(
+                ref.read(firestoreProvider).doc(e.path),
+              );
+              if (data != null) {
+                await onConfirmed();
+              } else {
+                messenger.showSnackBar(SnackBar(content: Text('لسه ما وصلش للسيرفر. جرّب تاني بعد ما النت يرجع.', style: GoogleFonts.cairo())));
+              }
+            } catch (_) {
+              messenger.showSnackBar(SnackBar(content: Text(CampaignSaveTexts.verifyFailed, style: GoogleFonts.cairo())));
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteEvent() async {
@@ -5777,6 +5915,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 ),
                 const SizedBox(height: 14),
 
+                // N-01: unconfirmed save; links and QR wait for «تحقق».
+                if (_pendingSavedEvent != null && _saveFlow.isPending) ...[
+                  CampaignSavePendingBanner(
+                    onVerify: _verifyPendingSave,
+                    verifying: _verifyingSave,
+                    message: _verifyMessage,
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 // Save / Submit Button
                 Row(
                   children: [
