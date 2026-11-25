@@ -1,3 +1,4 @@
+import 'campaign_wording.dart';
 import 'event_model.dart';
 
 /// C-05: what the admin sees before a campaign is published, and the risky
@@ -56,7 +57,7 @@ class CampaignActivationReview {
       w.add(const ReviewWarning(ReviewLevel.danger, 'اسم الحملة فاضي.'));
     }
     if (e.companySlug.trim().isEmpty) {
-      w.add(const ReviewWarning(ReviewLevel.danger, 'معرّف الشركة (slug) فاضي؛ روابط الحملة مش هتشتغل.'));
+      w.add(const ReviewWarning(ReviewLevel.danger, 'معرّف الشركة في الرابط فاضي؛ روابط الحملة مش هتشتغل.'));
     }
 
     // Dates.
@@ -119,7 +120,7 @@ class CampaignActivationReview {
     } else {
       for (final p in e.allocatedPrizes) {
         if (p.allocatedQuantity > 0 && p.remainingQuantity <= 0) {
-          w.add(ReviewWarning(ReviewLevel.warning, 'رصيد "${p.name}" في ${_branchOf(p)} خلص (المتبقي صفر).'));
+          w.add(ReviewWarning(ReviewLevel.warning, 'رصيد "${CampaignWording.giftLabel(p.name)}" في ${_branchOf(p)} خلص (المتبقي صفر).'));
         }
       }
       if (!e.isAllBranches) {
@@ -137,7 +138,7 @@ class CampaignActivationReview {
 
     // Behaviour worth knowing about.
     if (e.customPrompt.trim().isEmpty) {
-      w.add(const ReviewWarning(ReviewLevel.warning, 'برومبت قراءة الفواتير بالذكاء الاصطناعي فاضي.'));
+      w.add(const ReviewWarning(ReviewLevel.warning, 'تعليمات قراءة الفواتير بالذكاء الاصطناعي فاضية.'));
     }
     if (e.enableWhatsAppWinnerNotification) {
       w.add(const ReviewWarning(ReviewLevel.info, 'هيتبعت للفائزين رسالة واتساب تلقائيًا.'));
@@ -147,12 +148,21 @@ class CampaignActivationReview {
     }
     if (active) {
       w.add(ReviewWarning(ReviewLevel.info,
-          isNew ? 'الحملة هتتنشر مفعّلة وتظهر للمندوبين والفروع فورًا.' : 'الحملة مفعّلة؛ التعديل هيوصل للمندوبين والفروع فورًا.'));
+          isNew ? 'الحملة هتتفعّل وتظهر للمندوبين والفروع فورًا.' : 'الحملة مفعّلة؛ التعديل هيوصل للمندوبين والفروع فورًا.'));
     }
 
     w.sort((a, b) => a.level.index.compareTo(b.level.index));
     return CampaignActivationReview._(e, isNew, byBranch, w);
   }
+
+  /// Arabic name of the prize game (the stored value is an internal code).
+  static String gameLabel(String gameType) => switch (gameType) {
+        'wheel' => 'عجلة الحظ',
+        'scratch' => 'امسح واربح',
+        'directGift' => 'هدية فورية مباشرة',
+        'chooseGift' => 'اختر هديتك',
+        _ => 'حسب إعداد الحملة',
+      };
 
   /// One line per rule, for the summary.
   static String describeRule(PromotionalRuleItem r) {
