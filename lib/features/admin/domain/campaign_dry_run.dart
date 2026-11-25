@@ -1,0 +1,120 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'event_model.dart';
+
+/// C-05 "try with receipt": payloads for the dryRunCampaignEligibility
+/// callable and its result. The server runs the same eligibility check a real
+/// claim runs, and never writes anything.
+class DryRunLine {
+  final String name;
+  final String barcode;
+  final double price;
+  final int quantity;
+  final bool isTargetCompany;
+
+  const DryRunLine({
+    required this.name,
+    this.barcode = '',
+    required this.price,
+    this.quantity = 1,
+    this.isTargetCompany = true,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'name': name.trim(),
+        if (barcode.trim().isNotEmpty) 'barcode': barcode.trim(),
+        'price': price,
+        'quantity': quantity,
+        'isTargetCompany': isTargetCompany,
+      };
+}
+
+class DryRunResult {
+  final bool ok;
+  final String? code;
+  final String? message;
+  final int? serverUnits;
+  final String mode;
+  final bool campaignActive;
+  final int lineCount;
+
+  const DryRunResult({
+    required this.ok,
+    this.code,
+    this.message,
+    this.serverUnits,
+    this.mode = 'exclusive',
+    this.campaignActive = false,
+    this.lineCount = 0,
+  });
+
+  factory DryRunResult.fromMap(Map<dynamic, dynamic> m) => DryRunResult(
+        ok: m['ok'] == true,
+        code: m['code']?.toString(),
+        message: m['message']?.toString(),
+        serverUnits: m['serverUnits'] is num ? (m['serverUnits'] as num).toInt() : null,
+        mode: (m['mode'] ?? 'exclusive').toString(),
+        campaignActive: m['campaignActive'] == true,
+        lineCount: m['lineCount'] is num ? (m['lineCount'] as num).toInt() : 0,
+      );
+}
+
+class CampaignDryRun {
+  CampaignDryRun._();
+
+  static const String callableName = 'dryRunCampaignEligibility';
+
+  /// Fields the eligibility check never needs (and credentials never leave).
+  static const Set<String> _dropped = {
+    'createdAt',
+    'customAgencyUsername',
+    'customAgencyPassword',
+    'customPrompt',
+    'aiValidationSummary',
+    'promotionalIdea',
+    'termsAndConditions',
+    'welcomeMessage',
+    'welcomeTitle',
+    'companyLogoUrl',
+  };
+
+  /// Callable-safe value: Timestamp/DateTime become epoch ms, FieldValue is dropped.
+  static dynamic _plain(dynamic v) {
+    if (v is Timestamp) return v.millisecondsSinceEpoch;
+    if (v is DateTime) return v.millisecondsSinceEpoch;
+    if (v is FieldValue) return null;
+    if (v is Map) {
+      final out = <String, dynamic>{};
+      v.forEach((k, val) {
+        if (val is FieldValue) return;
+        out[k.toString()] = _plain(val);
+      });
+      return out;
+    }
+    if (v is Iterable) return v.map(_plain).toList();
+    return v;
+  }
+
+  /// The editor's current campaign, as the server check expects it.
+  static Map<String, dynamic> campaignPayload(EventModel e) {
+    final m = Map<String, dynamic>.from(_plain(e.toFirestore()) as Map);
+    m.removeWhere((k, _) => _dropped.contains(k));
+    return m;
+  }
+
+  /// Manual receipt: printed date (as on the receipt) and its lines.
+  static Map<String, dynamic> receiptPayload({String receiptDate = '', required List<DryRunLine> lines}) => {
+        'receipt_date': receiptDate.trim(),
+        'extracted_products': lines.where((l) => l.name.trim().isNotEmpty).map((l) => l.toMap()).toList(),
+      };
+
+  static Map<String, dynamic> request({
+    required EventModel campaign,
+    Map<String, dynamic>? receipt,
+    String? receiptId,
+  }) =>
+      {
+        'campaign': campaignPayload(campaign),
+        if (receiptId != null && receiptId.trim().isNotEmpty) 'receiptId': receiptId.trim() else 'receipt': receipt ?? const {},
+      };
+}

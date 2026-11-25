@@ -24,10 +24,14 @@ import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
+import '../domain/campaign_draft.dart';
+import '../domain/campaign_activation_review.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
 import 'widgets/portal_credentials_dialog.dart';
 import 'widgets/smart_branch_batch_importer_dialog.dart';
+import 'widgets/campaign_activation_summary_dialog.dart';
+import 'widgets/campaign_try_receipt_dialog.dart';
 
 
 class CreateEventScreen extends ConsumerStatefulWidget {
@@ -36,9 +40,14 @@ class CreateEventScreen extends ConsumerStatefulWidget {
   final VoidCallback? onSaved;
   final bool isEmbedded;
 
+  /// C-05: a saved draft to continue. Its content fills the form; for an edit
+  /// draft [eventToEdit] is the campaign as it was when the draft was made.
+  final CampaignDraft? resumeDraft;
+
   const CreateEventScreen({
     super.key,
     this.eventToEdit,
+    this.resumeDraft,
     this.onCancel,
     this.onSaved,
     this.isEmbedded = false,
@@ -183,19 +192,27 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }
       return b.branchName;
     }
-    if (widget.eventToEdit != null) {
-      final idx = widget.eventToEdit!.branchIds.indexOf(branchId);
-      if (idx >= 0 && idx < widget.eventToEdit!.branchNames.length) {
-        return widget.eventToEdit!.branchNames[idx];
+    final prefill = _prefill;
+    if (prefill != null) {
+      final idx = prefill.branchIds.indexOf(branchId);
+      if (idx >= 0 && idx < prefill.branchNames.length) {
+        return prefill.branchNames[idx];
       }
     }
     return branchId;
   }
 
+  /// C-05: what fills the form: a resumed draft, else the campaign being edited.
+  late final EventModel? _prefill = widget.resumeDraft?.event ?? widget.eventToEdit;
+
+  /// C-05: id of the draft in event_drafts this editor saves to, once saved.
+  String? _draftId;
+
   @override
   void initState() {
     super.initState();
-    final e = widget.eventToEdit;
+    _draftId = widget.resumeDraft?.id;
+    final e = _prefill;
     _eventNameController = TextEditingController(text: e?.eventName ?? '');
     _targetCompanyController = TextEditingController(text: e?.targetCompany ?? '');
     _companySlugController = TextEditingController(text: e?.companySlug ?? '');
@@ -318,7 +335,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           _updateAvailableBranches();
 
           // Reconcile and filter selected branches so each chain only owns its own branches
-          if (widget.eventToEdit != null && !(_chainIsAllBranchesMap[chainId] ?? true)) {
+          if (_prefill != null && !(_chainIsAllBranchesMap[chainId] ?? true)) {
             final chainBranchIds = branches.map((b) => b.id).toSet();
             final currentSelectedIds = _chainSelectedBranchIdsMap[chainId] ?? {};
 
@@ -327,7 +344,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
             // Also check name match in case IDs were slightly different or from older data
             final matchedByName = branches.where((b) =>
-                (widget.eventToEdit?.branchNames ?? []).contains(b.branchName) ||
+                _prefill.branchNames.contains(b.branchName) ||
                 currentSelectedIds.contains(b.branchName)
             ).toList();
 
@@ -344,7 +361,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               // If this is the only chain, match all known branches
               final allInChain = branches.where((b) =>
                   currentSelectedIds.contains(b.id) ||
-                  (widget.eventToEdit?.branchNames ?? []).contains(b.branchName)
+                  _prefill.branchNames.contains(b.branchName)
               ).toList();
               if (allInChain.isNotEmpty) {
                 _chainSelectedBranchIdsMap[chainId] = allInChain.map((b) => b.id).toSet();
@@ -1503,9 +1520,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return matchedGift.giftName;
     }
 
-    // 2. Check in widget.eventToEdit?.allocatedPrizes
-    if (widget.eventToEdit != null) {
-      final matchedPrize = widget.eventToEdit!.allocatedPrizes
+    // 2. Check in the prefilled campaign's allocatedPrizes
+    if (_prefill != null) {
+      final matchedPrize = _prefill.allocatedPrizes
           .where((p) => (p.giftId == giftKey || p.name == giftKey) && p.name.isNotEmpty)
           .firstOrNull;
       if (matchedPrize != null && matchedPrize.name.isNotEmpty && !RegExp(r'^[a-zA-Z0-9_-]{15,35}$').hasMatch(matchedPrize.name)) {
@@ -4031,72 +4048,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
   }
 
-  Future<void> _saveEvent() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    // 2.0.162 (issue #3): block an end day before the start day.
-    final datesError = campaignDatesError(_startDate, _endDate);
-    if (datesError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(datesError, style: GoogleFonts.cairo()),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
-    // Warn when an active campaign has no start or end date.
-    final willBeActive = widget.eventToEdit?.isActive ?? true;
-    if (willBeActive && (_startDate == null || _endDate == null)) {
-      final missing = [
-        if (_startDate == null) 'تاريخ البداية',
-        if (_endDate == null) 'آخر يوم في الحملة',
-      ].join(' و');
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('تواريخ الحملة غير مكتملة',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-          content: Text(
-            'لم يتم تحديد $missing. الحملة مفعّلة، لذلك ستبقى مفتوحة بلا حد '
-            'زمني وتُقبل الفواتير بأي تاريخ. هل تريد الحفظ على أي حال؟',
-            style: GoogleFonts.cairo(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('رجوع وتحديد التاريخ', style: GoogleFonts.cairo()),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text('حفظ على أي حال', style: GoogleFonts.cairo()),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true || !mounted) return;
-    }
-    
-    setState(() => _isLoading = true);
-    
-    try {
-      final firestore = ref.read(firestoreProvider);
-      
+  /// The campaign as currently filled in the form (no writes).
+  EventModel _eventFromForm({required String logoUrl}) {
       final productsText = _requiredProductsController.text.trim();
       final productsList = productsText.isNotEmpty 
           ? productsText.split(',').map((e) => e.trim()).toList() 
           : <String>[];
-
-      // Never persist an auto-generated prompt that names another company.
-      if (_promptNeedsCompanyRefresh()) {
-        _syncPromptFromRules(showSnackbar: false);
-      }
-
       final rawSlug = _companySlugController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
-
-      // Upload company logo to Firebase Storage if a new one was picked
-      final finalLogoUrl = await _uploadLogoIfNeeded(rawSlug);
-
+      final finalLogoUrl = logoUrl;
       final event = EventModel(
         id: widget.eventToEdit?.id ?? '',
         eventName: _eventNameController.text.trim(),
@@ -4293,24 +4252,142 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         createdAt: widget.eventToEdit?.createdAt,
       );
 
-      // TG-2: a tier option must point at a stock row of the same gift and
-      // value, otherwise every claim of it fails as "no stock".
-      final stockError = CampaignStockIntegrity.tierOptionStockError(
-        rules: event.promotionalRules,
-        prizes: [...event.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
+      return event;
+  }
+
+  String get _formSlug => _companySlugController.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
+
+  /// C-05: saves the form to event_drafts only. Reps, branches, the portals,
+  /// claims, stats and auto-close never read that collection.
+  Future<void> _saveDraft() async {
+    if (_eventNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('اكتب اسم الحملة الأول عشان تحفظ المسودة.', style: GoogleFonts.cairo())),
       );
-      if (stockError != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(stockError, style: GoogleFonts.cairo()),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              duration: const Duration(seconds: 10),
-            ),
-          );
-        }
-        return;
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      // A newly picked logo is uploaded on publish only (the upload also
+      // updates the company's logo, which a draft must not do).
+      final event = _eventFromForm(logoUrl: _companyLogoUrl);
+      final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+      final id = await CampaignDraftStore(ref.read(firestoreProvider)).save(
+        draftId: _draftId,
+        event: event,
+        updatedBy: uid,
+        editing: widget.eventToEdit,
+      );
+      if (!mounted) return;
+      setState(() => _draftId = id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم حفظ المسودة. مش هتظهر غير للإدارة لحد ما تنشرها.'
+            '${_pickedLogoBytes != null ? ' الشعار الجديد هيترفع وقت النشر.' : ''}',
+            style: GoogleFonts.cairo(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'تعذر حفظ المسودة')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// C-05: test receipt data against the campaign as it is in the form.
+  Future<void> _tryWithReceipt() async {
+    final EventModel event;
+    try {
+      event = _eventFromForm(logoUrl: _companyLogoUrl);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'راجع بيانات الحملة الأول'))),
+      );
+      return;
+    }
+    await CampaignTryReceiptDialog.show(context, event);
+  }
+
+  Future<void> _saveEvent() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // 2.0.162 (issue #3): block an end day before the start day.
+    final datesError = campaignDatesError(_startDate, _endDate);
+    if (datesError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(datesError, style: GoogleFonts.cairo()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    // Never persist an auto-generated prompt that names another company.
+    if (_promptNeedsCompanyRefresh()) {
+      _syncPromptFromRules(showSnackbar: false);
+    }
+
+    final EventModel preview;
+    try {
+      preview = _eventFromForm(logoUrl: _companyLogoUrl);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء تجهيز الحملة')),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    // TG-2: a tier option must point at a stock row of the same gift and
+    // value, otherwise every claim of it fails as "no stock".
+    final stockError = CampaignStockIntegrity.tierOptionStockError(
+      rules: preview.promotionalRules,
+      prizes: [...preview.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
+    );
+    if (stockError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(stockError, style: GoogleFonts.cairo()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 10),
+        ),
+      );
+      return;
+    }
+
+    // C-05: review data, conditions, stock per branch, links and risky
+    // settings before anything is written (replaces the missing-dates prompt,
+    // which is now one of the review warnings).
+    final confirmed = await CampaignActivationSummaryDialog.show(
+      context,
+      CampaignActivationReview.of(
+        preview,
+        isNew: widget.eventToEdit == null,
+        willBeActive: widget.eventToEdit?.isActive ?? true,
+      ),
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _isLoading = true);
+    
+    try {
+      final firestore = ref.read(firestoreProvider);
+
+      // Upload company logo to Firebase Storage if a new one was picked
+      final finalLogoUrl = await _uploadLogoIfNeeded(_formSlug);
+      final event = _eventFromForm(logoUrl: finalLogoUrl);
 
       String createdEventId = widget.eventToEdit?.id ?? '';
       if (widget.eventToEdit == null) {
@@ -4339,6 +4416,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               customAgencyUsername: event.customAgencyUsername,
               customAgencyPassword: event.customAgencyPassword,
             );
+      }
+
+      // C-05: the campaign is published, so its draft is no longer needed.
+      final draftId = _draftId;
+      if (draftId != null) {
+        try {
+          await CampaignDraftStore(firestore).delete(draftId);
+          _draftId = null;
+        } catch (e) {
+          // The campaign is saved; a leftover draft can be deleted from the list.
+          debugPrint('C-05: draft $draftId not deleted after publish: $e');
+        }
       }
 
       // Synchronize company master inventory in Firestore
@@ -5650,6 +5739,43 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
                 const SizedBox(height: 28),
 
+                // C-05: draft and dry-run actions (nothing here touches the live campaign).
+                if (_draftId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_outlined, size: 18, color: colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'بتشتغل على مسودة محفوظة. النشر هيحذفها من قائمة المسودات.',
+                            style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _saveDraft,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text('حفظ كمسودة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _tryWithReceipt,
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: Text('جرّب على فاتورة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
                 // Save / Submit Button
                 Row(
                   children: [
@@ -5689,7 +5815,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               )
                             : const Icon(Icons.check_circle_rounded, size: 22),
                         label: Text(
-                          isEditing ? 'حفظ وتحديث بيانات الحملة' : 'حفظ وإنشاء الحملة الجديدة',
+                          isEditing ? 'مراجعة وحفظ التعديل' : 'مراجعة ونشر الحملة',
                           style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         style: FilledButton.styleFrom(

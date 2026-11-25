@@ -131,6 +131,12 @@ beforeEach(async () => {
       receipt_number: "OWN-1",
       status: "accepted",
     });
+    await setDoc(doc(db, "event_drafts/draft-1"), {
+      sourceEventId: null,
+      eventName: "Draft campaign",
+      companySlug: "acme",
+      event: { companySlug: "acme", isActive: true, eventName: "Draft campaign" },
+    });
     await setDoc(doc(db, "receipts_transactions/foreign"), {
       submittedByUid: "rep-2",
       campaignId: "camp-1",
@@ -286,6 +292,35 @@ describe("staff and partner claims", () => {
       await assertFails(setDoc(doc(db, "loginThrottle/abc"), { failures: 0 }));
       await assertFails(deleteDoc(doc(db, "loginThrottle/abc")));
     }
+  });
+});
+
+describe("C-05 campaign drafts", () => {
+  test("admin and super_admin can create, read, list, update and delete drafts", async () => {
+    for (const db of [admin(), superAdmin()]) {
+      await assertSucceeds(getDoc(doc(db, "event_drafts/draft-1")));
+      await assertSucceeds(getDocs(collection(db, "event_drafts")));
+      await assertSucceeds(setDoc(doc(db, "event_drafts/new-draft"), { eventName: "New", event: {} }));
+      await assertSucceeds(updateDoc(doc(db, "event_drafts/new-draft"), { eventName: "Renamed" }));
+      await assertSucceeds(deleteDoc(doc(db, "event_drafts/new-draft")));
+    }
+  });
+
+  test("reps, partners and signed-out clients cannot see or write drafts", async () => {
+    const unauth = testEnv.unauthenticatedContext().firestore();
+    for (const db of [anon(), partner(), partnerOps(), unauth]) {
+      await assertFails(getDoc(doc(db, "event_drafts/draft-1")));
+      await assertFails(getDocs(collection(db, "event_drafts")));
+      await assertFails(getDocs(query(collection(db, "event_drafts"), where("companySlug", "==", "acme"))));
+      await assertFails(setDoc(doc(db, "event_drafts/x"), { eventName: "x" }));
+      await assertFails(updateDoc(doc(db, "event_drafts/draft-1"), { eventName: "x" }));
+      await assertFails(deleteDoc(doc(db, "event_drafts/draft-1")));
+    }
+  });
+
+  test("a draft is not a campaign: no receipt can be filed against it", async () => {
+    await assertFails(getDoc(doc(anon(), "events/draft-1")));
+    await assertFails(setDoc(doc(anon(), "receipts_transactions/on-draft"), receiptPayload({ campaignId: "draft-1" })));
   });
 });
 
