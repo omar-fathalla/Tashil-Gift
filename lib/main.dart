@@ -6,7 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'firebase_options.dart';
+import 'core/config/firebase_env_options.dart';
 import 'core/services/app_check_bootstrap.dart';
 import 'core/services/emulator_auth_persistence.dart'
     if (dart.library.html) 'core/services/emulator_auth_persistence_web.dart';
@@ -17,6 +17,7 @@ import 'core/update/app_update_checker.dart';
 import 'core/localization/locale_provider.dart';
 import 'core/services/firebase_service.dart';
 import 'core/utils/app_url_strategy.dart';
+import 'core/widgets/env_badge.dart';
 import 'core/widgets/campaign_suspended_screen.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/games/presentation/emulator_fixture_gift_claim_screen.dart';
@@ -48,9 +49,18 @@ void main() async {
   // 2.0.172: never hang the splash. Firebase init gets a timeout + one retry,
   // App Check activation and the device id are bounded (they are optional).
   // FIREBASE_EMULATOR uses a demo- project and localhost ports only.
-  final FirebaseOptions firebaseOptions = kFirebaseEmulator
-      ? kFirebaseEmulatorOptions
-      : DefaultFirebaseOptions.currentPlatform;
+  // APP_ENV picks the project: prod (default, tashil-gift) or dev
+  // (tashil-gift-dev). A dev build without its config stops here instead of
+  // falling back to production.
+  final FirebaseOptions firebaseOptions;
+  try {
+    firebaseOptions = kFirebaseEmulator
+        ? kFirebaseEmulatorOptions
+        : currentEnvFirebaseOptions;
+  } on DevFirebaseConfigMissing catch (e) {
+    runApp(_EnvConfigErrorApp(message: e.toString()));
+    return;
+  }
   if (kFirebaseEmulator) {
     await clearEmulatorAuthPersistence();
   }
@@ -446,9 +456,11 @@ class MyApp extends ConsumerWidget {
       ],
       locale: currentLocale,
       builder: (context, child) {
-        return Directionality(
-          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
-          child: child ?? const SizedBox.shrink(),
+        return EnvBadge(
+          child: Directionality(
+            textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
       onGenerateInitialRoutes: (initialRouteName) {
@@ -514,3 +526,27 @@ class AdminAuthGuard extends ConsumerWidget {
 
 
 
+
+/// Shown only by an APP_ENV=dev build whose dev Firebase config is missing.
+class _EnvConfigErrorApp extends StatelessWidget {
+  const _EnvConfigErrorApp({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SelectableText(
+              'بيئة التطوير (dev) لسه ما اتظبطتش.\n\n$message',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

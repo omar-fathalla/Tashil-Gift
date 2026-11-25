@@ -1,0 +1,131 @@
+# Manual deploy to the DEV project tashil-gift-dev ONLY (TAG-12, TAG-23).
+# Actions -> dev-deploy -> Run workflow. Builds with APP_ENV=dev and deploys
+# Hosting (live dev site), Cloud Functions, Firestore rules + indexes and
+# Storage rules to tashil-gift-dev. Never production, never --force.
+# Requires the FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV secret and a filled-in
+# lib/firebase_options_dev.dart; without them it stops with a clear message.
+name: dev-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or SHA to deploy to tashil-gift-dev
+        type: string
+        default: dev
+      what:
+        description: What to deploy
+        type: choice
+        default: all
+        options: [all, hosting, functions, rules]
+      run_tests:
+        description: Run Flutter and functions tests first
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout ${{ inputs.ref }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Dev project must be ready
+        env:
+          HAS_DEV_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV != '' }}
+        run: |
+          configured=$(python3 tool/ci/dev_config_status.py | sed -n 's/^configured=//p')
+          ok=true
+          [ "$HAS_DEV_SA" = "true" ] || { echo "::error::Secret FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV is missing (docs/DEV_ENVIRONMENT.md, step 8)."; ok=false; }
+          if [ "${{ inputs.what }}" = "all" ] || [ "${{ inputs.what }}" = "hosting" ]; then
+            [ "$configured" = "true" ] || { echo "::error::lib/firebase_options_dev.dart still has TODO_ placeholders (docs/DEV_ENVIRONMENT.md, step 5)."; ok=false; }
+          fi
+          [ "$ok" = "true" ]
+
+  checks:
+    needs: preflight
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ inputs.ref }}
+      run_tests: ${{ inputs.run_tests }}
+      app_env: dev
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment:
+      name: dev
+      url: https://tashil-gift-dev.web.app
+    env:
+      PROJECT: tashil-gift-dev
+      FIREBASE_TOOLS_VERSION: 15.37.0
+    steps:
+      - name: Checkout ${{ needs.checks.outputs.sha }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+          persist-credentials: false
+
+      - name: Checkout deploy scripts (this workflow's commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: _ci
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tool/ci/
+            /tool/dev/
+
+      - name: Download web build (APP_ENV=dev)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.checks.outputs.artifact }}
+          path: build/web
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: functions npm ci
+        working-directory: functions
+        run: npm ci
+
+      - name: Write dev deploy credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV }}
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+
+      # deploy_dev.sh hard-codes tashil-gift-dev, refuses non-dev credentials,
+      # renders firebase.dev.json (dev Storage bucket) and never uses --force.
+      - name: Deploy ${{ inputs.what }} to tashil-gift-dev
+        run: |
+          bash _ci/tool/dev/deploy_dev.sh "${{ inputs.what }}"
+          {
+            echo "### Deployed \`${{ inputs.what }}\` to tashil-gift-dev"
+            echo "- Version: ${{ needs.checks.outputs.version }} (env dev)"
+            echo "- Commit: \`${{ needs.checks.outputs.sha }}\`"
+            echo "- Site: https://tashil-gift-dev.web.app"
+            echo "- Console: https://console.firebase.google.com/project/tashil-gift-dev/overview"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove deploy credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json"
