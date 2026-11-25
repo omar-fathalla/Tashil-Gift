@@ -4520,11 +4520,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            // TAG-50: show the real Firebase code/message, not only a generic text.
             content: Text(e is CampaignEditRejected
                 ? e.message
-                : AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء حفظ الحملة')),
+                : e is CampaignContentTooLarge
+                    ? e.message
+                    : AppErrorHandler.getMessageWithCode(e, defaultMessage: 'حدث خطأ أثناء حفظ الحملة')),
             backgroundColor: Theme.of(context).colorScheme.error,
-            duration: e is CampaignEditRejected ? const Duration(seconds: 10) : const Duration(seconds: 4),
+            duration: e is CampaignEditRejected ? const Duration(seconds: 10) : const Duration(seconds: 8),
           ),
         );
       }
