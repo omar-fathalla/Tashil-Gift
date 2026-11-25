@@ -97,7 +97,7 @@ class AppStrings {
   String get navAiBrainRules => _t(ar: 'AI', en: 'AI', hi: 'एआई');
   String get navAiProductDiscovery => _t(ar: 'الأصناف', en: 'Products', hi: 'उत्पाद');
   String get navWhatsAppMarketing => _t(ar: 'واتساب', en: 'WhatsApp', hi: 'व्हाट्सएप');
-  String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / البروموتر', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
+  String get previewClientApp => _t(ar: 'معاينة تطبيق العميل / المندوب', en: 'Preview Client / Promoter App', hi: 'ग्राहक ऐप का पूर्वावलोकन');
   String get collapseMenu => _t(ar: 'إخفاء العناوين', en: 'Hide Labels', hi: 'लेबल छुपाएं');
   String get expandMenu => _t(ar: 'إظهار العناوين', en: 'Show Labels', hi: 'लेबल दिखाएं');
 
@@ -517,12 +517,12 @@ class AppStrings {
     hi: 'कृपया शाखा में कंपनी प्रतिनिधि से अपना स्वीकृत उपहार प्राप्त करें।',
   );
   String get promoterLowStockWarningSingle => _t(
-    ar: '⚠️ تنبيه للبروموتر: متبقي قطعة واحدة فقط من هذا الصنف في المخزون!',
+    ar: '⚠️ تنبيه للمندوب: متبقي قطعة واحدة فقط من هذا الصنف في المخزون!',
     en: '⚠️ Promoter Alert: Only 1 unit remaining in stock!',
     hi: '⚠️ प्रमोटर चेतावनी: स्टॉक में केवल 1 इकाई शेष है!',
   );
   String get promoterLowStockWarningDouble => _t(
-    ar: '⚠️ تنبيه للبروموتر: متبقي قطعتان فقط من هذا الصنف في المخزون!',
+    ar: '⚠️ تنبيه للمندوب: متبقي قطعتان فقط من هذا الصنف في المخزون!',
     en: '⚠️ Promoter Alert: Only 2 units remaining in stock!',
     hi: '⚠️ प्रमोटر चेतावनी: स्टॉक में केवल 2 इकाइयां शेष हैं!',
   );
@@ -545,7 +545,7 @@ class AppStrings {
   String get scanReceiptBtn => _t(ar: 'تصوير الفاتورة الآن', en: 'Scan Receipt Now', hi: 'रसीद स्कैन करें');
   String get analyzingReceiptMsg => _t(ar: 'جاري فحص الفاتورة والتحقق بالذكاء الاصطناعي...', en: 'AI is analyzing and verifying your receipt...', hi: 'एआई आपकी रसीद का सत्यापन कर रहा है...');
   String get congratulationsWon => _t(ar: 'مبروك! لقد فزت بجائزة قيمة!', en: 'Congratulations! You won a prize!', hi: 'बधाई हो! आपने एक शानदार उपहार जीता है!');
-  String get claimPrizeBtn => _t(ar: 'استلام الجائزة من البروموتر', en: 'Claim Prize from Promoter', hi: 'प्रमोटर से पुरस्कार प्राप्त करें');
+  String get claimPrizeBtn => _t(ar: 'استلام الجائزة من المندوب', en: 'Claim Prize from Promoter', hi: 'प्रमोटर से पुरस्कार प्राप्त करें');
 
   // ---------------------------------------------------------------------------
   // 13. Enterprise Invoices Log & Audit (سجل الفواتير وتدقيق المنتجات)
@@ -696,7 +696,7 @@ class AppStrings {
   // 14. Dual Links & Company Manager Portal
   // ---------------------------------------------------------------------------
   String get copyPromoterLink => _t(
-    ar: 'نسخ رابط العميل / البروموتر',
+    ar: 'نسخ رابط العميل / المندوب',
     en: 'Copy Promoter/Client Link',
     hi: 'प्रमोटر / ग्राहक लिंक कॉपी करें',
   );
@@ -731,7 +731,7 @@ class AppStrings {
     hi: 'कंपनी के सभी अभियान और कार्यक्रम',
   );
   String get promoterLinkCopied => _t(
-    ar: 'تم نسخ رابط البروموتر والعميل بنجاح',
+    ar: 'تم نسخ رابط المندوب والعميل بنجاح',
     en: 'Promoter & Client link copied successfully',
     hi: 'प्रमोटر और ग्राहक लिंक सफलतापूर्वक कॉपी किया गया',
   );
@@ -1398,7 +1398,7 @@ class AppStrings {
   // 18. Client & Promoter Customer Submission Portal
   // ---------------------------------------------------------------------------
   String get clientPortalSubtitle => _t(
-    ar: 'بوابة التحقق الذكي للعملاء والبروموتر',
+    ar: 'بوابة التحقق الذكي للعملاء والمندوب',
     en: 'Intelligent Verification Portal for Customers & Promoters',
     hi: 'ग्राहकों और प्रमोटरों के लिए स्मार्ट सत्यापन पोर्टल',
   );
@@ -1587,7 +1587,7 @@ class AppStrings {
     hi: 'कुल जुड़े कार्डों का मूल्य:',
   );
   String get syncPromptFromRulesBtn => _t(
-    ar: '🔄 تنسيق وتحديث البرومبت تلقائياً من القواعد المعتمدة',
+    ar: '🔄 تنسيق وتحديث تعليمات قراءة الفواتير تلقائياً من القواعد المعتمدة',
     en: '🔄 Auto-Format & Sync Prompt from Rules',
     hi: '🔄 नियमों से प्रॉम्प्ट को स्वतः प्रारूपित और समन्वयित करें',
   );
@@ -1955,12 +1955,12 @@ class AppStrings {
     hi: 'वाउचर कार्ड सीरियल नंबर',
   );
   String get campaignVoucherSerialsSettingSubtitle => _t(
-    ar: 'تحديد ما إذا كان إدخال الأرقام التسلسلية لكروت الفواتشرات إلزامياً للبروموتر عند تسليم الهدية أو اختيارياً (الافتراضي: اختياري)',
+    ar: 'تحديد ما إذا كان إدخال الأرقام التسلسلية لكروت الفواتشرات إلزامياً للمندوب عند تسليم الهدية أو اختيارياً (الافتراضي: اختياري)',
     en: 'Determine whether entering voucher serial numbers is mandatory or optional for promoters upon gift handover (Default: Optional)',
     hi: 'निर्धारित करें कि उपहार सौंपते समय प्रमोटरों के लिए वाउचर सीरियल दर्ज करना अनिवार्य है या वैकल्पिक (डिफ़ॉल्ट: वैकल्पिक)',
   );
   String get voucherSerialsMandatoryBadge => _t(
-    ar: 'إلزامي للبروموتر',
+    ar: 'إلزامي للمندوب',
     en: 'Mandatory for Promoter',
     hi: 'प्रमोटर के लिए अनिवार्य',
   );
@@ -2108,7 +2108,7 @@ class AppStrings {
   // 21. Granular Portal Status Controls & Suspended Campaign Screens
   // ---------------------------------------------------------------------------
   String get promoterPortalLabel => _t(
-    ar: 'بوابة البروموتر والعميل',
+    ar: 'بوابة المندوب والعميل',
     en: 'Promoter & Client Portal',
     hi: 'प्रमोटर और ग्राहक पोर्टल',
   );
@@ -2128,12 +2128,12 @@ class AppStrings {
     hi: 'रुकी हुई',
   );
   String get promoterPortalToggleTooltipActive => _t(
-    ar: 'بوابة البروموتر والعميل مفعلة حالياً - اضغط لإيقاف استقبال الفواتير',
+    ar: 'بوابة المندوب والعميل مفعلة حالياً - اضغط لإيقاف استقبال الفواتير',
     en: 'Promoter portal is active - tap to pause receipt submission',
     hi: 'प्रमोटर पोर्टल सक्रिय है - रसीद सबमिशन रोकने के लिए टैप करें',
   );
   String get promoterPortalToggleTooltipPaused => _t(
-    ar: 'بوابة البروموتر والعميل متوقفة - اضغط لإعادة تفعيلها فورياً',
+    ar: 'بوابة المندوب والعميل متوقفة - اضغط لإعادة تفعيلها فورياً',
     en: 'Promoter portal is paused - tap to reactivate immediately',
     hi: 'प्रमोटर पोर्टल रुका हुआ है - तुरंत पुनः सक्रिय करने के लिए टैप करें',
   );
@@ -3467,17 +3467,17 @@ class AppStrings {
     hi: 'ब्रांड मास्टर पोर्टल पूर्वावलोकन',
   );
   String get livePromoterSimulationNavTitle => _t(
-    ar: 'محاكاة تطبيق البروموتر الميداني',
+    ar: 'محاكاة تطبيق المندوب الميداني',
     en: 'Live Promoter In-Store Simulation',
     hi: 'लाइव प्रमोटर सिमुलेशन',
   );
   String get livePromoterSimulationNavSubtitle => _t(
-    ar: 'معاينة حية لتجربة المتسوق والبروموتر في رفع الفواتير واستلام الجوائز',
+    ar: 'معاينة حية لتجربة المتسوق والمندوب في رفع الفواتير واستلام الجوائز',
     en: 'Live preview of in-store customer & promoter receipt scanning flow',
     hi: 'इन-स्टोर प्रमोटर रसीद स्कैनिंग का लाइव पूर्वावलोकन',
   );
   String get livePromoterSimulationNavTooltip => _t(
-    ar: 'تجربة ومعاينة رحلة البروموتر والعميل في السوبرماركت مباشرة داخل البوابة',
+    ar: 'تجربة ومعاينة رحلة المندوب والعميل في السوبرماركت مباشرة داخل البوابة',
     en: 'Experience in-store customer scanning journey directly inside executive portal',
     hi: 'कार्यकारी पोर्टल के अंदर इन-स्टोर प्रमोटर यात्रा का अनुभव करें',
   );
@@ -3497,7 +3497,7 @@ class AppStrings {
     hi: 'ऐतिहासिक ऑडिट और रिपोर्टिंग मोड • अभियान वर्तमान में स्टोर्स में रोके गए हैं',
   );
   String get promoterPortalTooltip => _t(
-    ar: 'نسخ رابط العميل والبروموتر المباشر لرفع الفواتير وتجربة الألعاب واستلام الجوائز',
+    ar: 'نسخ رابط العميل والمندوب المباشر لرفع الفواتير وتجربة الألعاب واستلام الجوائز',
     en: 'Copy direct Promoter / Client submission link to scan receipts & play games',
     hi: 'रसीद स्कैन करने और गेम खेलने के लिए प्रमोटर लिंक कॉपी करें',
   );

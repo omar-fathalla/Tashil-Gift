@@ -18,7 +18,7 @@ void main() {
   group('Dual Link Architecture & Company Manager Portal Tests', () {
     test('Localization strings for Dual Links & Vouchers are present in AR, EN, and HI', () {
       final stringsAr = AppStrings.fromLocale('ar');
-      expect(stringsAr.copyPromoterLink, contains('البروموتر'));
+      expect(stringsAr.copyPromoterLink, contains('المندوب'));
       expect(stringsAr.copyManagerPortalLink, contains('مدير الشركة'));
       expect(stringsAr.previewManagerPortal, contains('معاينة بوابة المدير'));
       expect(stringsAr.companyManagerPortalTitle, contains('بوابة مدير'));

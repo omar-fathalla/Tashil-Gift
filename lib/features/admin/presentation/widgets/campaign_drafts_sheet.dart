@@ -43,7 +43,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('حذف المسودة؟', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-        content: Text('هتتحذف المسودة "${draft.eventName}" بس. الحملة المنشورة (لو موجودة) مش هتتأثر.',
+        content: Text('هتتحذف المسودة "${draft.eventName}" بس. الحملة الأصلية (لو موجودة) مش هتتأثر.',
             style: GoogleFonts.cairo()),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('إلغاء', style: GoogleFonts.cairo())),
@@ -65,7 +65,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('مسودات الحملات', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold)),
-          Text('المسودة مش ظاهرة للمندوبين ولا الفروع ولا بوابة الشركة، ومش بتدخل في الفواتير أو الإحصائيات لحد ما تتنشر.',
+          Text('المسودة مش ظاهرة للمندوبين ولا الفروع ولا بوابة الشركة، ومش بتدخل في الفواتير أو الإحصائيات لحد ما تتفعّل الحملة.',
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           const SizedBox(height: 8),
           Expanded(
@@ -90,7 +90,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
                       title: Text(d.eventName.isEmpty ? 'مسودة بدون اسم' : d.eventName, style: GoogleFonts.cairo()),
                       subtitle: Text(
                         [
-                          d.isEditDraft ? 'تعديل على حملة منشورة' : 'حملة جديدة',
+                          d.isEditDraft ? 'تعديل على حملة موجودة' : 'حملة جديدة',
                           if (d.companySlug.isNotEmpty) d.companySlug,
                           _when(d.updatedAt),
                         ].join(' · '),

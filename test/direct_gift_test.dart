@@ -74,8 +74,8 @@ void main() {
       expect(stringsAr.gameDirectGiftTitle, contains('الهدية الفورية المباشرة'));
       expect(stringsAr.claimDirectGift, contains('تسليم الهدية للعميل'));
       expect(stringsAr.directGiftCustomerCongrats, contains('مبروك'));
-      expect(stringsAr.promoterLowStockWarningSingle, contains('تنبيه للبروموتر'));
-      expect(stringsAr.promoterLowStockWarningDouble, contains('تنبيه للبروموتر'));
+      expect(stringsAr.promoterLowStockWarningSingle, contains('تنبيه للمندوب'));
+      expect(stringsAr.promoterLowStockWarningDouble, contains('تنبيه للمندوب'));
 
       // English
       expect(stringsEn.gameDirectGiftTitle, contains('Direct Instant Gift'));

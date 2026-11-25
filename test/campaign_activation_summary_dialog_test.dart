@@ -40,7 +40,7 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('مراجعة قبل نشر الحملة'), findsOneWidget);
+    expect(find.text('مراجعة قبل تفعيل الحملة'), findsOneWidget);
     expect(find.text('فرع المعادي'), findsOneWidget);
     await tester.tap(find.text(button));
     await tester.pumpAndSettle();
@@ -49,7 +49,7 @@ void main() {
 
   testWidgets('shows the review and publishes on confirm', (tester) async {
     final review = CampaignActivationReview.of(campaign(end: DateTime(2026, 11, 30)), isNew: true, now: DateTime(2026, 11, 25));
-    expect(await open(tester, review, 'تأكيد ونشر الحملة'), isTrue);
+    expect(await open(tester, review, 'تأكيد وتفعيل الحملة'), isTrue);
   });
 
   testWidgets('a danger warning changes the publish button; going back does not publish', (tester) async {

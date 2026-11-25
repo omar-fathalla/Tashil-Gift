@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/utils/url_builder.dart';
 import '../../domain/campaign_activation_review.dart';
+import '../../domain/campaign_wording.dart';
 import '../../domain/event_model.dart';
 
 /// C-05: review before a campaign is published. Returns true to publish.
@@ -71,7 +72,7 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: AlertDialog(
-        title: Text(review.isNew ? 'مراجعة قبل نشر الحملة' : 'مراجعة قبل حفظ التعديل',
+        title: Text(review.isNew ? 'مراجعة قبل تفعيل الحملة' : 'مراجعة قبل حفظ التعديل',
             style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 640,
@@ -117,7 +118,7 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
                     kv('آخر يوم', _day(e.endDate)),
                     kv('السلسلة', e.retailChainName.isEmpty ? '—' : e.retailChainName),
                     kv('الفروع', e.isAllBranches || e.branchNames.isEmpty ? 'كل الفروع' : '${e.branchNames.length} فرع'),
-                    kv('طريقة الجائزة', e.gameType),
+                    kv('طريقة الجائزة', CampaignActivationReview.gameLabel(e.gameType)),
                   ]),
                   section('الشروط', Icons.rule_rounded, [
                     kv('الحد الأدنى للشراء', e.minimumSpend > 0 ? _num(e.minimumSpend) : 'بدون'),
@@ -139,7 +140,7 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
                       ),
                       for (final AllocatedPrize p in entry.value)
                         Text(
-                          '   ${p.name}: ${p.allocatedQuantity}${review.isNew ? '' : ' (المتبقي ${p.remainingQuantity})'}',
+                          '   ${CampaignWording.giftLabel(p.name)}: ${p.allocatedQuantity}${review.isNew ? '' : ' (المتبقي ${p.remainingQuantity})'}',
                           style: tt.bodyMedium?.copyWith(color: p.remainingQuantity <= 0 ? cs.error : null),
                         ),
                     ],
@@ -157,7 +158,7 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
                       kv('تشغيل الوكالة', AppUrlBuilder.buildAgencyOpsUrl(slug, eventId: eventId)),
                       kv('مدير الحساب', AppUrlBuilder.buildManagerPortalUrl(slug, eventId: eventId)),
                       if (review.isNew)
-                        Text('الروابط الخاصة بالحملة نفسها هتظهر بعد النشر.',
+                        Text('الروابط الخاصة بالحملة نفسها هتظهر بعد تفعيل الحملة.',
                             style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                     ],
                   ]),
@@ -176,8 +177,8 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
             style: review.hasDanger ? FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError) : null,
             child: Text(
               review.hasDanger
-                  ? (review.isNew ? 'نشر رغم التحذيرات' : 'حفظ رغم التحذيرات')
-                  : (review.isNew ? 'تأكيد ونشر الحملة' : 'تأكيد وحفظ التعديل'),
+                  ? (review.isNew ? 'تفعيل رغم التحذيرات' : 'حفظ رغم التحذيرات')
+                  : (review.isNew ? 'تأكيد وتفعيل الحملة' : 'تأكيد وحفظ التعديل'),
               style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
             ),
           ),

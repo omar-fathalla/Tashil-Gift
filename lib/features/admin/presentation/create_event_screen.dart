@@ -26,6 +26,7 @@ import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
 import '../domain/campaign_activation_review.dart';
+import '../domain/campaign_wording.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
 import 'widgets/portal_credentials_dialog.dart';
@@ -467,7 +468,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: colorScheme.error),
+                        SnackBar(content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ، حاول تاني')), backgroundColor: colorScheme.error),
                       );
                     }
                   } finally {
@@ -633,7 +634,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: colorScheme.error),
+                        SnackBar(content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ، حاول تاني')), backgroundColor: colorScheme.error),
                       );
                     }
                   } finally {
@@ -1799,7 +1800,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✨ تم تحليل وهيكلة قواعد العرض وتحديث البرومبت بنجاح!'),
+          content: const Text('✨ تم تحليل وهيكلة قواعد العرض وتحديث تعليمات قراءة الفواتير بنجاح!'),
           backgroundColor: colorScheme.onTertiaryFixedVariant,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1973,7 +1974,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> فواتشر 50 ج.م',
+        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعة واحدة) -> كارت مشتريات 50 ج.م',
         triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
         minQuantity: 1,
         rewardType: 'voucher',
@@ -1989,7 +1990,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين) -> فواتشر 125 ج.م',
+        ruleTitle: 'عرض اسبراي ريكسونا أو أكس (قطعتين) -> كارت مشتريات 125 ج.م',
         triggerProduct: 'اسبراي ريكسونا، اسبراي أكس، مزيل عرق ريكسونا اسبراي، مزيل عرق أكس اسبراي',
         minQuantity: 2,
         rewardType: 'voucher',
@@ -2005,7 +2006,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> فواتشر 50 ج.م',
+        ruleTitle: 'عرض رول أون ريكسونا أو أكس (قطعتين) -> كارت مشتريات 50 ج.م',
         triggerProduct: 'رول أون ريكسونا، رول أون أكس، ريكسونا رول اون، اكس رول اون',
         minQuantity: 2,
         rewardType: 'voucher',
@@ -2021,7 +2022,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(50.0, _companyGifts);
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض صانسيلك (شراء قطعتين للحصول على فوتشر 50 ج.م)',
+        ruleTitle: 'عرض صانسيلك (شراء قطعتين للحصول على كارت مشتريات 50 ج.م)',
         triggerProduct: 'صانسيلك، صنسيلك، sunsilk، شامبو صانسيلك، بلسم صانسيلك، صانسيلك شامبو نعومه الحرير 350 مل + بلسم، 6221155611154',
         minQuantity: 2,
         rewardType: 'voucher',
@@ -2037,7 +2038,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final decomposed = CampaignAiAssistantService.decomposeVoucherAmount(125.0, _companyGifts);
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م',
+        ruleTitle: 'عرض شرنك أكس المزدوج (بندل 2 قطعة) -> كارت مشتريات 125 ج.م',
         triggerProduct: 'عرض اكس شرنك، اكس اسبراي شرنك، اكس مزدوج، اكس اسبراي 150مل 335، اكس اسبراي 150مل',
         minQuantity: 1,
         rewardType: 'voucher',
@@ -2057,7 +2058,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }).toList();
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup بقيمة 100 ج.م) -> فواتشر 25 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup بقيمة 100 ج.م) -> كارت مشتريات 25 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 100.0,
@@ -2083,7 +2084,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }).toList();
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup بقيمة 150 ج.م) -> فواتشر 50 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup بقيمة 150 ج.م) -> كارت مشتريات 50 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 150.0,
@@ -2109,7 +2110,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }).toList();
       final newRule = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup بقيمة 200 ج.م) -> فواتشر 75 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup بقيمة 200 ج.م) -> كارت مشتريات 75 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 200.0,
@@ -2139,7 +2140,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       final rule1 = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 1}',
-        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup: نطاق 95 إلى 139 ج.م) -> فواتشر 25 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 1 (Signal أو Closeup: نطاق 95 إلى 139 ج.م) -> كارت مشتريات 25 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 95.0,
@@ -2160,7 +2161,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       final rule2 = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 2}',
-        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup: نطاق 140 إلى 189 ج.م) -> فواتشر 50 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 2 (Signal أو Closeup: نطاق 140 إلى 189 ج.م) -> كارت مشتريات 50 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 140.0,
@@ -2181,7 +2182,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
       final rule3 = PromotionalRuleItem(
         id: 'rule_${_promotionalRules.length + 3}',
-        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup: نطاق 190+ ج.م) -> فواتشر 75 ج.م',
+        ruleTitle: 'حزمة العناية بالفم 3 (Signal أو Closeup: نطاق 190+ ج.م) -> كارت مشتريات 75 ج.م',
         triggerProduct: 'معجون أسنان سيجنال، معجون أسنان كلوس اب، Signal Toothpaste, Closeup Toothpaste',
         conditionType: 'by_spend',
         minSpend: 190.0,
@@ -2935,7 +2936,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         decoration: InputDecoration(
                           labelText: strings.ruleTitleLabel,
                           hintText: conditionType == 'combo_spend'
-                              ? 'مثال: حزمة سيجنال + كلوس اب بقيمة 100 ج.م -> فواتشر 25 ج.م'
+                              ? 'مثال: حزمة سيجنال + كلوس اب بقيمة 100 ج.م -> كارت مشتريات 25 ج.م'
                               : 'مثال: عرض اسبراي ريكسونا أو أكس (قطعتين)',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
@@ -3395,7 +3396,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 controller: rewardAmtController,
                                 keyboardType: TextInputType.number,
                                 decoration: InputDecoration(
-                                  labelText: 'المبلغ الإجمالي للفاوتشر (ج.م)',
+                                  labelText: 'المبلغ الإجمالي لكارت المشتريات (ج.م)',
                                   hintText: '75',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   isDense: true,
@@ -3479,7 +3480,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         Icon(Icons.redeem_rounded, size: 16, color: colorScheme.tertiary),
                                         const SizedBox(width: 6),
                                         Text(
-                                          '🎁 هدية فورية مباشرة (Direct Gift)',
+                                          '🎁 هدية فورية مباشرة',
                                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onTertiaryFixedVariant),
                                         ),
                                       ],
@@ -3492,7 +3493,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         Icon(Icons.style_rounded, size: 16, color: colorScheme.primary),
                                         const SizedBox(width: 6),
                                         Text(
-                                          '🎟️ كارت خربش واكسب (Scratch Card)',
+                                          '🎟️ كارت خربش واكسب',
                                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant),
                                         ),
                                       ],
@@ -3505,7 +3506,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         Icon(Icons.casino_rounded, size: 16, color: colorScheme.primary),
                                         const SizedBox(width: 6),
                                         Text(
-                                          '🎡 عجلة الحظ (Spin The Wheel)',
+                                          '🎡 عجلة الحظ',
                                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryFixedVariant),
                                         ),
                                       ],
@@ -3518,7 +3519,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                         Icon(Icons.grid_view_rounded, size: 16, color: colorScheme.secondary),
                                         const SizedBox(width: 6),
                                         Text(
-                                          '📦 اختر هديتك (Choose Gift)',
+                                          '📦 اختر هديتك',
                                           style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: colorScheme.onSecondaryFixedVariant),
                                         ),
                                       ],
@@ -3606,7 +3607,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                alloc.giftName,
+                                                CampaignWording.giftLabel(alloc.giftName),
                                                 style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.bold),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -3719,11 +3720,11 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   isDense: true,
                                 ),
                                 items: _companyGifts.map((g) {
-                                  final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                                  final typeDesc = g.isVoucher ? 'كارت مشتريات (${g.formattedUnitValue})' : 'هدية عينية';
                                   return DropdownMenuItem(
                                     value: g,
                                     child: Text(
-                                      '${g.giftName} - $typeDesc',
+                                      '${CampaignWording.giftLabel(g.giftName)} - $typeDesc',
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.cairo(fontSize: 12),
                                     ),
@@ -3908,10 +3909,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                   isDense: true,
                                 ),
                                 items: _companyGifts.map((g) {
-                                  final typeDesc = g.isVoucher ? 'فواتشر (${g.formattedUnitValue})' : 'هدية عينية';
+                                  final typeDesc = g.isVoucher ? 'كارت مشتريات (${g.formattedUnitValue})' : 'هدية عينية';
                                   return DropdownMenuItem(
                                     value: g,
-                                    child: Text('${g.giftName} - $typeDesc',
+                                    child: Text('${CampaignWording.giftLabel(g.giftName)} - $typeDesc',
                                         overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 12)),
                                   );
                                 }).toList(),
@@ -4134,7 +4135,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             if (isRawId) {
               if (finalType == 'voucher' || finalUnitValue > 0) {
                 final val = finalUnitValue == finalUnitValue.roundToDouble() ? finalUnitValue.toInt() : finalUnitValue;
-                finalName = finalUnitValue > 0 ? 'فواتشر $val جنيه' : 'كارت فواتشر مشتريات';
+                finalName = finalUnitValue > 0 ? 'فواتشر $val جنيه' : 'كارت فواتشر مشتريات';  // C-06: stored value (voucher checks match it); shown via CampaignWording.giftLabel
               } else {
                 finalName = 'هدية ترويجية مميزة';
               }
@@ -4283,7 +4284,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تم حفظ المسودة. مش هتظهر غير للإدارة لحد ما تنشرها.'
+            'تم حفظ المسودة. مش هتظهر غير للإدارة لحد ما تفعّل الحملة.'
             '${_pickedLogoBytes != null ? ' الشعار الجديد هيترفع وقت النشر.' : ''}',
             style: GoogleFonts.cairo(),
           ),
@@ -4540,7 +4541,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(strings.operationFailed(e.toString())),
+              content: Text(strings.operationFailed(AppErrorHandler.getFriendlyMessage(e))),
               backgroundColor: colorScheme.onErrorContainer,
               behavior: SnackBarBehavior.floating,
             ),
@@ -4608,7 +4609,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                isAr ? 'تم نشر وتفعيل الحملة على الفايربيس!' : 'Campaign Live on Firebase!',
+                isAr ? 'تم تفعيل الحملة!' : 'Campaign Live on Firebase!',
                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
               ),
             ),
@@ -4645,7 +4646,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              isAr ? '1. رابط البروموتر الميداني (مفتوح بدون باسورد):' : '1. Field Promoter Link (Open / No Password):',
+                              isAr ? '1. رابط المندوب (مفتوح من غير كلمة مرور):' : '1. Field Promoter Link (Open / No Password):',
                               style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 12, color: colorScheme.onTertiaryContainer),
                             ),
                           ),
@@ -4661,12 +4662,12 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         alignment: AlignmentDirectional.centerEnd,
                         child: FilledButton.tonalIcon(
                           icon: const Icon(Icons.copy_rounded, size: 16),
-                          label: Text(isAr ? 'نسخ رابط البروموتر' : 'Copy Promoter Link', style: GoogleFonts.cairo(fontSize: 12)),
+                          label: Text(isAr ? 'نسخ رابط المندوب' : 'Copy Promoter Link', style: GoogleFonts.cairo(fontSize: 12)),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: promoterUrl));
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
-                                content: Text(isAr ? 'تم نسخ رابط البروموتر بنجاح!' : 'Promoter Link Copied!'),
+                                content: Text(isAr ? 'تم نسخ رابط المندوب بنجاح!' : 'Promoter Link Copied!'),
                                 backgroundColor: colorScheme.onTertiaryFixedVariant,
                                 duration: const Duration(seconds: 2),
                               ),
@@ -4885,7 +4886,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final isEditing = widget.eventToEdit != null;
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
-    final title = isEditing ? (isAr ? 'تعديل الحملة وتخصيص الـ AI' : 'Edit Campaign & AI Config') : strings.createCampaignTitle;
+    final title = isEditing ? (isAr ? 'تعديل الحملة وإعدادات الذكاء الاصطناعي' : 'Edit Campaign & AI Config') : strings.createCampaignTitle;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -5147,9 +5148,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                       style: GoogleFonts.cairo(),
                                       decoration: _m3InputDecoration(
                                         context: context,
-                                        labelText: 'معرف الرابط الإنجليزي (English Slug)',
+                                        labelText: 'معرّف الرابط (بحروف إنجليزي)',
                                         hintText: 'مثال: almarai أو summer-promo',
-                                        helperText: 'يحدد الرابط في الفايربيس: /c/${_companySlugController.text.isNotEmpty ? _companySlugController.text : 'slug'}',
+                                        helperText: 'بيحدد رابط الحملة: /c/${_companySlugController.text.isNotEmpty ? _companySlugController.text : 'slug'}',
                                         prefixIcon: Icons.link_rounded,
                                         suffixIcon: IconButton(
                                           icon: Icon(Icons.auto_awesome_rounded, color: colorScheme.primary, size: 20),
@@ -5197,7 +5198,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                             Icon(Icons.cloud_done_rounded, size: 16, color: colorScheme.primary),
                                             const SizedBox(width: 6),
                                             Text(
-                                              'معاينة روابط الفايربيس الحية (Firebase Web URLs):',
+                                              'معاينة روابط الحملة:',
                                               style: GoogleFonts.cairo(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 12,
@@ -5213,7 +5214,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                             const SizedBox(width: 6),
                                             Expanded(
                                               child: Text(
-                                                'البروموتر: $promoterUrl',
+                                                'المندوب: $promoterUrl',
                                                 style: GoogleFonts.sourceCodePro(fontSize: 11, color: colorScheme.onTertiaryContainer),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -5223,7 +5224,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                                 Clipboard.setData(ClipboardData(text: promoterUrl));
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
-                                                    content: Text('تم نسخ رابط البروموتر: $promoterUrl'),
+                                                    content: Text('تم نسخ رابط المندوب: $promoterUrl'),
                                                     backgroundColor: colorScheme.onTertiaryFixedVariant,
                                                     behavior: SnackBarBehavior.floating,
                                                   ),
@@ -5291,7 +5292,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               context: context,
                               labelText: 'الحد الأدنى للشراء (${activeCountry.currencySymbol}) (اختياري)',
                               hintText: 'اتركه فارغاً إذا كان العرض بدون حد أدنى للمشتريات',
-                              helperText: 'اختياري - في حال تركه فارغاً يعتمد الـ AI على شروط البرومبت والأصناف فقط',
+                              helperText: 'اختياري - في حال تركه فارغاً يعتمد الذكاء الاصطناعي على تعليمات قراءة الفواتير والأصناف فقط',
                               prefixIcon: Icons.payments_outlined,
                             ),
                             validator: (value) {
@@ -5394,7 +5395,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.casino_rounded,
-                  title: 'نوع اللعبة (Game Type)',
+                  title: 'نوع اللعبة',
                   subtitle: 'اختر نوع اللعبة التي ستظهر للعميل بعد التحقق من الفاتورة بنجاح',
                   children: [
                     DropdownButtonFormField<String>(
@@ -5413,7 +5414,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             children: [
                               Icon(Icons.casino_rounded, color: colorScheme.primary, size: 20),
                               const SizedBox(width: 10),
-                              Text('عجلة الحظ (Spin the Wheel)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              Text('عجلة الحظ', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -5423,7 +5424,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             children: [
                               Icon(Icons.style_rounded, color: colorScheme.primary, size: 20),
                               const SizedBox(width: 10),
-                              Text('امسح واربح (Scratch & Win)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              Text('امسح واربح', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -5433,7 +5434,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             children: [
                               Icon(Icons.redeem_rounded, color: colorScheme.secondary, size: 20),
                               const SizedBox(width: 10),
-                              Text('هدية فورية مباشرة (Direct Instant Gift)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              Text('هدية فورية مباشرة', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -5443,7 +5444,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             children: [
                               Icon(Icons.grid_view_rounded, color: colorScheme.primary, size: 20),
                               const SizedBox(width: 10),
-                              Text('اختر هديتك - شبكة الاختيارات (Choose Your Gift)', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                              Text('اختر هديتك - شبكة الاختيارات', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -5649,7 +5650,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'يتم تخزين اللوجو سحابياً في Firebase Storage ليظهر دائماً للمستهلك والبروموتر في واجهة الفعالية.',
+                                  'يتم حفظ اللوجو على السيرفر ليظهر دائماً للعميل والمندوب في صفحة الحملة.',
                                   style: GoogleFonts.cairo(
                                     fontSize: 11,
                                     color: colorScheme.onSurfaceVariant,
@@ -5749,7 +5750,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'بتشتغل على مسودة محفوظة. النشر هيحذفها من قائمة المسودات.',
+                            'بتشتغل على مسودة محفوظة. تفعيل الحملة هيحذفها من قائمة المسودات.',
                             style: GoogleFonts.cairo(fontSize: 13, color: colorScheme.onSurfaceVariant),
                           ),
                         ),
@@ -5815,7 +5816,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               )
                             : const Icon(Icons.check_circle_rounded, size: 22),
                         label: Text(
-                          isEditing ? 'مراجعة وحفظ التعديل' : 'مراجعة ونشر الحملة',
+                          isEditing ? 'مراجعة وحفظ التعديل' : 'مراجعة وتفعيل الحملة',
                           style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         style: FilledButton.styleFrom(
@@ -5882,7 +5883,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     ),
                     Text(
                       selectedNames.isNotEmpty
-                          ? 'محدد ${selectedNames.length} صنف مخصص من أصل $totalCount منتج (سيقوم الـ AI باحتساب هذه الأصناف فقط)'
+                          ? 'محدد ${selectedNames.length} صنف مخصص من أصل $totalCount منتج (سيقوم الذكاء الاصطناعي باحتساب هذه الأصناف فقط)'
                           : totalCount > 0
                               ? 'الوضع الافتراضي: الحملة تسري على جميع منتجات الشركة ($totalCount منتج) دون استثناء'
                               : 'لم يتم تسجيل منتجات في كتالوج الشركة بعد',
@@ -6240,7 +6241,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'مضاعفة فرص السحب والجوائز (Smart Multipliers)',
+                      'مضاعفة فرص السحب والجوائز',
                       style: GoogleFonts.cairo(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w700,
@@ -6398,7 +6399,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     switch (mode) {
       case 'required':
         desc = isAr
-            ? 'يلزم البروموتر بإدخال أرقام كروت الفواتشرات قبل تأكيد تسليم الهدية.'
+            ? 'يلزم المندوب بإدخال أرقام كروت المشتريات قبل تأكيد تسليم الهدية.'
             : 'The promoter must enter voucher card numbers before confirming the handover.';
         break;
       case 'hidden':
@@ -6445,7 +6446,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  isAr ? 'أرقام كروت الفواتشرات' : 'Voucher card numbers',
+                  isAr ? 'أرقام كروت المشتريات' : 'Voucher card numbers',
                   style: GoogleFonts.cairo(fontSize: 14.5, fontWeight: FontWeight.w700, color: colorScheme.onSurface),
                 ),
               ),
@@ -6524,7 +6525,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   runSpacing: 4,
                   children: [
                     Text(
-                      'السماح بالبونات التكميلية (Complementary Receipts)',
+                      'السماح بالفواتير التكميلية',
                       style: GoogleFonts.cairo(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w700,
@@ -6540,7 +6541,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        _allowComplementaryReceipts ? 'مفعل (يسمح بدمج البونات)' : 'معطل (فاتورة واحدة فقط)',
+                        _allowComplementaryReceipts ? 'مفعل (يسمح بدمج الفواتير)' : 'معطل (فاتورة واحدة فقط)',
                         style: GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -6664,7 +6665,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 const SizedBox(height: 3),
                 Text(
                   isEnabled
-                      ? 'عند تفعيل هذا الخيار، يقوم النظام تلقائياً بإرسال رسالة تهنئة احتفالية رسمية برقم الفاتورة واسم الجائزة وكود الفواتشر إلى هاتف العميل عبر الواتساب فور تأكيد تسليم الهدية.'
+                      ? 'عند تفعيل هذا الخيار، يقوم النظام تلقائياً بإرسال رسالة تهنئة احتفالية رسمية برقم الفاتورة واسم الجائزة وكود كارت المشتريات إلى هاتف العميل عبر الواتساب فور تأكيد تسليم الهدية.'
                       : 'تم تعطيل إرسال رسائل التهنئة عبر الواتساب لهذه الحملة تحديداً، ولن يتم إرسال أي رسائل تلقائية للعملاء عند استلام هداياهم.',
                   style: GoogleFonts.cairo(
                     fontSize: 12,
@@ -6748,7 +6749,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         Flexible(
                           child: Text(
                             isAr
-                                ? 'تخصيص كلمة مرور مستقلة لشركة الدعاية في هذه الحملة (Tier 2)'
+                                ? 'تخصيص كلمة مرور مستقلة لشركة الدعاية في هذه الحملة'
                                 : 'Custom Campaign-Specific Agency Credentials (Tier 2)',
                             style: GoogleFonts.cairo(
                               fontSize: isMobile ? 14 : 15,
@@ -6788,7 +6789,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               ? 'تعمل هذه الحملة باسم مستخدم وكلمة مرور مستقلين لشركة الدعاية والعمليات (لتعديل المخزون والهدايا في هذه الحملة فقط).'
                               : 'This campaign uses isolated Agency Operations credentials for stock & gifts management.')
                           : (isAr
-                              ? 'الوضع الافتراضي (Tier 1): ترث الحملة تلقائياً بيانات دخول شركة الدعاية الموحدة للشركة ($defaultOpsUser / $defaultOpsPass) دون الحاجة لإعداد يدوي.'
+                              ? 'الوضع الافتراضي: ترث الحملة تلقائياً بيانات دخول شركة الدعاية الموحدة للشركة ($defaultOpsUser / $defaultOpsPass) دون الحاجة لإعداد يدوي.'
                               : 'Default (Tier 1): Automatically inherits the company-wide Agency Operations credentials ($defaultOpsUser / $defaultOpsPass).'),
                       style: GoogleFonts.cairo(
                         fontSize: 12,
@@ -7035,7 +7036,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            'استوديو العروض وقواعد الذكاء الاصطناعي (AI & Rules Studio)',
+                            'استوديو العروض وقواعد الذكاء الاصطناعي',
                             style: GoogleFonts.cairo(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -7234,15 +7235,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_100',
-                          child: Text('🦷 حزمة العناية بالفم 1: سيجنال أو كلوس اب ≥ 100 ج.م -> فواتشر 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('🦷 حزمة العناية بالفم 1: سيجنال أو كلوس اب ≥ 100 ج.م -> كارت مشتريات 25 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_150',
-                          child: Text('🦷 حزمة العناية بالفم 2: سيجنال أو كلوس اب ≥ 150 ج.م -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('🦷 حزمة العناية بالفم 2: سيجنال أو كلوس اب ≥ 150 ج.م -> كارت مشتريات 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'oral_bundle_200',
-                          child: Text('🦷 حزمة العناية بالفم 3: سيجنال أو كلوس اب ≥ 200 ج.م -> فواتشر 75 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('🦷 حزمة العناية بالفم 3: سيجنال أو كلوس اب ≥ 200 ج.م -> كارت مشتريات 75 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'tresemme_single',
@@ -7258,23 +7259,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                         ),
                         DropdownMenuItem(
                           value: 'spray_1pc_50',
-                          child: Text('💳 شراء 1 اسبراي ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('💳 شراء 1 اسبراي ريكسونا أو أكس -> كارت مشتريات 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'spray_2pc_125',
-                          child: Text('💳 شراء 2 اسبراي ريكسونا أو أكس -> فواتشر 125 ج.م (2×50 + 1×25)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('💳 شراء 2 اسبراي ريكسونا أو أكس -> كارت مشتريات 125 ج.م (2×50 + 1×25)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'rollon_2pc_50',
-                          child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('💳 شراء 2 رول أون ريكسونا أو أكس -> كارت مشتريات 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'axe_twin_shrink',
-                          child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> فواتشر 125 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('💳 شراء عرض شرنك أكس المزدوج (بندل 2 قطعة) -> كارت مشتريات 125 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                         DropdownMenuItem(
                           value: 'sunsilk_2pc_50',
-                          child: Text('💳 شراء 2 صانسيلك (أو عرض شامبو+بلسم المزدوج) -> فواتشر 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                          child: Text('💳 شراء 2 صانسيلك (أو عرض شامبو+بلسم المزدوج) -> كارت مشتريات 50 ج.م', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                         ),
                       ],
                       onChanged: (val) {
@@ -7459,7 +7460,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'منطق تدقيق وفحص الذكاء الاصطناعي (AI Prompt) متزامن ويعمل تلقائياً في الخلفية 100%',
+                    'منطق تدقيق وفحص الذكاء الاصطناعي متزامن ويعمل تلقائياً في الخلفية 100%',
                     style: GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -7482,7 +7483,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               onExpansionChanged: (exp) => setState(() => _isPromptExpanded = exp),
               leading: Icon(Icons.code_rounded, size: 18, color: colorScheme.onSurfaceVariant),
               title: Text(
-                '👁️ معاينة أو تخصيص متقدم للبرومبت البرمجي (AI Prompt Customizer) - اختياري للمطورين',
+                '👁️ معاينة أو تخصيص متقدم لتعليمات قراءة الفواتير - اختياري للمطورين',
                 style: GoogleFonts.cairo(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -7994,7 +7995,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'تم تفكيك الفواتشر تلقائياً: ${decomposed.map((d) => '${d.quantity} × ${d.giftName}').join(' + ')}',
+                                  'تم تفكيك المبلغ لكروت مشتريات تلقائياً: ${decomposed.map((d) => '${d.quantity} × ${CampaignWording.giftLabel(d.giftName)}').join(' + ')}',
                                 ),
                                 backgroundColor: colorScheme.onTertiaryFixedVariant,
                                 behavior: SnackBarBehavior.floating,
@@ -8004,7 +8005,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'لم نتمكن من مطابقة فئات الفواتشر في المخزون بدقة مع $effectiveVoucherAmount ج.م',
+                                  'لم نتمكن من مطابقة فئات كروت المشتريات في المخزون بدقة مع $effectiveVoucherAmount ج.م',
                                 ),
                                 backgroundColor: colorScheme.onSecondaryFixedVariant,
                                 behavior: SnackBarBehavior.floating,
@@ -8070,7 +8071,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  alloc.giftName,
+                                  CampaignWording.giftLabel(alloc.giftName),
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -8246,7 +8247,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                gift.giftName,
+                                CampaignWording.giftLabel(gift.giftName),
                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -8389,7 +8390,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         return _buildSectionCard(
           context: context,
           icon: Icons.storefront_rounded,
-          title: 'سلاسل الماركت والفروع المستهدفة (Retail Chains & Outlets)',
+          title: 'سلاسل الماركت والفروع المستهدفة',
           subtitle: 'اختر السلاسل التجارية المسجلة في النظام والفروع المشمولة في الحملة الترويجية',
           children: [
             // Smart Importer Action Button Banner
@@ -8427,7 +8428,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     style: GoogleFonts.cairo(color: colorScheme.onSurface),
                     decoration: _m3InputDecoration(
                       context: context,
-                      labelText: 'إضافة سلسلة تجارية من النظام (Dropdown)',
+                      labelText: 'إضافة سلسلة تجارية من النظام',
                       hintText: cleanChains.isEmpty
                           ? 'لا توجد سلاسل مسجلة بالنظام بعد'
                           : 'اختر سلسلة لإضافتها (مثل: أسواق فتح الله، كارفور...)',
@@ -9405,7 +9406,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     return _buildSectionCard(
       context: context,
       icon: Icons.card_giftcard_rounded,
-      title: 'تخصيص الهدايا للحملة والفروع (Prize Allocation)',
+      title: 'تخصيص الهدايا للحملة والفروع',
       subtitle: _isAllBranches 
           ? 'اختر الهدايا ووزع الكميات المخصصة للحملة ككل'
           : 'اختر الفرع المستهدف بالضغط عليه، ثم خصص كميات الهدايا الخاصة به من الرصيد المتبقي',
@@ -9660,7 +9661,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                           children: [
                             Flexible(
                               child: Text(
-                                gift.giftName,
+                                CampaignWording.giftLabel(gift.giftName),
                                 style: GoogleFonts.cairo(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
@@ -9850,7 +9851,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     final Map<String, int> resolvedGiftsMap = {};
                     for (final entry in bAllocations.entries) {
                       if (entry.value <= 0) continue;
-                      final displayName = _resolveGiftDisplayName(entry.key);
+                      final displayName = CampaignWording.giftLabel(_resolveGiftDisplayName(entry.key));
                       resolvedGiftsMap[displayName] = (resolvedGiftsMap[displayName] ?? 0) + entry.value;
                     }
 
@@ -9926,7 +9927,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                             Icon(Icons.inventory_2_outlined, size: 14, color: colorScheme.secondary),
                             const SizedBox(width: 6),
                             Text(
-                              '${gift.giftName}: ',
+                              '${CampaignWording.giftLabel(gift.giftName)}: ',
                               style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                             Text(
