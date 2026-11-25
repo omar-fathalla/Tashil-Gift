@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'event_model.dart';
@@ -108,13 +110,27 @@ class CampaignDryRun {
         'extracted_products': lines.where((l) => l.name.trim().isNotEmpty).map((l) => l.toMap()).toList(),
       };
 
+  /// TAG-62: above this the product list is not sent; the server reads the
+  /// stored list of [EventModel.id] instead (callable payload limit).
+  static const int maxInlineProductsChars = 200000;
+
   static Map<String, dynamic> request({
     required EventModel campaign,
     Map<String, dynamic>? receipt,
     String? receiptId,
-  }) =>
-      {
-        'campaign': campaignPayload(campaign),
-        if (receiptId != null && receiptId.trim().isNotEmpty) 'receiptId': receiptId.trim() else 'receipt': receipt ?? const {},
-      };
+  }) {
+    final payload = campaignPayload(campaign);
+    String? contentEventId;
+    final products = payload['requiredProducts'];
+    final tooBig = products is List && jsonEncode(products).length > maxInlineProductsChars;
+    if (campaign.id.isNotEmpty && (tooBig || !campaign.contentInfo.productsInline)) {
+      payload.remove('requiredProducts');
+      contentEventId = campaign.id;
+    }
+    return {
+      'campaign': payload,
+      if (contentEventId != null) 'contentEventId': contentEventId,
+      if (receiptId != null && receiptId.trim().isNotEmpty) 'receiptId': receiptId.trim() else 'receipt': receipt ?? const {},
+    };
+  }
 }
