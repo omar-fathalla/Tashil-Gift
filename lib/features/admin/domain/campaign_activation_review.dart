@@ -12,6 +12,10 @@ class ReviewWarning {
 }
 
 class CampaignActivationReview {
+  /// TAG-43: appended to each tier-gift stock warning.
+  static const String tierStockHint =
+      'الصرف للشريحة دي ممكن يترفض أو يتخصم من رصيد هدية تانية. اختار الهدية الصحيحة في الشريحة أو ضيف لها رصيد في الفروع.';
+
   /// Label used for stock rows that are not tied to one branch.
   static const String generalPool = 'كل الفروع (رصيد عام)';
 
@@ -44,6 +48,7 @@ class CampaignActivationReview {
     required bool isNew,
     bool? willBeActive,
     DateTime? now,
+    List<String> tierStockIssues = const [],
   }) {
     final today = now ?? DateTime.now();
     final active = willBeActive ?? (isNew ? true : e.isActive);
@@ -152,6 +157,11 @@ class CampaignActivationReview {
     }
 
     w.sort((a, b) => a.level.index.compareTo(b.level.index));
+    // TAG-43: tier gifts with no stock row of the same gift. A warning only:
+    // the save goes on, and the server decides each claim.
+    for (final issue in tierStockIssues) {
+      w.add(ReviewWarning(ReviewLevel.warning, '$issue $tierStockHint'));
+    }
     return CampaignActivationReview._(e, isNew, byBranch, w);
   }
 

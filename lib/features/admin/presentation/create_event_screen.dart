@@ -4377,22 +4377,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    // TG-2: a tier option must point at a stock row of the same gift and
-    // value, otherwise every claim of it fails as "no stock".
-    final stockError = CampaignStockIntegrity.tierOptionStockError(
+    // TG-2 / TAG-43: a tier gift without a stock row of the same gift is a
+    // warning in the review below, not a block (Mohamed, 25 Nov): saving
+    // behaves as before 2.0.185. Server-side claim checks are unchanged.
+    final stockIssues = CampaignStockIntegrity.tierOptionStockIssues(
       rules: preview.promotionalRules,
       prizes: [...preview.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
     );
-    if (stockError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(stockError, style: GoogleFonts.cairo()),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          duration: const Duration(seconds: 10),
-        ),
-      );
-      return;
-    }
 
     // C-05: review data, conditions, stock per branch, links and risky
     // settings before anything is written (replaces the missing-dates prompt,
@@ -4403,6 +4394,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         preview,
         isNew: widget.eventToEdit == null,
         willBeActive: widget.eventToEdit?.isActive ?? true,
+        tierStockIssues: stockIssues,
       ),
     );
     if (!confirmed || !mounted) return;
