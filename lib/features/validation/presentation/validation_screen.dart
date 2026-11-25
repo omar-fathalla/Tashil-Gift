@@ -24,6 +24,7 @@ import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../games/presentation/choose_gift_screen.dart';
+import '../../admin/data/campaign_content_repository.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../client_portal/presentation/widgets/campaign_gift_balance_dialog.dart';
@@ -281,6 +282,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
         activeEvent = EventModel.fromFirestore(eventsSnapshot.docs.first);
       }
+      // TAG-62: products/prompt may be in events/{id}/content (no read when inline).
+      final EventModel contentEvent = await CampaignContentRepository(firestore).hydrate(activeEvent);
 
       final aiService = ref.read(aiReceiptServiceProvider);
       final productsService = ref.read(companyProductsServiceProvider);
@@ -349,7 +352,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       } catch (_) {}
       
       final List<String> effectiveRequiredProducts = [
-        ...activeEvent.requiredProducts,
+        ...contentEvent.requiredProducts,
         for (final rule in activeEvent.promotionalRules) ...[
           ...rule.selectedProductNames,
           ...rule.requiredBrands,
@@ -378,7 +381,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         registeredBranches: chainBranches,
         startDate: activeEvent.startDate,
         endDate: activeEvent.endDate,
-        customPrompt: activeEvent.customPrompt,
+        customPrompt: contentEvent.customPrompt,
         allowMultipleChances: activeEvent.allowMultipleChances,
         multiplierBasis: activeEvent.multiplierBasis,
         maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,

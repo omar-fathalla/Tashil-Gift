@@ -37,6 +37,7 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/animations/m3_motion.dart';
+import '../../admin/data/campaign_content_repository.dart';
 import '../../admin/domain/event_model.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
@@ -1060,6 +1061,15 @@ class _ClientReceiptUploadScreenState
         if (branchLoadError.isNotEmpty) 'error': branchLoadError,
       };
 
+      // TAG-62: products/prompt may be in events/{id}/content (read once per
+      // content version; no read when they are on the campaign doc).
+      final contentRepo = CampaignContentRepository(ref.read(firestoreProvider));
+      final List<EventModel> contentEvents = isMultiScan
+          ? await contentRepo.hydrateAll(_availableCompanyEvents)
+          : const <EventModel>[];
+      final EventModel? contentActive =
+          _activeEvent == null ? null : await contentRepo.hydrate(_activeEvent!);
+
       List<String> combinedRequiredProducts = [];
       List<PromotionalRuleItem> combinedPromotionalRules = [];
       List<String> combinedAllowedBranches = [];
@@ -1070,7 +1080,7 @@ class _ClientReceiptUploadScreenState
         final Set<String> ruleIdSet = {};
         final Set<String> branchSet = {};
 
-        for (final ev in _availableCompanyEvents) {
+        for (final ev in contentEvents) {
           if (ev.isAllBranches) combinedIsAllBranches = true;
           for (final b in ev.branchNames) {
             if (b.trim().isNotEmpty) branchSet.add(b.trim());
@@ -1095,7 +1105,7 @@ class _ClientReceiptUploadScreenState
         combinedAllowedBranches = branchSet.toList();
       } else {
         final Set<String> singleReqProds = Set<String>.from(
-          _activeEvent!.requiredProducts,
+          contentActive!.requiredProducts,
         );
         for (final r in _activeEvent!.promotionalRules) {
           for (final sp in r.selectedProductNames) {
@@ -1143,7 +1153,7 @@ class _ClientReceiptUploadScreenState
             startDate: isMultiScan ? null : _activeEvent!.startDate,
             endDate: isMultiScan ? null : _activeEvent!.endDate,
             customPrompt: [
-              if (!isMultiScan) _activeEvent!.customPrompt,
+              if (!isMultiScan) contentActive!.customPrompt,
               extraPrompt,
             ].where((t) => t.trim().isNotEmpty).join('\n\n'),
             // Multi-scan keeps true here; the per-campaign evaluator applies
