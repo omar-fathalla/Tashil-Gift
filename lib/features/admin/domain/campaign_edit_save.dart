@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'campaign_content_storage.dart';
 import 'event_model.dart';
 
 /// Campaign edit refused before any write (Arabic message for the admin).
@@ -224,9 +225,29 @@ class CampaignEditSave {
       currentRaw: currentRaw,
     );
     if (prizes != null) patch['allocatedPrizes'] = prizes;
+    invalidateContentCopy(patch, currentData, draftMap: draftMap);
     patch['updatedAt'] = FieldValue.serverTimestamp();
     patch['updatedBy'] = updatedBy;
     return patch;
+  }
+
+  /// TAG-51: when the edit changes requiredProducts or customPrompt, the
+  /// copy in events/{id}/content no longer matches, so the same write drops
+  /// the `contentStorage` marker and readers use the campaign fields until
+  /// [CampaignContentRepository.syncFromLegacy] has copied the new values.
+  /// Both fields are then written in full from the (hydrated) draft, so the
+  /// campaign document is complete again even if a later cleanup step had
+  /// already removed the legacy fields.
+  static void invalidateContentCopy(
+    Map<String, dynamic> patch,
+    Map<String, dynamic> currentData, {
+    required Map<String, dynamic> draftMap,
+  }) {
+    final touchesContent = patch.containsKey('requiredProducts') || patch.containsKey('customPrompt');
+    if (!touchesContent || !currentData.containsKey(CampaignContentLayout.markerField)) return;
+    patch['requiredProducts'] = draftMap['requiredProducts'];
+    patch['customPrompt'] = draftMap['customPrompt'];
+    patch[CampaignContentLayout.markerField] = FieldValue.delete();
   }
 
   /// Runs the edit as one transaction on the stored campaign. No silent

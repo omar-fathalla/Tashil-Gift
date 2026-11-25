@@ -112,6 +112,24 @@ service cloud.firestore {
           allow write: if isAdmin();
         }
       }
+
+      // TAG-51: requiredProducts / customPrompt parts of the campaign
+      // (products-N, prompt-N). Readable by whoever may read the campaign
+      // itself; only fetched by id (no list except admins); admins write.
+      match /content/{partId} {
+        allow get: if isAdmin()
+          || (isAnonymous() && eventData(eventId).isActive == true)
+          || sameCompany(eventData(eventId).companySlug);
+        allow list: if isAdmin();
+        allow create, update: if isAdmin()
+          && partId.matches('^(products|prompt)-[0-9]{1,2}$')
+          && request.resource.data.kind in ['products', 'prompt']
+          && partId.split('-')[0] == request.resource.data.kind
+          && request.resource.data.rev is string
+          && request.resource.data.part is int
+          && request.resource.data.parts is int;
+        allow delete: if isAdmin();
+      }
     }
 
     match /receipts_transactions/{txId} {

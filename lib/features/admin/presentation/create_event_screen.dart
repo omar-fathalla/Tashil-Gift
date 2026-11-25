@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +23,7 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../../../core/services/partner_portal_auth_service.dart';
 import '../domain/company_model.dart';
+import '../domain/campaign_content_storage.dart';
 import '../domain/event_model.dart';
 import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
@@ -4503,6 +4506,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         // The campaign is saved; a leftover draft can be deleted from the list.
         debugPrint('C-05: draft $draftId not deleted after publish: $e');
       }
+    }
+
+    // TAG-51: copy products and prompt to events/{id}/content in the
+    // background. Best effort: until it lands (or while the rules for the new
+    // path are not deployed) readers use the campaign fields.
+    final opened = widget.eventToEdit;
+    if (opened == null ||
+        opened.contentStorage == null ||
+        opened.customPrompt != event.customPrompt ||
+        !listEquals(opened.requiredProducts, event.requiredProducts)) {
+      unawaited(CampaignContentRepository(firestore).syncFromLegacy(eventId));
     }
 
     // Synchronize company master inventory in Firestore

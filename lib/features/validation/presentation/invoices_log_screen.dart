@@ -24,6 +24,7 @@ import '../../admin/domain/retail_chain_model.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../admin/domain/campaign_content_storage.dart';
 import '../../admin/domain/event_model.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
@@ -1784,6 +1785,11 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       };
     } catch (_) {}
 
+    // TAG-51: products and prompt from events/{id}/content when present.
+    final contentRepo = CampaignContentRepository(firestore);
+    final hydratedEvents = await contentRepo.hydrateAll(companyEvents);
+    final hydratedActive = await contentRepo.hydrate(activeEvent);
+
     // Combine required products, promotional rules, and branches across all active company events
     final Set<String> combinedReqProds = {};
     final Set<String> ruleIdSet = {};
@@ -1791,7 +1797,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     bool combinedIsAllBranches = false;
     final List<PromotionalRuleItem> combinedPromotionalRules = [];
 
-    for (final ev in companyEvents) {
+    for (final ev in hydratedEvents) {
       if (ev.isAllBranches) combinedIsAllBranches = true;
       for (final b in ev.branchNames) {
         if (b.trim().isNotEmpty) combinedBranches.add(b.trim());
@@ -1829,7 +1835,7 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
       registeredBranches: chainBranches,
       startDate: null,
       endDate: null,
-      customPrompt: activeEvent.customPrompt,
+      customPrompt: hydratedActive.customPrompt,
       allowMultipleChances: activeEvent.allowMultipleChances,
       multiplierBasis: activeEvent.multiplierBasis,
       maxChancesPerReceipt: activeEvent.maxChancesPerReceipt,

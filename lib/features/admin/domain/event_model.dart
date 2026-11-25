@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/services/company_gifts_service.dart';
 import '../../../../core/utils/receipt_date_window.dart';
+import 'campaign_content_storage.dart';
 
 /// Represents a specific quantity of an inventory gift allocated to a promotional rule
 class LinkedGiftAllocation {
@@ -636,6 +637,10 @@ class EventModel {
   final double minimumSpend;
   final List<String> requiredProducts;
   final String customPrompt;
+  /// TAG-51: marker of the copy of requiredProducts / customPrompt kept in
+  /// events/{id}/content (null when there is none). Read-only for the editor:
+  /// never part of [toFirestore].
+  final CampaignContentMarker? contentStorage;
   final String welcomeTitle;
   final String welcomeMessage;
   final String termsAndConditions;
@@ -731,6 +736,7 @@ class EventModel {
     required this.minimumSpend,
     this.requiredProducts = const [],
     this.customPrompt = '',
+    this.contentStorage,
     this.welcomeTitle = '',
     this.welcomeMessage = '',
     this.termsAndConditions = '',
@@ -1042,6 +1048,7 @@ class EventModel {
       minimumSpend: (data['minimumSpend'] as num?)?.toDouble() ?? 0.0,
       requiredProducts: List<String>.from(data['requiredProducts'] ?? []),
       customPrompt: data['customPrompt'] ?? '',
+      contentStorage: CampaignContentMarker.tryParse(data[CampaignContentLayout.markerField]),
       welcomeTitle: data['welcomeTitle'] ?? '',
       welcomeMessage: data['welcomeMessage'] ?? '',
       termsAndConditions: data['termsAndConditions'] ?? '',
@@ -1233,6 +1240,7 @@ class EventModel {
     double? minimumSpend,
     List<String>? requiredProducts,
     String? customPrompt,
+    CampaignContentMarker? contentStorage,
     String? welcomeTitle,
     String? welcomeMessage,
     String? termsAndConditions,
@@ -1275,6 +1283,7 @@ class EventModel {
       minimumSpend: minimumSpend ?? this.minimumSpend,
       requiredProducts: requiredProducts ?? this.requiredProducts,
       customPrompt: customPrompt ?? this.customPrompt,
+      contentStorage: contentStorage ?? this.contentStorage,
       welcomeTitle: welcomeTitle ?? this.welcomeTitle,
       welcomeMessage: welcomeMessage ?? this.welcomeMessage,
       termsAndConditions: termsAndConditions ?? this.termsAndConditions,

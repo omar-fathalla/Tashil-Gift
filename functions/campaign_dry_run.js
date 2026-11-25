@@ -7,6 +7,7 @@
  */
 const { HttpsError } = require("firebase-functions/v2/https");
 const { evaluateClaimEligibility } = require("./campaign_eligibility");
+const { withCampaignContent } = require("./campaign_content");
 
 const STAFF_ROLES = new Set(["super_admin", "admin"]);
 const MAX_LINES = 200;
@@ -67,7 +68,7 @@ async function dryRunCampaignEligibilityHandler(db, request, nowMs = Date.now())
   } else if (typeof data.eventId === "string" && data.eventId.trim()) {
     const snap = await db.collection("events").doc(data.eventId.trim()).get();
     if (!snap.exists) throw new HttpsError("not-found", "الحملة غير موجودة.");
-    campaign = snap.data();
+    campaign = await withCampaignContent(db, snap.id, snap.data() || {}); // TAG-51
   } else {
     throw new HttpsError("invalid-argument", "لازم تبعت بيانات الحملة.");
   }

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../domain/campaign_content_storage.dart';
 import '../domain/event_model.dart';
 import 'create_event_screen.dart';
 import 'widgets/campaign_drafts_sheet.dart';
@@ -1903,10 +1904,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       context: context,
                       label: isAr ? 'تعديل بيانات وشروط وبرومبت الحملة' : 'Edit Campaign Rules & Prompt',
                       icon: Icons.edit_note_rounded,
-                      onPressed: () {
-                        Navigator.of(context).push(
+                      onPressed: () async {
+                        final nav = Navigator.of(context);
+                        // TAG-51: the editor gets products and prompt from
+                        // events/{id}/content when the campaign has a copy there.
+                        final full = firestore == null
+                            ? event
+                            : await CampaignContentRepository(firestore).hydrate(event);
+                        nav.push(
                           MaterialPageRoute(
-                            builder: (context) => CreateEventScreen(eventToEdit: event),
+                            builder: (context) => CreateEventScreen(eventToEdit: full),
                           ),
                         );
                       },

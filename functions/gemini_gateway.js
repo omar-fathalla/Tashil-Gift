@@ -1,6 +1,7 @@
 const LRU = require("lru-cache");
 const { consumeRateLimit } = require("./rate_limit");
 const crypto = require("node:crypto");
+const { readCampaignContent } = require("./campaign_content");
 
 /**
  * 1. LRU Caches for Campaign Metadata & Recurring Invoices
@@ -111,7 +112,11 @@ async function getCachedCampaignProducts(db, campaignId) {
   const doc = await db.collection("events").doc(campaignId).get();
   if (!doc.exists) return [];
   const data = doc.data() || {};
-  const products = data.requiredProducts || data.eligibleProducts || [];
+  // TAG-51: events/{id}/content first, the campaign fields otherwise.
+  const content = await readCampaignContent(db, campaignId, data);
+  const products = content.source === "parts"
+    ? content.requiredProducts
+    : (data.requiredProducts || data.eligibleProducts || []);
   campaignProductsCache.set(campaignId, products);
   return products;
 }
