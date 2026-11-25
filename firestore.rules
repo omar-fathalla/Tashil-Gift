@@ -302,6 +302,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // C-05 campaign drafts: staff only. Reps, branches, partners and the
+    // portals never read events from here, so a draft stays out of every
+    // claim, receipt check, stat and the auto-close job until it is published.
+    match /event_drafts/{draftId} {
+      allow read, write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
