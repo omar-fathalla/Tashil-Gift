@@ -21,7 +21,7 @@
 | GitHub secret للنشر | `FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT` | `FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV` |
 | Workflow | `deploy-production.yml` (push على `main`) | `dev-preview.yml` (PR و push على `dev`) و `dev-deploy.yml` (يدوي) |
 | البيانات | حقيقية | وهمية من `tool/seed_dev.js` |
-| Firestore | `me-central1` | `me-central1` (لازم نفس المنطقة) |
+| Firestore | `me-central1` | `eur3` (اتعمل كده ومش هيتغير. الفرق بيأثر على السرعة بس، مش على الـ rules أو الكود) |
 | Functions | `us-central1` | `us-central1` |
 
 ### الملفات المهمة
@@ -30,7 +30,7 @@
 |---|---|
 | `.firebaserc` | aliases: `default` و `prod` = `tashil-gift`، و `dev` = `tashil-gift-dev`. الـ default فضل prod، والـ CI دايمًا بيكتب `--project` صريح. |
 | `lib/core/config/app_env.dart` | قراءة `APP_ENV` (الافتراضي prod). أي قيمة غلط زي `dve` بتوقف التطبيق بدل ما يشتغل على الإنتاج. |
-| `lib/firebase_options_dev.dart` | إعدادات Firebase بتاعة dev. **فيها `TODO_` لحد ما نحط القيم الحقيقية** (خطوة 5). |
+| `lib/firebase_options_dev.dart` | إعدادات Firebase بتاعة dev. فيها الـ config الحقيقي بتاع الـ web app `tashil-gift-dev-web` (خطوة 5). لو أي قيمة رجعت `TODO_`، نسخة dev بتقف وما بتكلمش الإنتاج. |
 | `lib/core/config/firebase_env_options.dart` | بيختار الإعدادات حسب البيئة. نسخة dev من غير إعدادات بتعرض رسالة وما بتكلمش الإنتاج أبدًا. |
 | `lib/core/widgets/env_badge.dart` | شريط DEV. |
 | `functions/env_config.js` | القيم اللي بتختلف بين البيئتين في Functions (رابط الموقع، الـ origins المسموحة للـ WAHA proxy). الإنتاج بيستخدم نفس القيم القديمة بالظبط. |
@@ -91,6 +91,8 @@ https://console.cloud.google.com/security/secret-manager?project=tashil-gift-dev
 1. Project settings ← Your apps ← **Add app** ← Web، وسمّيه `Tashil Gift DEV`:
    https://console.firebase.google.com/project/tashil-gift-dev/settings/general
 2. انسخ `firebaseConfig` (apiKey و appId و messagingSenderId) وابعتهولي. الـ web config مش secret، وأنا هحطه في `lib/firebase_options_dev.dart` مكان الـ `TODO_` في PR صغير.
+
+> ✅ اتعملت يوم 2026-11-25: الـ web app اسمه `tashil-gift-dev-web` (appId `1:871169518648:web:0ef2437d5b7183e299cacd`)، والقيم متحطوطة في `lib/firebase_options_dev.dart`.
 
 ### خطوة 6 — Authorized domains و Browser key (TAG-5 و TAG-6)
 1. Authentication ← Settings ← Authorized domains: لازم يكون فيها `tashil-gift-dev.web.app` و `tashil-gift-dev.firebaseapp.com` و `localhost`:

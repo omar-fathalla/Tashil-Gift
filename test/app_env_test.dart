@@ -79,6 +79,21 @@ void main() {
       expect(DevFirebaseOptions.web.authDomain, isNot(startsWith('tashil-gift.')));
     });
 
+    test('dev web config is filled in with the tashil-gift-dev web app', () {
+      final o = DevFirebaseOptions.web;
+      expect(DevFirebaseOptions.isConfigured, isTrue);
+      expect(o.messagingSenderId, '871169518648');
+      expect(o.appId, startsWith('1:871169518648:web:'));
+      expect(o.authDomain, 'tashil-gift-dev.firebaseapp.com');
+      expect(o.storageBucket, 'tashil-gift-dev.firebasestorage.app');
+      // Never the production web app.
+      final prod = DefaultFirebaseOptions.web;
+      expect(o.apiKey, isNot(prod.apiKey));
+      expect(o.appId, isNot(prod.appId));
+      expect(o.messagingSenderId, isNot(prod.messagingSenderId));
+      expect(firebaseOptionsFor(AppEnvironment.dev, isWeb: true), same(o));
+    });
+
     test('labels and origins per environment', () {
       expect(AppEnv.labelOf(AppEnvironment.dev), 'dev');
       expect(AppEnv.projectIdOf(AppEnvironment.dev), 'tashil-gift-dev');

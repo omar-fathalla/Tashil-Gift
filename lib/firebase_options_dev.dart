@@ -4,12 +4,12 @@
 // (see lib/core/config/firebase_env_options.dart). Production builds never
 // read this file.
 //
-// TODO(TAG-3/TAG-8): fill in the real web config of the `tashil-gift-dev` web
-// app (Firebase console -> Project settings -> Your apps -> Web app ->
-// SDK setup and configuration -> Config). Firebase web config is not a
-// secret, but the values below must come from that console page; do not
-// invent them. Until every `TODO_` value is replaced, a dev build refuses to
-// start (and CI skips the dev deploy) instead of falling back to production.
+// Values come from the `tashil-gift-dev-web` web app (Firebase console ->
+// Project settings -> Your apps -> Web app -> SDK setup and configuration ->
+// Config), registered 2026-11-25. Firebase web config is public, not a
+// secret. If a value is ever reset to a `TODO_` placeholder, a dev build
+// refuses to start (and CI skips the dev deploy) instead of falling back to
+// production.
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 
@@ -18,9 +18,9 @@ class DevFirebaseOptions {
   static const String placeholderPrefix = 'TODO_';
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'TODO_DEV_WEB_API_KEY',
-    appId: 'TODO_DEV_WEB_APP_ID',
-    messagingSenderId: 'TODO_DEV_MESSAGING_SENDER_ID',
+    apiKey: 'AIzaSyBvyzS6DuwJ1I5CST1wBta3YTPkA7re5Qc',
+    appId: '1:871169518648:web:0ef2437d5b7183e299cacd',
+    messagingSenderId: '871169518648',
     projectId: 'tashil-gift-dev',
     authDomain: 'tashil-gift-dev.firebaseapp.com',
     storageBucket: 'tashil-gift-dev.firebasestorage.app',
