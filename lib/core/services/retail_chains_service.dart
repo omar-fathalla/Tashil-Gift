@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'firebase_service.dart';
 import 'chain_products_intelligence_service.dart';
 import '../utils/arabic_numbers_utils.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
+import '../../features/admin/domain/campaign_save_confirmation.dart' show WriteNotConfirmedException;
 
 final retailChainsServiceProvider = Provider<RetailChainsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -112,7 +114,11 @@ class RetailChainsService {
   /// Adds a new retail chain.
   /// Returns `true` if duplicate was detected and addition was rejected.
   /// Returns `false` on successful addition of new unique chain.
-  Future<bool> addRetailChain(RetailChainModel chain) async {
+  ///
+  /// N-01: with [confirmWrite] the write must be acknowledged by the server
+  /// within the wait; otherwise [WriteNotConfirmedException] is thrown with
+  /// the document path (no silent success).
+  Future<bool> addRetailChain(RetailChainModel chain, {bool confirmWrite = false}) async {
     final cleanSlug = chain.slug.toLowerCase().trim().toEnglishDigits().replaceAll(RegExp(r'\s+'), '-');
     final deterministicId = cleanSlug.isNotEmpty ? cleanSlug : chain.name.toLowerCase().trim().toEnglishDigits().replaceAll(RegExp(r'\s+'), '-');
     
@@ -138,12 +144,28 @@ class RetailChainsService {
       createdAt: chain.createdAt ?? DateTime.now(),
     );
 
-    await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
-    );
+    final write = docRef.set(toSave.toFirestore(), SetOptions(merge: true));
+    if (confirmWrite) {
+      await _confirmedWrite(write, docRef.path);
+    } else {
+      await write.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
+    }
 
     return false;
+  }
+
+  /// N-01: waits for the server; a write still pending after the wait throws
+  /// [WriteNotConfirmedException] instead of counting as saved.
+  Future<void> _confirmedWrite(Future<void> write, String path) async {
+    unawaited(write.then((_) {}, onError: (Object _) {}));
+    try {
+      await write.timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      throw WriteNotConfirmedException(path);
+    }
   }
 
   Future<void> updateRetailChain(RetailChainModel chain) async {
@@ -306,7 +328,9 @@ class RetailChainsService {
   /// Adds a branch with strict deduplication validation.
   /// If a branch with the same code, name, or storeId already exists in this chain,
   /// the addition is rejected (returns `true` for isDuplicate) and no duplicate doc is created.
-  Future<bool> addBranch(BranchModel branch) async {
+  ///
+  /// N-01: see [addRetailChain] for [confirmWrite].
+  Future<bool> addBranch(BranchModel branch, {bool confirmWrite = false}) async {
     final chainId = branch.retailChainId.trim().toLowerCase();
     final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
     final cleanName = branch.branchName.trim().toLowerCase();
@@ -347,10 +371,15 @@ class RetailChainsService {
       createdAt: branch.createdAt ?? DateTime.now(),
     );
 
-    await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
-    );
+    final write = docRef.set(toSave.toFirestore(), SetOptions(merge: true));
+    if (confirmWrite) {
+      await _confirmedWrite(write, docRef.path);
+    } else {
+      await write.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
+    }
 
     // Update branches count in parent chain
     await _recalculateChainBranchesCount(branch.retailChainId);
