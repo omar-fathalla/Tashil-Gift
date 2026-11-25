@@ -7,6 +7,7 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../domain/event_model.dart';
 import 'create_event_screen.dart';
+import 'widgets/campaign_drafts_sheet.dart';
 import 'campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
 import '../../client_portal/presentation/client_receipt_upload_screen.dart';
@@ -1198,6 +1199,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     const SizedBox(width: M3Spacing.sm),
                   ],
+                  // C-05: saved campaign drafts (staff only, never shown to reps).
+                  TextButton.icon(
+                    onPressed: () async {
+                      await CampaignDraftsSheet.show(context);
+                      if (mounted) setState(() {});
+                    },
+                    icon: const Icon(Icons.inventory_outlined),
+                    label: Text(isAr ? 'المسودات' : 'Drafts'),
+                    style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                  ),
+                  const SizedBox(width: M3Spacing.xs),
                   if (!isFabLayout)
                     FilledButton.icon(
                       onPressed: _openCreateEventScreen,
