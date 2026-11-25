@@ -12,6 +12,8 @@ const _pageFiles = [
   'lib/features/admin/presentation/widgets/campaign_try_receipt_dialog.dart',
   'lib/features/admin/presentation/widgets/campaign_drafts_sheet.dart',
   'lib/features/admin/domain/campaign_activation_review.dart',
+  'lib/features/admin/domain/campaign_save_confirmation.dart',
+  'lib/features/admin/presentation/widgets/campaign_save_pending_banner.dart',
 ];
 
 /// Word → why it is not allowed on screen.
