@@ -13,6 +13,7 @@
  */
 const admin = require("../admin_sdk");
 const { evaluateClaimEligibility, isCampaignEnded, campaignWindow, toMillis } = require("../campaign_eligibility");
+const { withCampaignContent } = require("../campaign_content");
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -48,7 +49,8 @@ async function main() {
   const events = await db.collection("events").where("isActive", "==", true).get();
   const report = [];
   for (const doc of events.docs) {
-    const event = doc.data() || {};
+    // TAG-62: large campaigns keep requiredProducts in events/{id}/content.
+    const event = await withCampaignContent(db, doc.id, doc.data() || {}, { prompt: false });
     const receipts = await db.collection("receipts_transactions").where("campaignId", "==", doc.id).limit(limit).get();
     const byReason = {};
     const samples = [];

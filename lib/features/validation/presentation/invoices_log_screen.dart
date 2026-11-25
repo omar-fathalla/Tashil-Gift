@@ -24,6 +24,7 @@ import '../../admin/domain/retail_chain_model.dart';
 import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../admin/data/campaign_content_repository.dart';
 import '../../admin/domain/event_model.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
@@ -1698,6 +1699,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
     final currentUser = ref.read(firebaseAuthProvider).currentUser;
     final aiService = ref.read(aiReceiptServiceProvider);
     final productsService = ref.read(companyProductsServiceProvider);
+    // TAG-62: products/prompt may be in events/{id}/content (no read when inline).
+    final contentRepo = CampaignContentRepository(firestore);
+    activeEvent = await contentRepo.hydrate(activeEvent);
+    companyEvents = await contentRepo.hydrateAll(companyEvents);
     final retailChainsService = ref.read(retailChainsServiceProvider);
 
     // Collect all image URLs & storage paths (supporting multi-part receipts)
