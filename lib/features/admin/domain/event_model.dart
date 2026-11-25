@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/services/company_gifts_service.dart';
 import '../../../../core/utils/receipt_date_window.dart';
+import 'campaign_content.dart';
 
 /// Represents a specific quantity of an inventory gift allocated to a promotional rule
 class LinkedGiftAllocation {
@@ -636,6 +637,12 @@ class EventModel {
   final double minimumSpend;
   final List<String> requiredProducts;
   final String customPrompt;
+
+  /// TAG-56: where [requiredProducts] / [customPrompt] are stored outside the
+  /// campaign document (null for a legacy campaign), and whether they were
+  /// already loaded from there (CampaignContentStore.hydrate).
+  final CampaignContentPointer? contentPointer;
+  final bool contentLoaded;
   final String welcomeTitle;
   final String welcomeMessage;
   final String termsAndConditions;
@@ -731,6 +738,8 @@ class EventModel {
     required this.minimumSpend,
     this.requiredProducts = const [],
     this.customPrompt = '',
+    this.contentPointer,
+    this.contentLoaded = false,
     this.welcomeTitle = '',
     this.welcomeMessage = '',
     this.termsAndConditions = '',
@@ -1042,6 +1051,7 @@ class EventModel {
       minimumSpend: (data['minimumSpend'] as num?)?.toDouble() ?? 0.0,
       requiredProducts: List<String>.from(data['requiredProducts'] ?? []),
       customPrompt: data['customPrompt'] ?? '',
+      contentPointer: CampaignContentPointer.fromEventData(data),
       welcomeTitle: data['welcomeTitle'] ?? '',
       welcomeMessage: data['welcomeMessage'] ?? '',
       termsAndConditions: data['termsAndConditions'] ?? '',
@@ -1160,6 +1170,14 @@ class EventModel {
     'customAgencyCredentialVersion',
   };
 
+  /// Number of target products, also when they are not loaded yet.
+  int get requiredProductsCountForDisplay =>
+      requiredProducts.isNotEmpty || contentLoaded ? requiredProducts.length : (contentPointer?.productsCount ?? 0);
+
+  /// Whether the campaign has an AI prompt, also when it is not loaded yet.
+  bool get hasCustomPrompt =>
+      customPrompt.isNotEmpty || (!contentLoaded && (contentPointer?.promptLength ?? 0) > 0);
+
   /// Create payload. [createdAt] is a server timestamp when the model has none.
   Map<String, dynamic> toFirestore() {
     return {
@@ -1233,6 +1251,8 @@ class EventModel {
     double? minimumSpend,
     List<String>? requiredProducts,
     String? customPrompt,
+    CampaignContentPointer? contentPointer,
+    bool? contentLoaded,
     String? welcomeTitle,
     String? welcomeMessage,
     String? termsAndConditions,
@@ -1275,6 +1295,8 @@ class EventModel {
       minimumSpend: minimumSpend ?? this.minimumSpend,
       requiredProducts: requiredProducts ?? this.requiredProducts,
       customPrompt: customPrompt ?? this.customPrompt,
+      contentPointer: contentPointer ?? this.contentPointer,
+      contentLoaded: contentLoaded ?? this.contentLoaded,
       welcomeTitle: welcomeTitle ?? this.welcomeTitle,
       welcomeMessage: welcomeMessage ?? this.welcomeMessage,
       termsAndConditions: termsAndConditions ?? this.termsAndConditions,

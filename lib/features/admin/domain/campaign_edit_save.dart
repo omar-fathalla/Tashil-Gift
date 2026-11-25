@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'campaign_content.dart';
 import 'event_model.dart';
 
 /// Campaign edit refused before any write (Arabic message for the admin).
@@ -247,10 +248,22 @@ class CampaignEditSave {
   }) async {
     final ref = firestore.collection('events').doc(opened.id);
     final attempt = CampaignEditAttempt(draft: draft, opened: opened, updatedBy: updatedBy);
+    final content = ref.collection(CampaignContentLayout.subcollection);
     await firestore.runTransaction<void>((tx) async {
       final snap = await tx.get(ref);
-      final patch = attempt.plan(snap.exists ? snap.data() : null);
-      if (patch != null) tx.update(ref, patch);
+      final current = snap.exists ? snap.data() : null;
+      final patch = attempt.plan(current);
+      if (patch == null) return;
+      // TAG-56: changed products / prompt go to events/{id}/content chunks,
+      // in the same transaction as the stock-checked patch.
+      final writes = CampaignContentLayout.splitEditPatch(patch: patch, draft: draft, currentData: current!);
+      tx.update(ref, patch);
+      if (writes != null) {
+        writes.docs.forEach((id, data) => tx.set(content.doc(id), data));
+        for (final id in writes.deleteIds) {
+          tx.delete(content.doc(id));
+        }
+      }
     }, timeout: const Duration(seconds: 30));
     attempt.throwIfRejected();
   }

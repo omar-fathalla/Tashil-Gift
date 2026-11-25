@@ -295,6 +295,51 @@ describe("staff and partner claims", () => {
   });
 });
 
+describe("TAG-56 campaign content chunks", () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const id of ["camp-1", "camp-off", "other-camp"]) {
+        await setDoc(doc(db, `events/${id}/content/products_0`), { kind: "products", index: 0, revision: 1, items: ["Lux"] });
+        await setDoc(doc(db, `events/${id}/content/prompt_0`), { kind: "prompt", index: 0, revision: 1, text: "p" });
+      }
+    });
+  });
+
+  test("admins read and write content", async () => {
+    for (const db of [admin(), superAdmin()]) {
+      await assertSucceeds(getDoc(doc(db, "events/camp-off/content/products_0")));
+      await assertSucceeds(getDocs(collection(db, "events/camp-1/content")));
+      await assertSucceeds(setDoc(doc(db, "events/camp-1/content/products_1"), { kind: "products", index: 1, revision: 1, items: [] }));
+      await assertSucceeds(deleteDoc(doc(db, "events/camp-1/content/products_1")));
+    }
+  });
+
+  test("anonymous reps read content of an active campaign only, and never write", async () => {
+    await assertSucceeds(getDocs(collection(anon(), "events/camp-1/content")));
+    await assertSucceeds(getDoc(doc(anon(), "events/camp-1/content/prompt_0")));
+    await assertFails(getDocs(collection(anon(), "events/camp-off/content")));
+    await assertFails(getDoc(doc(anon(), "events/camp-off/content/prompt_0")));
+    await assertFails(setDoc(doc(anon(), "events/camp-1/content/products_0"), { items: ["x"], revision: 1 }));
+    await assertFails(deleteDoc(doc(anon(), "events/camp-1/content/products_0")));
+  });
+
+  test("partners read their own company's content only, and never write", async () => {
+    for (const db of [partner(), partnerOps()]) {
+      await assertSucceeds(getDocs(collection(db, "events/camp-1/content")));
+      await assertSucceeds(getDoc(doc(db, "events/camp-off/content/products_0")));
+      await assertFails(getDocs(collection(db, "events/other-camp/content")));
+      await assertFails(setDoc(doc(db, "events/camp-1/content/products_0"), { items: ["x"], revision: 1 }));
+    }
+  });
+
+  test("signed-out clients cannot read or write content", async () => {
+    const unauth = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(unauth, "events/camp-1/content")));
+    await assertFails(setDoc(doc(unauth, "events/camp-1/content/products_0"), { items: [] }));
+  });
+});
+
 describe("C-05 campaign drafts", () => {
   test("admin and super_admin can create, read, list, update and delete drafts", async () => {
     for (const db of [admin(), superAdmin()]) {

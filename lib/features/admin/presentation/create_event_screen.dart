@@ -22,6 +22,7 @@ import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../../../core/services/partner_portal_auth_service.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
+import '../domain/campaign_content.dart';
 import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
@@ -4426,7 +4427,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final outcome = await _saveFlow.run(
         target: target,
         write: isNew
-            ? () => firestore.collection('events').doc(eventId).set(event.toFirestore())
+            // TAG-56: products and prompt go to events/{id}/content in the same batch.
+            ? () => CampaignContentStore(firestore).create(eventId, event)
             // C-02: transaction on the stored campaign; only changed fields
             // are written and stock rows are merged from fresh data.
             : () => CampaignEditSave.save(

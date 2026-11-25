@@ -10,6 +10,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { planConsumingClaim } = require("./consuming_spend_ladder");
 const { exclusiveLadderUnits } = require("./exclusive_spend_ladder");
 const { evaluateClaimEligibility, ELIGIBILITY_REASONS, REASONS } = require("./campaign_eligibility");
+const { withEventContent } = require("./campaign_content");
 const admin = require("./admin_sdk");
 
 const callableOptions = {
@@ -840,7 +841,7 @@ async function applyCampaignPrizeClaim(db, input) {
     if (!eventSnap.exists) {
       throw new HttpsError("not-found", "Campaign not found.");
     }
-    const event = eventSnap.data() || {};
+    let event = eventSnap.data() || {};
     if (event.isActive !== true && !staff) {
       throw new HttpsError("failed-precondition", "Campaign is not active.", { reason: REASONS.CAMPAIGN_INACTIVE });
     }
@@ -887,6 +888,12 @@ async function applyCampaignPrizeClaim(db, input) {
     // the stored campaign and receipt before any stock is touched.
     let serverUnits = null;
     if (receipt && decrements.length > 0 && !confirmOnly && !staff) {
+      // TAG-56: products may live in events/{id}/content (read before any write).
+      try {
+        event = await withEventContent(db, eventId, event, { tx });
+      } catch (err) {
+        throw new HttpsError("unavailable", "تعذر تحميل منتجات الحملة، جرّب تاني.");
+      }
       const verdict = evaluateClaimEligibility({ event, receipt, nowMs, system });
       if (!verdict.ok) {
         throw new HttpsError("failed-precondition", verdict.message, Object.assign({ reason: verdict.code }, verdict.details));

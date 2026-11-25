@@ -25,6 +25,7 @@ import '../../../core/constants/country_currency_config.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/campaign_content.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/widgets/portal_screen_header_card.dart';
 import '../../../core/widgets/interactive_receipt_viewer_dialog.dart';
@@ -1386,6 +1387,10 @@ ${productsStr.isNotEmpty ? '- $productsStr' : 'لا توجد منتجات مست
             : 'Associated campaign data not found.');
       }
       activeEvent ??= companyEvents.first;
+      // TAG-56: products and prompt may live in events/{id}/content.
+      final contentStore = CampaignContentStore(firestore);
+      companyEvents = await contentStore.hydrateAll(companyEvents);
+      activeEvent = await contentStore.hydrate(activeEvent);
 
       if (!isFullAiScan) {
         await _runQuickRuleRecheck(

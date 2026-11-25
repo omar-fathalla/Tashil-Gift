@@ -38,6 +38,7 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/animations/m3_motion.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/campaign_content.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../games/presentation/spin_the_wheel_screen.dart';
 import '../../games/presentation/scratch_card_screen.dart';
@@ -1059,6 +1060,13 @@ class _ClientReceiptUploadScreenState
         'ms': branchLoadWatch.elapsedMilliseconds,
         if (branchLoadError.isNotEmpty) 'error': branchLoadError,
       };
+
+      // TAG-56: products and prompt may live in events/{id}/content.
+      final contentStore = CampaignContentStore(ref.read(firestoreProvider));
+      _activeEvent = await contentStore.hydrate(_activeEvent!);
+      if (isMultiScan) {
+        _availableCompanyEvents = await contentStore.hydrateAll(_availableCompanyEvents);
+      }
 
       List<String> combinedRequiredProducts = [];
       List<PromotionalRuleItem> combinedPromotionalRules = [];

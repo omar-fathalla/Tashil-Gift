@@ -25,6 +25,7 @@ import '../../games/presentation/scratch_card_screen.dart';
 import '../../games/presentation/direct_gift_claim_screen.dart';
 import '../../games/presentation/choose_gift_screen.dart';
 import '../../admin/domain/event_model.dart';
+import '../../admin/domain/campaign_content.dart';
 import '../../admin/domain/retail_chain_model.dart';
 import '../../client_portal/presentation/widgets/campaign_gift_balance_dialog.dart';
 import '../../client_portal/presentation/widgets/campaign_brief_dialog.dart';
@@ -256,7 +257,7 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
       final firestore = ref.read(firestoreProvider);
       
       // Resolve active event
-      final EventModel activeEvent;
+      EventModel activeEvent;
       if (_activeEvent != null) {
         EventModel refreshed = _activeEvent!;
         try {
@@ -281,6 +282,8 @@ class _ValidationScreenState extends ConsumerState<ValidationScreen> {
         }
         activeEvent = EventModel.fromFirestore(eventsSnapshot.docs.first);
       }
+      // TAG-56: products and prompt may live in events/{id}/content.
+      activeEvent = await CampaignContentStore(firestore).hydrate(activeEvent);
 
       final aiService = ref.read(aiReceiptServiceProvider);
       final productsService = ref.read(companyProductsServiceProvider);

@@ -103,6 +103,15 @@ service cloud.firestore {
         || sameCompany(resource.data.companySlug);
       allow create, update, delete: if isAdmin();
 
+      // TAG-56: the campaign's product list and AI prompt (chunks). Readable by
+      // whoever can read the campaign itself; written by admins only.
+      match /content/{contentId} {
+        allow read: if isAdmin()
+          || (isAnonymous() && eventData(eventId).isActive == true)
+          || sameCompany(eventData(eventId).companySlug);
+        allow write: if isAdmin();
+      }
+
       match /sharded_counters/{counterId} {
         allow read: if isAdmin() || sameCompany(eventData(eventId).companySlug);
         allow write: if isAdmin();

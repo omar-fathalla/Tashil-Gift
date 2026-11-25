@@ -24,6 +24,7 @@ import '../../../../core/utils/error_handler.dart';
 import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../admin/domain/event_model.dart';
+import '../../../admin/domain/campaign_content.dart';
 import '../../../admin/domain/retail_chain_model.dart';
 import '../../../games/presentation/choose_gift_screen.dart';
 import '../../../games/presentation/spin_the_wheel_screen.dart';
@@ -2714,6 +2715,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
         companyEvents = [activeEvent ?? widget.event];
       }
       activeEvent ??= companyEvents.first;
+      // TAG-56: products and prompt may live in events/{id}/content.
+      final contentStore = CampaignContentStore(firestore);
+      companyEvents = await contentStore.hydrateAll(companyEvents);
+      activeEvent = await contentStore.hydrate(activeEvent);
 
       if (!isFullAiScan) {
         await _runQuickRuleRecheck(

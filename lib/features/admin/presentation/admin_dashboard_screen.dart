@@ -6,6 +6,8 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../domain/event_model.dart';
+import '../domain/campaign_content.dart';
+import 'widgets/campaign_content_loader.dart';
 import 'create_event_screen.dart';
 import 'widgets/campaign_drafts_sheet.dart';
 import 'campaign_reports_screen.dart';
@@ -1562,14 +1564,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     colorScheme: colorScheme,
                     tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة (يوم النهاية محسوب بتوقيت القاهرة)' : 'Campaign validity (end day inclusive, Cairo time)',
                   ),
-                if (event.requiredProducts.isNotEmpty)
+                if (event.requiredProductsCountForDisplay > 0)
                   _buildMetadataPill(
                     icon: Icons.inventory_2_outlined,
-                    label: '${isAr ? "الأصناف المستهدفة: " : "Target items: "}${amountFmt.format(event.requiredProducts.length)} ${isAr ? "صنفاً" : "items"}',
+                    label: '${isAr ? "الأصناف المستهدفة: " : "Target items: "}${amountFmt.format(event.requiredProductsCountForDisplay)} ${isAr ? "صنفاً" : "items"}',
                     colorScheme: colorScheme,
-                    tooltip: isAr
-                        ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
-                        : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
+                    // TAG-56: a list stored in events/{id}/content is not loaded here.
+                    tooltip: event.requiredProducts.isEmpty
+                        ? (isAr
+                            ? 'الأصناف المستهدفة (${event.requiredProductsCountForDisplay} صنف) محفوظة منفصلة؛ افتح تعديل الحملة لعرضها'
+                            : 'Target Products (${event.requiredProductsCountForDisplay} items) are stored separately; open the campaign editor to see them')
+                        : isAr
+                            ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
+                            : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
                   ),
               ],
             ),
@@ -1580,14 +1587,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               context,
               icon: Icons.auto_awesome_outlined,
               title: isAr ? 'برومبت الذكاء الاصطناعي' : 'AI verification prompt',
-              subtitle: event.customPrompt.isNotEmpty
+              subtitle: event.hasCustomPrompt
                   ? (isAr ? 'برومبت مخصص' : 'Custom prompt')
                   : (isAr ? 'البرومبت الافتراضي للنظام' : 'System default prompt'),
               children: [
                 Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: SelectableText(
-                    event.customPrompt.isNotEmpty ? event.customPrompt : (isAr ? 'يستخدم البرومبت الافتراضي الذكي للنظام' : 'Using smart system default prompt'),
+                    event.customPrompt.isNotEmpty
+                        ? event.customPrompt
+                        : event.hasCustomPrompt
+                            ? (isAr
+                                ? 'البرومبت محفوظ منفصل (${event.contentPointer?.promptLength ?? 0} حرف). دوس «نسخ البرومبت» أو افتح تعديل الحملة لعرضه.'
+                                : 'The prompt is stored separately (${event.contentPointer?.promptLength ?? 0} chars). Use Copy prompt or the editor to see it.')
+                            : (isAr ? 'يستخدم البرومبت الافتراضي الذكي للنظام' : 'Using smart system default prompt'),
                     style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
                   ),
                 ),
@@ -1596,8 +1609,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   alignment: AlignmentDirectional.centerEnd,
                   child: TextButton.icon(
                     style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: event.customPrompt));
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      String prompt = event.customPrompt;
+                      if (event.hasCustomPrompt && prompt.isEmpty) {
+                        try {
+                          prompt = (await CampaignContentStore(ref.read(firestoreProvider)).hydrate(event)).customPrompt;
+                        } catch (e) {
+                          messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+                          return;
+                        }
+                      }
+                      await Clipboard.setData(ClipboardData(text: prompt));
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(isAr ? 'تم نسخ البرومبت بنجاح!' : 'AI Prompt copied to clipboard!'),
@@ -1903,10 +1927,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       context: context,
                       label: isAr ? 'تعديل بيانات وشروط وبرومبت الحملة' : 'Edit Campaign Rules & Prompt',
                       icon: Icons.edit_note_rounded,
-                      onPressed: () {
+                      onPressed: () async {
+                        // TAG-56: products and prompt may live in events/{id}/content.
+                        final loaded = await loadCampaignContentForEdit(context, ref, event);
+                        if (loaded == null || !context.mounted) return;
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => CreateEventScreen(eventToEdit: event),
+                            builder: (context) => CreateEventScreen(eventToEdit: loaded),
                           ),
                         );
                       },

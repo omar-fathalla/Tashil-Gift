@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/services/firebase_service.dart';
 import '../../domain/campaign_draft.dart';
 import '../create_event_screen.dart';
+import 'campaign_content_loader.dart';
 
 /// C-05: staff list of saved campaign drafts (open to continue, or delete).
 class CampaignDraftsSheet extends ConsumerWidget {
@@ -24,7 +25,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
 
-  Future<void> _open(BuildContext context, CampaignDraft draft) async {
+  Future<void> _open(BuildContext context, WidgetRef ref, CampaignDraft draft) async {
     final nav = Navigator.of(context);
     if (draft.isEditDraft && draft.baseEvent == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -32,9 +33,14 @@ class CampaignDraftsSheet extends ConsumerWidget {
       );
       return;
     }
+    var base = draft.baseEvent;
+    if (base != null) {
+      base = await loadCampaignContentForEdit(context, ref, base);
+      if (base == null) return;
+    }
     nav.pop();
     await nav.push(MaterialPageRoute(
-      builder: (_) => CreateEventScreen(eventToEdit: draft.baseEvent, resumeDraft: draft),
+      builder: (_) => CreateEventScreen(eventToEdit: base, resumeDraft: draft),
     ));
   }
 
@@ -96,7 +102,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
                         ].join(' · '),
                         style: GoogleFonts.cairo(fontSize: 12),
                       ),
-                      onTap: () => _open(context, d),
+                      onTap: () => _open(context, ref, d),
                       trailing: IconButton(
                         tooltip: 'حذف المسودة',
                         icon: const Icon(Icons.delete_outline_rounded),
