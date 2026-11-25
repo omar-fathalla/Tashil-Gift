@@ -642,6 +642,11 @@ class EventModel {
   final DateTime? startDate;
   final DateTime? endDate;
   final bool isActive;
+
+  /// TAG-18: an admin turned the campaign off from the dashboard switch, so the
+  /// daily auto-activate leaves it off. Read-only here: only the switch writes it
+  /// (never the create/edit save).
+  final bool pausedManually;
   final DateTime? createdAt;
 
   /// Independent control toggles for Promoter, Agency Operations, and Brand Executive Portals
@@ -737,6 +742,7 @@ class EventModel {
     this.startDate,
     this.endDate,
     this.isActive = true,
+    this.pausedManually = false,
     this.createdAt,
     this.isPromoterActive = true,
     this.isAgencyActive = true,
@@ -1056,6 +1062,7 @@ class EventModel {
               ? data['endDate'] as DateTime
               : null,
       isActive: data['isActive'] ?? true,
+      pausedManually: data['pausedManually'] == true,
       createdAt: data['createdAt'] is Timestamp
           ? (data['createdAt'] as Timestamp).toDate()
           : data['createdAt'] is DateTime
@@ -1239,6 +1246,7 @@ class EventModel {
     DateTime? startDate,
     DateTime? endDate,
     bool? isActive,
+    bool? pausedManually,
     DateTime? createdAt,
     bool? isPromoterActive,
     bool? isAgencyActive,
@@ -1281,6 +1289,7 @@ class EventModel {
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       isActive: isActive ?? this.isActive,
+      pausedManually: pausedManually ?? this.pausedManually,
       createdAt: createdAt ?? this.createdAt,
       isPromoterActive: isPromoterActive ?? this.isPromoterActive,
       isAgencyActive: isAgencyActive ?? this.isAgencyActive,

@@ -13,6 +13,7 @@ const {
 } = require("./whatsapp_webhook_admin");
 const { handleSharePreview, SHARE_PREVIEW_MAX_INSTANCES } = require("./share_preview");
 const { autoCloseExpiredCampaigns } = require("./auto_close_campaigns");
+const { autoActivateCampaigns } = require("./auto_activate_campaigns");
 
 // Firebase Secrets (set via: firebase functions:secrets:set NAME)
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -363,8 +364,14 @@ exports.wahaWebhook = onRequest({
 });
 
 /**
- * Daily end-date auto-close (Cairo 00:10, right after the day-after-end cutoff).
- * Closes campaigns whose end date has passed; never reacts to stock levels.
+ * Daily campaign status sweep (Cairo 00:10, right after the day cutoff).
+ *  1. auto-close: closes campaigns whose end date has passed; never reacts to
+ *     stock levels and never sets pausedManually.
+ *  2. auto-activate (TAG-18): turns on campaigns that are off, were not stopped
+ *     by an admin (pausedManually !== true) and whose dates cover today.
+ * Both run on the same tick (one Cloud Scheduler job, no extra cost). The
+ * export name stays autoCloseExpiredCampaigns so a deploy updates the existing
+ * function instead of deleting it. A failure in one step does not skip the other.
  */
 exports.autoCloseExpiredCampaigns = onSchedule(
   {
@@ -376,7 +383,20 @@ exports.autoCloseExpiredCampaigns = onSchedule(
     retryCount: 0,
   },
   async () => {
-    await autoCloseExpiredCampaigns(db);
+    const failures = [];
+    const steps = [
+      ["autoCloseExpiredCampaigns", autoCloseExpiredCampaigns],
+      ["autoActivateCampaigns", autoActivateCampaigns],
+    ];
+    for (const [name, step] of steps) {
+      try {
+        await step(db);
+      } catch (err) {
+        failures.push(name);
+        console.error(JSON.stringify({ severity: "ERROR", fn: name, action: "failed", message: String((err && err.message) || err) }));
+      }
+    }
+    if (failures.length) throw new Error(`campaign status sweep failed: ${failures.join(", ")}`);
   },
 );
 

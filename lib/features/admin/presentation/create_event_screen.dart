@@ -4403,6 +4403,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         preview,
         isNew: widget.eventToEdit == null,
         willBeActive: widget.eventToEdit?.isActive ?? true,
+        pausedManually: widget.eventToEdit?.pausedManually ?? false,
       ),
     );
     if (!confirmed || !mounted) return;

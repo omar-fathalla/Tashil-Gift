@@ -6,6 +6,7 @@ import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../domain/event_model.dart';
+import '../domain/campaign_status_toggle.dart';
 import 'create_event_screen.dart';
 import 'widgets/campaign_drafts_sheet.dart';
 import 'campaign_reports_screen.dart';
@@ -1437,7 +1438,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     Future<void> toggleActive(bool value) async {
       if (firestore != null) {
-        await firestore.collection('events').doc(event.id).update({'isActive': value});
+        // TAG-18: an admin "off" is a manual pause, so the daily auto-activate
+        // leaves it alone; "on" clears it. Who and when are recorded.
+        final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+        await firestore
+            .collection('events')
+            .doc(event.id)
+            .update(CampaignStatusToggle.patch(active: value, uid: uid));
       }
       if (event.companySlug.isNotEmpty) {
         await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
