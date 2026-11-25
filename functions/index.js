@@ -125,6 +125,11 @@ exports.sendWinnerWhatsApp = onCall(
   (request) => sendWinnerWhatsAppHandler(db, request, wahaApiKey.value()),
 );
 
+const { dryRunCampaignEligibilityHandler } = require("./campaign_dry_run");
+/** C-05: staff-only "try with receipt". Same eligibility check as a claim; never writes. */
+exports.dryRunCampaignEligibility = onCall(callableOptions, (request) =>
+  dryRunCampaignEligibilityHandler(db, request));
+
 const { updateBranchAllocationsHandler } = require("./branch_allocations");
 /** Branch balances save + weekend settlement (company portal ops users and staff). */
 exports.updateBranchAllocations = onCall(callableOptions, (request) =>
