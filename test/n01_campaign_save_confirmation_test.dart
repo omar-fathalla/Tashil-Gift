@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:al_mraay/features/admin/domain/campaign_save_confirmation.dart';
+import 'package:al_mraay/features/admin/domain/campaign_save_failure_log.dart';
 import 'package:al_mraay/features/admin/presentation/widgets/campaign_save_pending_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 PendingCampaignSave _newTarget(String id) =>
-    PendingCampaignSave(eventId: id, isNew: true, updatedBy: 'admin1', startedAt: DateTime(2026, 11, 25, 13));
+    PendingCampaignSave(eventId: id, isNew: true, updatedBy: 'admin1', saveToken: 'tok-$id');
 
 /// Mimics the screen: links/QR are shown only from the confirmed branch.
 class _FakeScreen {
@@ -128,19 +129,159 @@ void main() {
     });
   });
 
-  group('N-01 edit confirmation', () {
-    final started = DateTime(2026, 11, 25, 13);
-    final edit = PendingCampaignSave(eventId: 'e1', isNew: false, updatedBy: 'admin1', startedAt: started);
+  group('N-01 edit confirmation (TAG-43: by save token, not the PC clock)', () {
+    const edit = PendingCampaignSave(eventId: 'e1', isNew: false, updatedBy: 'admin1', saveToken: 'tok-123');
 
-    test('confirmed only when the server copy was updated by this admin after the save started', () {
+    test('confirmed only when the server copy carries this save token', () {
       expect(edit.isConfirmedBy(null), isFalse);
-      expect(
-        edit.isConfirmedBy({'updatedBy': 'admin1', 'updatedAt': Timestamp.fromDate(started.subtract(const Duration(minutes: 1)))}),
-        isFalse,
-      );
-      expect(edit.isConfirmedBy({'updatedBy': 'other', 'updatedAt': Timestamp.fromDate(started.add(const Duration(seconds: 3)))}), isFalse);
       expect(edit.isConfirmedBy({'updatedBy': 'admin1'}), isFalse);
-      expect(edit.isConfirmedBy({'updatedBy': 'admin1', 'updatedAt': Timestamp.fromDate(started.add(const Duration(seconds: 3)))}), isTrue);
+      expect(edit.isConfirmedBy({'updatedBy': 'admin1', kCampaignSaveTokenField: 'tok-old'}), isFalse);
+      expect(edit.isConfirmedBy({'updatedBy': 'admin1', kCampaignSaveTokenField: 'tok-123'}), isTrue);
+    });
+
+    test('a PC clock far ahead of the server no longer hides a saved edit', () {
+      // Before TAG-43 this compared server updatedAt with DateTime.now() on
+      // the PC: a clock 10 minutes fast reported "not yet" forever.
+      final serverTime = Timestamp.fromDate(DateTime(2026, 11, 25, 13, 0));
+      expect(
+        edit.isConfirmedBy({'updatedBy': 'admin1', 'updatedAt': serverTime, kCampaignSaveTokenField: 'tok-123'}),
+        isTrue,
+      );
+    });
+
+    test('tokens are unique per save', () {
+      final tokens = {for (var i = 0; i < 200; i++) newCampaignSaveToken()};
+      expect(tokens.length, 200);
+    });
+  });
+
+  group('TAG-43 late outcome of an unconfirmed write', () {
+    test('a write that lands after the wait confirms itself (links shown)', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 20));
+      final c = Completer<void>();
+      final late = <String>[];
+      final outcome = await flow.run(
+        target: _newTarget('e1'),
+        write: () => c.future,
+        onLateSuccess: (t) => late.add(t.eventId),
+        onLateError: (t, f, e) => fail('no error expected'),
+      );
+      expect(outcome, CampaignSaveOutcome.unconfirmed);
+      expect(flow.hasUnfinishedSave, isTrue);
+      c.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(late, ['e1']);
+      expect(flow.isPending, isFalse);
+      expect(flow.hasUnfinishedSave, isFalse);
+    });
+
+    test('a write that fails after the wait reports the real error code', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 20));
+      final c = Completer<void>();
+      CampaignSaveFailure? seen;
+      await flow.run(
+        target: _newTarget('e1'),
+        write: () => c.future,
+        onLateSuccess: (_) => fail('no success expected'),
+        onLateError: (t, f, e) => seen = f,
+      );
+      c.completeError(FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied', message: 'Missing or insufficient permissions.'));
+      await Future<void>.delayed(Duration.zero);
+      expect(seen?.code, 'permission-denied');
+      expect(seen?.late, isTrue);
+      expect(seen?.display, 'permission-denied: Missing or insufficient permissions.');
+      expect(flow.failure?.code, 'permission-denied');
+      expect(flow.isPending, isFalse);
+      expect(flow.hasUnfinishedSave, isFalse);
+    });
+
+    test('a non-Firebase late error keeps its type and text', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 20));
+      final c = Completer<void>();
+      CampaignSaveFailure? seen;
+      await flow.run(target: _newTarget('e1'), write: () => c.future, onLateError: (t, f, e) => seen = f);
+      c.completeError(StateError('boom'));
+      await Future<void>.delayed(Duration.zero);
+      expect(seen?.code, 'StateError');
+      expect(seen?.message, contains('boom'));
+    });
+
+    test('a late result of an older save is ignored once a newer save started', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 20));
+      final first = Completer<void>();
+      var lateCalls = 0;
+      await flow.run(target: _newTarget('e1'), write: () => first.future, onLateSuccess: (_) => lateCalls++);
+      final second = Completer<void>();
+      await flow.run(target: _newTarget('e1'), write: () => second.future, onLateSuccess: (_) => lateCalls++);
+      first.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(lateCalls, 0, reason: 'the newer save decides');
+      expect(flow.isPending, isTrue);
+      second.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(lateCalls, 1);
+    });
+
+    test('after «تحقق» confirmed, a late success does not finish the save twice', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 20));
+      final c = Completer<void>();
+      var lateCalls = 0;
+      await flow.run(target: _newTarget('e1'), write: () => c.future, onLateSuccess: (_) => lateCalls++);
+      expect(await flow.verify((id) async => {'eventName': 'x'}), CampaignVerifyResult.confirmed);
+      c.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(lateCalls, 0);
+    });
+
+    test('an error within the wait is kept as the failure and rethrown', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 50));
+      await expectLater(
+        flow.run(target: _newTarget('e1'), write: () async => throw FirebaseException(plugin: 'cloud_firestore', code: 'invalid-argument')),
+        throwsA(isA<FirebaseException>()),
+      );
+      expect(flow.failure?.code, 'invalid-argument');
+      expect(flow.hasUnfinishedSave, isFalse);
+    });
+
+    test('a quick success leaves nothing unfinished (no leave-page warning)', () async {
+      final flow = CampaignSaveFlow(wait: const Duration(milliseconds: 50));
+      expect(await flow.run(target: _newTarget('e1'), write: () async {}), CampaignSaveOutcome.confirmed);
+      expect(flow.hasUnfinishedSave, isFalse);
+    });
+  });
+
+  group('TAG-43 save failure log record', () {
+    test('only the fields the rules allow, clipped to their limits', () {
+      final rec = CampaignSaveFailureLog.record(
+        kind: CampaignSaveFailureLog.kindLateError,
+        isNew: true,
+        eventId: 'e1',
+        companySlug: '512',
+        uid: 'admin1',
+        elapsedMs: 16000,
+        payloadBytes: 300000,
+        failure: CampaignSaveFailure(code: 'unavailable', message: 'x' * 900, late: true),
+        userAgent: 'u' * 400,
+      );
+      expect(rec.keys.toSet(), CampaignSaveFailureLog.fields.toSet());
+      expect(rec['op'], 'create');
+      expect((rec['message'] as String).length, 500);
+      expect((rec['userAgent'] as String).length, 300);
+      expect(rec['createdAt'], isA<FieldValue>());
+    });
+
+    test('rules allow exactly the same fields', () {
+      final rules = File('firestore.rules').readAsStringSync();
+      final start = rules.indexOf('match /save_failures/');
+      expect(start, greaterThan(0));
+      final block = rules.substring(start, rules.indexOf('allow update, delete: if false;', start));
+      for (final f in CampaignSaveFailureLog.fields) {
+        expect(block.contains("'$f'"), isTrue, reason: f);
+      }
+    });
+
+    test('payload size estimate handles Firestore values', () {
+      expect(CampaignSaveFailureLog.approxBytes({'a': 'ب', 't': FieldValue.serverTimestamp()}), greaterThan(5));
     });
   });
 
@@ -163,6 +304,35 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('n01-verify-button')));
       expect(taps, 0);
       expect(find.text(CampaignSaveTexts.notYet), findsOneWidget);
+    });
+  });
+
+  group('TAG-43 banners', () {
+    Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+
+    testWidgets('pending banner shows the technical error and the clear button', (tester) async {
+      var cleared = 0;
+      await tester.pumpWidget(wrap(CampaignSavePendingBanner(
+        onVerify: () {},
+        errorDetail: 'unavailable: offline',
+        onClearPending: () => cleared++,
+      )));
+      expect(find.text('unavailable: offline'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tag43-clear-pending')));
+      expect(cleared, 1);
+    });
+
+    testWidgets('no clear button when not offered (non-web)', (tester) async {
+      await tester.pumpWidget(wrap(CampaignSavePendingBanner(onVerify: () {})));
+      expect(find.byKey(const ValueKey('tag43-clear-pending')), findsNothing);
+    });
+
+    testWidgets('failed banner keeps the real code on screen', (tester) async {
+      await tester.pumpWidget(wrap(const CampaignSaveFailedBanner(
+        failure: CampaignSaveFailure(code: 'permission-denied', message: 'Missing or insufficient permissions.', late: true),
+      )));
+      expect(find.text(CampaignSaveTexts.failedTitle), findsOneWidget);
+      expect(find.text('permission-denied: Missing or insufficient permissions.'), findsOneWidget);
     });
   });
 
@@ -189,6 +359,29 @@ void main() {
     test('verify reads from the server, not the cache', () {
       final conf = File('lib/features/admin/domain/campaign_save_confirmation.dart').readAsStringSync();
       expect(conf.contains('GetOptions(source: Source.server)'), isTrue);
+    });
+
+    test('TAG-43: the save token is written on create and edit', () {
+      expect(src.contains('kCampaignSaveTokenField: saveToken'), isTrue);
+      expect(src.contains('saveToken: saveToken,'), isTrue);
+      final edit = File('lib/features/admin/domain/campaign_edit_save.dart').readAsStringSync();
+      expect(edit.contains('patch[kCampaignSaveTokenField] = saveToken'), isTrue);
+    });
+
+    test('TAG-43: late outcome handled, failures logged, leave guard and clear action wired', () {
+      expect(src.contains('onLateSuccess:'), isTrue);
+      expect(src.contains('onLateError:'), isTrue);
+      expect(src.contains('CampaignSaveFailureLog.kindTimeout'), isTrue);
+      expect(src.contains('setLeavePageGuard(true)'), isTrue);
+      expect(src.contains('PopScope('), isTrue);
+      expect(src.contains('clearPendingFirestoreWrites('), isTrue);
+      final conf = File('lib/features/admin/domain/campaign_save_confirmation.dart').readAsStringSync();
+      expect(conf.contains("onError: (Object _) {}"), isFalse, reason: 'late errors must not be dropped');
+    });
+
+    test('TAG-43: Firestore web auto-detects long polling', () {
+      final fs = File('lib/core/services/firebase_service.dart').readAsStringSync();
+      expect(fs.contains('webExperimentalAutoDetectLongPolling: true'), isTrue);
     });
 
     test('quick-add chain/branch require server confirmation', () {

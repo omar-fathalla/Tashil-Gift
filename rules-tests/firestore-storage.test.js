@@ -517,3 +517,77 @@ describe("whatsapp campaign media storage", () => {
     await assertFails(deleteObject(ref(asPartner().storage(), adminPath)));
   });
 });
+
+describe("TAG-43 campaign save diagnostics", () => {
+  const failure = (overrides = {}) => ({
+    kind: "late_error",
+    op: "create",
+    code: "unavailable",
+    message: "Failed to get document because the client is offline.",
+    eventId: "evt-1",
+    companySlug: "512",
+    payloadBytes: 300000,
+    elapsedMs: 15000,
+    appVersion: "2.0.188+248",
+    userAgent: "Mozilla/5.0",
+    uid: "admin-1",
+    createdAt: serverTimestamp(),
+    ...overrides,
+  });
+
+  test("save_failures: admin create-only with small fixed fields", async () => {
+    const db = admin();
+    await assertSucceeds(setDoc(doc(db, "save_failures/f1"), failure()));
+    await assertSucceeds(getDoc(doc(db, "save_failures/f1")));
+    await assertFails(updateDoc(doc(db, "save_failures/f1"), { code: "x" }));
+    await assertFails(deleteDoc(doc(db, "save_failures/f1")));
+    await assertFails(setDoc(doc(db, "save_failures/f2"), failure({ uid: "someone-else" })));
+    await assertFails(setDoc(doc(db, "save_failures/f3"), failure({ extra: "no" })));
+    await assertFails(setDoc(doc(db, "save_failures/f4"), failure({ kind: "other" })));
+    await assertFails(setDoc(doc(db, "save_failures/f5"), failure({ message: "x".repeat(501) })));
+    await assertFails(setDoc(doc(db, "save_failures/f6"), failure({ createdAt: new Date(0) })));
+    await assertFails(setDoc(doc(partner(), "save_failures/f7"), failure({ uid: "partner-1" })));
+    await assertFails(setDoc(doc(anon(), "save_failures/f8"), failure({ uid: "rep-1" })));
+    await assertFails(getDoc(doc(partner(), "save_failures/f1")));
+  });
+
+  // Mohamed's case: a NEW Unilever campaign, no gift stock allocated, active
+  // at once, a long product list, saved after «تفعيل رغم التحذيرات».
+  test("new zero-stock active Unilever campaign (~300KB) is allowed in one write", async () => {
+    const db = admin();
+    const products = Array.from({ length: 500 }, (_, i) => `منتج يونيليفر رقم ${i} شامبو كلير ضد القشرة 400 مل`);
+    const rules = Array.from({ length: 120 }, (_, i) => ({
+      id: `rule-${i}`,
+      title: `قاعدة ${i}`,
+      products: products.slice(0, 40),
+      minimumSpend: 200,
+    }));
+    const event = {
+      eventName: "حمله منتجات شركه يونيلفر",
+      targetCompany: "يونيليفر",
+      companySlug: "512",
+      retailChainId: "fathalla",
+      retailChainName: "أسواق فتح الله",
+      branchIds: ["b1", "b2", "b3", "b4", "b5", "b6"],
+      isActive: true,
+      gameType: "instant",
+      minimumSpend: 200,
+      requiredProducts: products,
+      promotionalRules: rules,
+      allocatedPrizes: [],
+      allowComplementaryReceipts: true,
+      enableWhatsAppWinnerNotification: true,
+      createdAt: serverTimestamp(),
+      lastSaveToken: "tok-1",
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(event));
+    expect(bytes).toBeGreaterThan(250000);
+    const t0 = Date.now();
+    await assertSucceeds(setDoc(doc(db, "events/tag43-new"), event));
+    // The edit path writes the token with the changed fields.
+    await assertSucceeds(updateDoc(doc(db, "events/tag43-new"), { eventName: "renamed", updatedBy: "admin-1", updatedAt: serverTimestamp(), lastSaveToken: "tok-2" }));
+    console.log(`TAG-43 zero-stock create+edit of ${bytes} bytes: ${Date.now() - t0}ms`);
+    // Same doc for company "unilever" is equally allowed (rules do not look at the slug for admins).
+    await assertSucceeds(setDoc(doc(db, "events/tag43-new-2"), { ...event, companySlug: "unilever" }));
+  });
+});

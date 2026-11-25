@@ -20,6 +20,9 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../../../core/services/partner_portal_auth_service.dart';
+import '../../../core/services/firestore_pending_writes.dart';
+import '../../../core/update/page_reload.dart';
+import '../../../core/utils/leave_page_guard.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/campaign_stock_integrity.dart';
@@ -28,6 +31,7 @@ import '../domain/campaign_draft.dart';
 import '../domain/campaign_activation_review.dart';
 import '../domain/campaign_wording.dart';
 import '../domain/campaign_save_confirmation.dart';
+import '../domain/campaign_save_failure_log.dart';
 import '../domain/company_gift_model.dart';
 import '../domain/retail_chain_model.dart';
 import 'widgets/portal_credentials_dialog.dart';
@@ -216,6 +220,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   EventModel? _pendingSavedEvent;
   bool _verifyingSave = false;
   String? _verifyMessage;
+  // TAG-43: real error of the last save, and the browser leave-page guard.
+  CampaignSaveFailure? _saveFailure;
+  bool _leaveGuardActive = false;
 
   @override
   void initState() {
@@ -1733,6 +1740,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   @override
   void dispose() {
+    if (_leaveGuardActive) setLeavePageGuard(false);
     for (final controller in _chainBranchSearchControllers.values) {
       controller.dispose();
     }
@@ -4425,27 +4433,75 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final eventId = isNew
           ? _saveFlow.newCampaignId(() => firestore.collection('events').doc().id)
           : widget.eventToEdit!.id;
+      // TAG-43: a token unique to this save; «تحقق» finds it on the server
+      // copy, so confirmation never depends on the PC clock.
+      final saveToken = newCampaignSaveToken();
       final target = PendingCampaignSave(
         eventId: eventId,
         isNew: isNew,
         updatedBy: uid,
-        startedAt: DateTime.now(),
+        saveToken: saveToken,
       );
-      final outcome = await _saveFlow.run(
-        target: target,
-        write: isNew
-            ? () => firestore.collection('events').doc(eventId).set(event.toFirestore())
-            // C-02: transaction on the stored campaign; only changed fields
-            // are written and stock rows are merged from fresh data.
-            : () => CampaignEditSave.save(
-                  firestore: firestore,
-                  draft: event,
-                  opened: widget.eventToEdit!,
-                  updatedBy: uid,
-                ),
-      );
+      final createData = isNew
+          ? <String, dynamic>{...event.toFirestore(), kCampaignSaveTokenField: saveToken}
+          : null;
+      final payloadBytes = CampaignSaveFailureLog.approxBytes(createData ?? event.toFirestore());
+      final started = Stopwatch()..start();
+      Map<String, dynamic> logRecord(String kind, [CampaignSaveFailure? failure]) => CampaignSaveFailureLog.record(
+            kind: kind,
+            isNew: isNew,
+            eventId: eventId,
+            companySlug: event.companySlug,
+            uid: uid,
+            elapsedMs: started.elapsedMilliseconds,
+            payloadBytes: payloadBytes,
+            failure: failure,
+            userAgent: browserUserAgent(),
+          );
+      if (mounted) setState(() => _saveFailure = null);
+      _leaveGuardActive = true;
+      setLeavePageGuard(true);
+      final CampaignSaveOutcome outcome;
+      try {
+        outcome = await _saveFlow.run(
+          target: target,
+          write: isNew
+              ? () => firestore.collection('events').doc(eventId).set(createData!)
+              // C-02: transaction on the stored campaign; only changed fields
+              // are written and stock rows are merged from fresh data.
+              : () => CampaignEditSave.save(
+                    firestore: firestore,
+                    draft: event,
+                    opened: widget.eventToEdit!,
+                    updatedBy: uid,
+                    saveToken: saveToken,
+                  ),
+          onLateSuccess: (t) {
+            _syncLeaveGuard();
+            CampaignSaveFailureLog.send(firestore, logRecord(CampaignSaveFailureLog.kindLateSuccess));
+            _onLateSaveConfirmed(event, t.eventId);
+          },
+          onLateError: (t, failure, error) {
+            _syncLeaveGuard();
+            CampaignSaveFailureLog.send(firestore, logRecord(CampaignSaveFailureLog.kindLateError, failure));
+            _onLateSaveFailed(failure);
+          },
+        );
+      } catch (e) {
+        if (e is! CampaignEditRejected) {
+          CampaignSaveFailureLog.send(
+            firestore,
+            logRecord(CampaignSaveFailureLog.kindError, CampaignSaveFailure.from(e, late: false)),
+          );
+          if (mounted) setState(() => _saveFailure = CampaignSaveFailure.from(e, late: false));
+        }
+        _syncLeaveGuard();
+        rethrow;
+      }
+      _syncLeaveGuard();
 
       if (outcome == CampaignSaveOutcome.unconfirmed) {
+        CampaignSaveFailureLog.send(firestore, logRecord(CampaignSaveFailureLog.kindTimeout, _saveFlow.failure));
         if (mounted) {
           setState(() {
             _pendingSavedEvent = event;
@@ -4524,6 +4580,111 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       } else if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
+    }
+  }
+
+  /// TAG-43: the unconfirmed write landed after the wait: finish the save
+  /// (links and QR) without «تحقق».
+  Future<void> _onLateSaveConfirmed(EventModel event, String eventId) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(CampaignSaveTexts.lateConfirmed, style: GoogleFonts.cairo())),
+    );
+    setState(() => _isLoading = true);
+    try {
+      await _finishConfirmedSave(event, eventId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'الحملة اتحفظت، بس حصلت مشكلة في الخطوات اللي بعد الحفظ')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// TAG-43: the unconfirmed write failed after the wait: show the real
+  /// error (code + message) until the next save.
+  void _onLateSaveFailed(CampaignSaveFailure failure) {
+    if (!mounted) return;
+    setState(() {
+      _pendingSavedEvent = null;
+      _verifyMessage = null;
+      _saveFailure = failure;
+    });
+  }
+
+  /// TAG-43: drops writes this browser could not send (terminate +
+  /// clearPersistence), then reloads. Asks first: unsent changes are lost.
+  Future<void> _clearPendingWrites() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(CampaignSaveTexts.clearPendingTitle, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+        content: Text(CampaignSaveTexts.clearPendingBody, style: GoogleFonts.cairo()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(CampaignSaveTexts.clearPendingCancel, style: GoogleFonts.cairo()),
+          ),
+          FilledButton(
+            key: const ValueKey('tag43-clear-pending-confirm'),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(CampaignSaveTexts.clearPendingConfirm, style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final cleared = await clearPendingFirestoreWrites(ref.read(firestoreProvider));
+    if (!cleared && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          content: Text(CampaignSaveTexts.clearPendingFailed, style: GoogleFonts.cairo()),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text('تمام', style: GoogleFonts.cairo())),
+          ],
+        ),
+      );
+    }
+    // The Firestore instance is terminated either way: reload.
+    reloadPage();
+  }
+
+  /// TAG-43: asks before leaving while a save has not finished.
+  Future<bool> _confirmLeaveWhileSaving() async {
+    if (!_saveFlow.hasUnfinishedSave) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(CampaignSaveTexts.leaveTitle, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+        content: Text(CampaignSaveTexts.leaveBody, style: GoogleFonts.cairo()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(CampaignSaveTexts.leaveAnyway, style: GoogleFonts.cairo()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(CampaignSaveTexts.leaveStay, style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
+  }
+
+  void _syncLeaveGuard() {
+    final active = _saveFlow.hasUnfinishedSave;
+    if (active != _leaveGuardActive) {
+      _leaveGuardActive = active;
+      setLeavePageGuard(active);
     }
   }
 
@@ -5021,6 +5182,24 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // TAG-43: warn before leaving (refresh, close, back) while a save is
+    // unfinished.
+    _syncLeaveGuard();
+    return PopScope(
+      canPop: !_saveFlow.hasUnfinishedSave,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmLeaveWhileSaving() && mounted) {
+          _saveFlow.clearPending();
+          _syncLeaveGuard();
+          Navigator.of(this.context).pop();
+        }
+      },
+      child: _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     final isEditing = widget.eventToEdit != null;
     final isAr = ref.isArabic;
     final strings = AppStrings.of(ref);
@@ -5047,7 +5226,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                   IconButton(
                     icon: Icon(Icons.arrow_back_rounded, color: colorScheme.primary),
                     tooltip: isAr ? 'إلغاء والعودة للوحة التحكم' : 'Cancel & Return to Dashboard',
-                    onPressed: widget.onCancel,
+                    onPressed: () async {
+                      if (await _confirmLeaveWhileSaving()) widget.onCancel?.call();
+                    },
                   ),
                 const SizedBox(width: 8),
                 Container(
@@ -5921,6 +6102,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                     onVerify: _verifyPendingSave,
                     verifying: _verifyingSave,
                     message: _verifyMessage,
+                    errorDetail: _saveFlow.failure?.display,
+                    onClearPending: kIsWeb ? _clearPendingWrites : null,
+                  ),
+                  const SizedBox(height: 14),
+                ] else if (_saveFailure != null) ...[
+                  // TAG-43: the save failed; the real error stays on screen.
+                  CampaignSaveFailedBanner(
+                    failure: _saveFailure!,
+                    onClearPending: kIsWeb ? _clearPendingWrites : null,
                   ),
                   const SizedBox(height: 14),
                 ],
