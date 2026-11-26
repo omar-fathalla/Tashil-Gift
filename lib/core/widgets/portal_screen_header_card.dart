@@ -25,6 +25,10 @@ class PortalScreenHeaderCard extends ConsumerStatefulWidget {
   final bool enableActiveFilterToggle;
   final ValueChanged<bool>? onActiveFilterChanged;
 
+  /// When false the campaign selector (and its active-filter toggle) is not
+  /// rendered. Used by screens locked to a single campaign (`/ep/` sessions).
+  final bool showEventSelector;
+
   const PortalScreenHeaderCard({
     super.key,
     required this.icon,
@@ -39,6 +43,7 @@ class PortalScreenHeaderCard extends ConsumerStatefulWidget {
     this.defaultOnlyActive = true,
     this.enableActiveFilterToggle = true,
     this.onActiveFilterChanged,
+    this.showEventSelector = true,
   });
 
   @override
@@ -553,16 +558,18 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     titleWidget,
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: dropdownWidget),
-                        if (toggleActiveButton != null) ...[
-                          const SizedBox(width: 8),
-                          toggleActiveButton,
+                    if (widget.showEventSelector) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: dropdownWidget),
+                          if (toggleActiveButton != null) ...[
+                            const SizedBox(width: 8),
+                            toggleActiveButton,
+                          ],
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                     if (widget.actions.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Wrap(
@@ -577,11 +584,13 @@ class _PortalScreenHeaderCardState extends ConsumerState<PortalScreenHeaderCard>
               : Row(
                   children: [
                     Expanded(child: titleWidget),
-                    const SizedBox(width: 14),
-                    SizedBox(width: 300, child: dropdownWidget),
-                    if (toggleActiveButton != null) ...[
-                      const SizedBox(width: 8),
-                      toggleActiveButton,
+                    if (widget.showEventSelector) ...[
+                      const SizedBox(width: 14),
+                      SizedBox(width: 300, child: dropdownWidget),
+                      if (toggleActiveButton != null) ...[
+                        const SizedBox(width: 8),
+                        toggleActiveButton,
+                      ],
                     ],
                     if (widget.actions.isNotEmpty) ...[
                       const SizedBox(width: 8),
