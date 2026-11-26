@@ -155,9 +155,11 @@ jobs:
       - name: Deploy functions + rules + indexes to tashil-gift-dev (DEV_AUTO_DEPLOY_BACKEND)
         if: github.event_name == 'push' && vars.DEV_AUTO_DEPLOY_BACKEND == 'true'
         run: |
+          # Rules first: they are quick and independent, so a functions
+          # problem never leaves dev on stale rules.
+          bash tool/dev/deploy_dev.sh rules
           (cd functions && npm ci)
           bash tool/dev/deploy_dev.sh functions
-          bash tool/dev/deploy_dev.sh rules
 
       - name: Verify the preview serves this build (env=dev)
         env:
