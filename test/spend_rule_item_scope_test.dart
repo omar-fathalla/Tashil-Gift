@@ -7,8 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// A target-company product that strictly belongs (barcode / name / brand) to
 /// one scoped spend rule must not be counted on another scoped spend rule of
-/// the same campaign through the company spend bypass. Products that match no
-/// rule strictly (OCR typos) keep the bypass, as do unscoped spend rules.
+/// the same campaign through the company spend bypass. Since TAG-67 the bypass
+/// is kept only on rules that cover all company products (unscoped rules or
+/// rules that name the company), never on brand-scoped rules.
 void main() {
   final cadburyRules = (jsonDecode(
           File('test/fixtures/cadbury_oreo_dairymilk_rules.json')
@@ -60,9 +61,12 @@ void main() {
           ['rule_2:100', 'rule_3:100']);
     });
     test(
-        'company product matching no rule strictly (e.g. OCR-misspelled name) '
-        'keeps the company spend bypass', () {
-      expect(match([p('منتج عام 1 كجم', '', 600)]), isNotEmpty);
+        'company product matching no rule strictly is not counted on '
+        'brand-scoped rules (TAG-67)', () {
+      // These rules are scoped to Oreo / Dairy Milk. A company-flagged product
+      // that matches none of them strictly must not earn their gifts, the
+      // same way other Unilever products were leaking into Knorr's rules.
+      expect(match([p('منتج عام 1 كجم', '', 600)]), isEmpty);
     });
   });
 

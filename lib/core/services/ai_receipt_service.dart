@@ -4645,6 +4645,55 @@ class PromotionalRuleMatcher {
     return brands;
   }
 
+  static const List<String> _companyWideMarkers = [
+    'شركه',
+    'شركة',
+    'company',
+    'كل منتجات',
+    'جميع منتجات',
+    'all products',
+  ];
+
+  /// True when a spend rule covers all of the company's products rather than
+  /// a single brand: it has no item scope at all, or its title or trigger
+  /// names the company (e.g. «من منتجات شركه يونيلفر»), or an umbrella
+  /// company name such as يونيليفر / نستله.
+  static bool isCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!_ruleHasItemScope(rule)) return true;
+    final text = '${_normalize(rule.ruleTitle)} ${_normalize(rule.triggerProduct)}';
+    if (_companyWideMarkers.any((m) => text.contains(_normalize(m)))) return true;
+    return _umbrellaCompanyNames.any((n) => text.contains(_normalize(n)));
+  }
+
+  static bool _barcodeOutsideRuleCatalog(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    final barcode = product.barcode.trim();
+    if (barcode.isEmpty) return false;
+    final catalog = rule.selectedBarcodes
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (catalog.isEmpty) return false;
+    if (catalog.contains(barcode)) return false;
+    if (barcode.length >= 10 &&
+        catalog.any((b) => b.startsWith(barcode) || barcode.startsWith(b))) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Whether a company-flagged product may count toward [rule] without
+  /// matching the rule's brands (TAG-67).
+  static bool companySpendBypassAllowed(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    return !_barcodeOutsideRuleCatalog(product, rule);
+  }
+
   static bool _ruleHasItemScope(PromotionalRuleItem? rule) =>
       rule != null &&
       (rule.selectedBarcodes.any((b) => b.trim().isNotEmpty) ||
@@ -4665,10 +4714,15 @@ class PromotionalRuleMatcher {
     // and the product strictly belongs to ANOTHER scoped spend rule of the same
     // campaign, it must not leak into this rule (e.g. Dairy Milk products being
     // counted on the Oreo rules). Strict = matched without the bypass.
+    // TAG-67: the company flag only stands in for brand membership on a rule
+    // that covers all of the company's products. A brand-scoped rule (e.g.
+    // Knorr only) must not count other products of the same company, and a
+    // product whose barcode is outside the rule's catalog never gets the bypass.
     bool isCompanySpendRule = allowCompanySpendBypass &&
         rule != null &&
         (rule.isSpendBased || rule.conditionType == 'by_spend') &&
-        product.isTargetCompany;
+        product.isTargetCompany &&
+        companySpendBypassAllowed(product, rule);
     if (isCompanySpendRule &&
         _ruleHasItemScope(rule) &&
         siblingRules != null &&

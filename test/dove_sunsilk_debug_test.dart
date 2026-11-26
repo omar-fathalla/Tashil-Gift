@@ -117,9 +117,12 @@ void main() {
       extractedProducts: [sunsilkItem, doveItem],
       promotionalRules: [rule921],
     );
-    expect(matches1.length, equals(1));
-    expect(matches1.first.qualifyingSpend, equals(245.0));
-    expect(check1, isEmpty);
+    // TAG-67: a brand-scoped rule counts only its own brands. Dove is not in
+    // this rule's requiredBrands, so the company flag no longer adds it; only
+    // Sunsilk (75) counts, which is below 170. The live rule (scenario 4)
+    // lists Dove explicitly and still earns the voucher.
+    expect(matches1, isEmpty);
+    expect(check1, isNotEmpty);
 
     expect(matches2.length, equals(1));
     expect(matches2.first.qualifyingSpend, equals(245.0));
