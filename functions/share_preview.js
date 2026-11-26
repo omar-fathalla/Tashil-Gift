@@ -1,5 +1,7 @@
 "use strict";
 
+const { publicSiteOrigin } = require("./env_config");
+
 /**
  * OpenGraph preview for campaign links.
  *
@@ -159,7 +161,7 @@ async function resolveEvent(db, eventIdParam, routeIdentifier) {
 function extractPreviewMetadata(resolvedEvent, query, isManagerPortal) {
   let companyName = "تسهيل جيفت";
   let eventName = "منظومة إدارة العروض والهدايا الترويجية";
-  let companyLogoUrl = "https://tashil-gift.web.app/icons/Icon-512.png";
+  let companyLogoUrl = `${publicSiteOrigin()}/icons/Icon-512.png`;
   let welcomeDesc = "Tashil Gift - Smart Multi-Company Promotion & Validation Platform by Switch Point";
 
   if (resolvedEvent) {

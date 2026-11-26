@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/config/app_env.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../presentation/widgets/whatsapp_campaign_dispatcher_dialog.dart';
 import 'whatsapp_gateway_config_model.dart';
@@ -316,7 +317,7 @@ class WhatsAppGatewayService {
 
   /// Hosted HTTPS reverse proxy (Firebase Hosting → wahaProxy Function).
   /// The Function injects WAHA_API_KEY from Firebase Secrets; the client never needs it.
-  static const String kDefaultWahaProxyBase = 'https://tashil-gift.web.app/waha';
+  static const String kDefaultWahaProxyBase = '$kDefaultHostingOrigin/waha';
 
   /// Resolves the effective API endpoint for WAHA / Gateway requests.
   /// Prefers the HTTPS Cloud proxy so the browser/app never talks to the raw HTTP WAHA host
@@ -325,6 +326,8 @@ class WhatsAppGatewayService {
   static const Set<String> kOwnProxyHosts = {
     'tashil-gift.web.app',
     'tashil-gift.firebaseapp.com',
+    'tashil-gift-dev.web.app',
+    'tashil-gift-dev.firebaseapp.com',
     'gift.sw-point.com',
     'www.gift.sw-point.com',
   };

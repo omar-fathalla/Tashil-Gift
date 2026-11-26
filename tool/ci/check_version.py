@@ -11,6 +11,9 @@ the version itself; it only verifies.
   check_version.py --built build/web   ... and the built version.json matches
   check_version.py --newer-than URL    ... and is strictly newer than the live
                                        version.json (production deploys)
+  check_version.py --built D --env E   ... and the built version.json `env` is E
+                                       (prod | dev; a missing `env` means prod,
+                                       for builds older than the env split)
 Prints `version=X.Y.Z+N` for $GITHUB_OUTPUT.
 """
 import json, re, sys, urllib.request
@@ -52,10 +55,18 @@ if rel and web_d.get("build_date") != rel.group(1):
 
 if "--built" in args:
     d = args[args.index("--built") + 1]
-    built, _ = from_version_json(open(f"{d}/version.json", encoding="utf-8").read(), f"{d}/version.json")
+    built, built_d = from_version_json(open(f"{d}/version.json", encoding="utf-8").read(), f"{d}/version.json")
     print(f"{d}/version.json  {built}")
     if built != pub:
         fail(f"built version.json is {built}, expected {pub}")
+    if "--env" in args:
+        want = args[args.index("--env") + 1]
+        if want not in ("prod", "dev"):
+            fail(f"--env must be prod or dev, got {want}")
+        got = built_d.get("env", "prod")
+        print(f"{d}/version.json  env={got}")
+        if got != want:
+            fail(f"built version.json env is {got!r}, expected {want!r}. A production deploy only ships an APP_ENV=prod build.")
 
 if "--newer-than" in args:
     url = args[args.index("--newer-than") + 1]

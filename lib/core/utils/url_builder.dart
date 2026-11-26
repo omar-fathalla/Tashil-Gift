@@ -1,11 +1,15 @@
 import 'package:flutter/foundation.dart';
 
+import '../config/app_env.dart';
+
 /// Central URL builder for Tashil Gift platform.
 /// Handles generating links for Promoters and Company Managers
 /// pointing dynamically to Firebase Hosting (or local test origin).
 class AppUrlBuilder {
-  /// Default Firebase Hosting domain for Tashil Gift
-  static const String productionDomain = 'https://tashil-gift.web.app';
+  /// Default Firebase Hosting domain of this build's environment
+  /// (`https://tashil-gift.web.app` for prod, the default; the dev site for
+  /// APP_ENV=dev).
+  static const String productionDomain = kDefaultHostingOrigin;
 
   /// Resolves the current base URL.
   /// On web, uses the current domain origin (e.g. https://tashil-gift.web.app or http://localhost:8080).
