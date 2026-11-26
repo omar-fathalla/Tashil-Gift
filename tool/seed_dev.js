@@ -15,7 +15,8 @@
  *   FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 node tool/seed_dev.js --project demo-tashil-dev
  *
  * Options: --dry-run (print the plan, write nothing), --skip-storage,
- *          --skip-auth. Optional env: DEV_ADMIN_PASSWORD (else a random one is
+ *          --skip-auth, --credentials-out <file> (write new passwords to a
+ *          file instead of stdout; used by CI). Optional env: DEV_ADMIN_PASSWORD (else a random one is
  *          generated and printed ONCE, when the user is first created).
  *
  * Idempotent: fixed document ids + merge writes; existing passwords are kept.
@@ -164,7 +165,14 @@ async function main() {
   const site = target.emulator ? "http://127.0.0.1:<port>" : `https://${target.projectId}.web.app`;
   console.log("\nPromoter (مندوب) links - anonymous, no password:");
   for (const e of data.events.filter((x) => x.isActive)) console.log(`  ${e.eventName}: ${site}/c/${e.companySlug}?event=${e.id}`);
-  if (printed.length) {
+  const outIdx = argv.indexOf("--credentials-out");
+  const credentialsOut = outIdx >= 0 ? argv[outIdx + 1] : "";
+  if (printed.length && credentialsOut) {
+    // CI: never print passwords to the job log; write them to a private file
+    // that the workflow uploads as a short-lived artifact.
+    fs.writeFileSync(credentialsOut, printed.join("\n") + "\n", { mode: 0o600 });
+    console.log(`\nNEW credentials written to ${path.basename(credentialsOut)} (not printed here).`);
+  } else if (printed.length) {
     console.log("\nNEW credentials (shown once; save them in your password manager, never in the repo or a ticket):");
     for (const line of printed) console.log(`  ${line}`);
   } else {
