@@ -1,4 +1,4 @@
-import 'package:al_mraay/core/constants/ai_models.dart';
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -151,8 +151,8 @@ class BranchSignatureAiService {
   late final CloudGenerativeModel _fallbackModel;
 
   BranchSignatureAiService() {
-    _model = _createModel(AiModels.helperServices);
-    _fallbackModel = _createModel(AiModels.helperServicesFallback);
+    _model = _createModel(AiConfig.helperModel);
+    _fallbackModel = _createModel(AiConfig.helperFallbackModel);
   }
 
   static CloudGenerativeModel _createModel(String modelName) {

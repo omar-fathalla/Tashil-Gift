@@ -9,6 +9,37 @@ void main() {
     expect(AiReceiptService.fastTierThinkingConfig('gemini-3.8-flash'),
         {'thinkingLevel': 'low'});
   });
+  test('Gemini 4 fast tier sets an explicit thinkingLevel (default high is never used)', () {
+    for (final id in ['gemini-4-hydrogen', 'gemini-4-neon', 'gemini-4-carbon', 'gemini-4-argon']) {
+      expect(AiReceiptService.fastTierThinkingConfig(id), {'thinkingLevel': 'low'}, reason: id);
+    }
+    expect(AiReceiptService.fastTierThinkingConfig('gemini-4-hydrogen', level: 'medium'),
+        {'thinkingLevel': 'medium'});
+  });
+  test('fast tier thinking override accepts only low, medium and high', () {
+    expect(AiReceiptService.fastTierThinkingConfig('gemini-3.8-flash', level: 'high'),
+        {'thinkingLevel': 'high'});
+    for (final bad in ['minimal', 'xhigh', '', 'bogus']) {
+      expect(AiReceiptService.fastTierThinkingConfig('gemini-4-hydrogen', level: bad),
+          {'thinkingLevel': 'low'}, reason: bad);
+    }
+    expect(AiReceiptService.fastTierThinkingConfig('gemini-2.5-flash', level: 'high'),
+        {'thinkingBudget': 1024});
+  });
+  test('deep audit thinking: default unchanged for 3.x, explicit level for Gemini 4', () {
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-3.8-flash'), isNull);
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-3.8-flash', level: 'medium'),
+        {'thinkingLevel': 'medium'});
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-4-hydrogen'), {'thinkingLevel': 'medium'});
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-4-hydrogen', level: 'low'),
+        {'thinkingLevel': 'low'});
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-2.5-flash', level: 'low'), isNull);
+  });
+  test('AiReceiptService normalizes admin thinking levels', () {
+    final svc = AiReceiptService(thinkingLevelFast: 'Medium', thinkingLevelDeep: 'minimal');
+    expect(svc.thinkingLevelFast, 'medium');
+    expect(svc.thinkingLevelDeep, isNull);
+  });
   test('Gemini 2.x fast tier uses a bounded thinkingBudget', () {
     expect(AiReceiptService.fastTierThinkingConfig('gemini-2.5-flash'),
         {'thinkingBudget': 1024});

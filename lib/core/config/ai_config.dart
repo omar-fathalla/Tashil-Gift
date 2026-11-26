@@ -13,6 +13,10 @@ class AiConfig {
   static String _deepAuditModel = AiModels.defaultDeepAudit;
   static dynamic _activeAgentMode;
   static int _thinkingBudget = 0;
+  static String _helperModel = '';
+  static String _helperFallbackModel = '';
+  static String _thinkingLevelFast = '';
+  static String _thinkingLevelDeep = '';
 
   /// Returns the currently active global primary model identifier
   static String get primaryModel => _primaryModel;
@@ -32,6 +36,24 @@ class AiConfig {
   /// Optional thinking budget for reasoning models
   static int get thinkingBudget => _thinkingBudget;
 
+  /// Model for the non-scan helper services. Runtime override from
+  /// `system_settings/ai_engine.helper_model`, else [AiModels.helperServices].
+  static String get helperModel =>
+      _helperModel.isEmpty ? AiModels.helperServices : _helperModel;
+
+  /// Fallback for the helper services, else [AiModels.helperServicesFallback].
+  static String get helperFallbackModel => _helperFallbackModel.isEmpty
+      ? AiModels.helperServicesFallback
+      : _helperFallbackModel;
+
+  /// Admin thinking level for the fast scan tier, or null when unset.
+  static String? get thinkingLevelFast =>
+      _thinkingLevelFast.isEmpty ? null : _thinkingLevelFast;
+
+  /// Admin thinking level for the deep-audit tier, or null when unset.
+  static String? get thinkingLevelDeep =>
+      _thinkingLevelDeep.isEmpty ? null : _thinkingLevelDeep;
+
   /// Synchronize the in-memory active AI model configuration
   static void updateActiveModelConfig({
     required String primary,
@@ -40,6 +62,10 @@ class AiConfig {
     String? deepAudit,
     dynamic mode,
     int budget = 0,
+    String? helperModel,
+    String? helperFallbackModel,
+    String? thinkingLevelFast,
+    String? thinkingLevelDeep,
   }) {
     if (primary.trim().isNotEmpty) {
       _primaryModel = primary.trim();
@@ -55,5 +81,16 @@ class AiConfig {
     }
     _activeAgentMode = mode;
     _thinkingBudget = budget;
+    // null keeps the current value; an empty string clears the override.
+    if (helperModel != null) _helperModel = helperModel.trim();
+    if (helperFallbackModel != null) {
+      _helperFallbackModel = helperFallbackModel.trim();
+    }
+    if (thinkingLevelFast != null) {
+      _thinkingLevelFast = AiModels.normalizeThinkingLevel(thinkingLevelFast) ?? '';
+    }
+    if (thinkingLevelDeep != null) {
+      _thinkingLevelDeep = AiModels.normalizeThinkingLevel(thinkingLevelDeep) ?? '';
+    }
   }
 }

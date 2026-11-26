@@ -121,6 +121,14 @@ class GeminiModelPreset {
       isLatest: true,
     ),
     GeminiModelPreset(
+      id: AiModels.gemini4Hydrogen,
+      titleAr: 'جيميناي 4 هيدروجين (تجربة)',
+      titleEn: '${AiModels.gemini4HydrogenLabel} (Trial)',
+      descriptionAr: 'نموذج الجيل الرابع قيد التجربة على بيئة التطوير فقط. يتم ضبط مستوى التفكير من إعدادات المحرك بدون تحديث للتطبيق.',
+      badge: 'تجربة 🧪',
+      isLatest: true,
+    ),
+    GeminiModelPreset(
       id: AiModels.gemini36Flash,
       titleAr: 'جيميناي 3.6 فلاش (الاحتياطي الأول)',
       titleEn: '${AiModels.gemini36FlashLabel} (Primary Fallback)',
@@ -146,6 +154,22 @@ class AiModelConfig {
   final AiAgentMode agentMode;
   final int thinkingBudget;
   final String? customModelIdentifier;
+
+  /// Optional runtime override for the helper services (`helper_model`).
+  /// Null/empty means "use [AiModels.helperServices]".
+  final String? helperModel;
+
+  /// Optional runtime override for the helper fallback (`helper_fallback_model`).
+  /// Null/empty means "use [AiModels.helperServicesFallback]".
+  final String? helperFallbackModel;
+
+  /// Optional thinking level for the fast scan tier (`thinking_level_fast`).
+  /// Only `low`, `medium` or `high`; anything else is ignored.
+  final String? thinkingLevelFast;
+
+  /// Optional thinking level for the deep-audit tier (`thinking_level_deep`).
+  /// Only `low`, `medium` or `high`; anything else is ignored.
+  final String? thinkingLevelDeep;
   final DateTime? updatedAt;
   final String? updatedBy;
 
@@ -157,6 +181,10 @@ class AiModelConfig {
     this.agentMode = AiAgentMode.standardVision,
     this.thinkingBudget = 0,
     this.customModelIdentifier,
+    this.helperModel,
+    this.helperFallbackModel,
+    this.thinkingLevelFast,
+    this.thinkingLevelDeep,
     this.updatedAt,
     this.updatedBy,
   });
@@ -181,6 +209,12 @@ class AiModelConfig {
       'agent_mode': agentMode.code,
       'thinking_budget': thinkingBudget,
       'custom_model_identifier': customModelIdentifier,
+      // Optional fields are written only when set, so a plain model switch
+      // never wipes them. An empty string clears a field.
+      'helper_model': ?helperModel,
+      'helper_fallback_model': ?helperFallbackModel,
+      'thinking_level_fast': ?thinkingLevelFast,
+      'thinking_level_deep': ?thinkingLevelDeep,
       'updated_at': FieldValue.serverTimestamp(),
       'updated_by': updatedBy ?? 'admin',
     };
@@ -197,6 +231,8 @@ class AiModelConfig {
     final deepAudit = (data['deep_audit_model'] as String?)?.trim();
     final custom = (data['custom_model_identifier'] as String?)?.trim();
     final budget = (data['thinking_budget'] as num?)?.toInt() ?? 0;
+    final helper = _trimmedOrNull(data['helper_model']);
+    final helperFallback = _trimmedOrNull(data['helper_fallback_model']);
 
     DateTime? updated;
     if (data['updated_at'] is Timestamp) {
@@ -211,9 +247,19 @@ class AiModelConfig {
       agentMode: AiAgentMode.fromCode(modeCode),
       thinkingBudget: budget,
       customModelIdentifier: custom != null && custom.isNotEmpty ? custom : null,
+      helperModel: helper,
+      helperFallbackModel: helperFallback,
+      thinkingLevelFast: AiModels.normalizeThinkingLevel(data['thinking_level_fast']),
+      thinkingLevelDeep: AiModels.normalizeThinkingLevel(data['thinking_level_deep']),
       updatedAt: updated,
       updatedBy: data['updated_by'] as String?,
     );
+  }
+
+  static String? _trimmedOrNull(Object? raw) {
+    if (raw is! String) return null;
+    final trimmed = raw.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 }
 
@@ -238,6 +284,10 @@ class AiModelConfigService {
         deepAudit: config.deepAuditModel,
         mode: config.agentMode,
         budget: config.thinkingBudget,
+        helperModel: config.helperModel ?? '',
+        helperFallbackModel: config.helperFallbackModel ?? '',
+        thinkingLevelFast: config.thinkingLevelFast ?? '',
+        thinkingLevelDeep: config.thinkingLevelDeep ?? '',
       );
       return config;
     });
@@ -255,6 +305,10 @@ class AiModelConfigService {
         deepAudit: config.deepAuditModel,
         mode: config.agentMode,
         budget: config.thinkingBudget,
+        helperModel: config.helperModel ?? '',
+        helperFallbackModel: config.helperFallbackModel ?? '',
+        thinkingLevelFast: config.thinkingLevelFast ?? '',
+        thinkingLevelDeep: config.thinkingLevelDeep ?? '',
       );
       return config;
     } catch (e) {
@@ -272,6 +326,10 @@ class AiModelConfigService {
     required AiAgentMode agentMode,
     int thinkingBudget = 0,
     String? customModelIdentifier,
+    String? helperModel,
+    String? helperFallbackModel,
+    String? thinkingLevelFast,
+    String? thinkingLevelDeep,
     String? updatedBy,
   }) async {
     final effectiveModel = (customModelIdentifier != null && customModelIdentifier.trim().isNotEmpty)
@@ -286,6 +344,10 @@ class AiModelConfigService {
       agentMode: agentMode,
       thinkingBudget: thinkingBudget,
       customModelIdentifier: customModelIdentifier,
+      helperModel: helperModel?.trim(),
+      helperFallbackModel: helperFallbackModel?.trim(),
+      thinkingLevelFast: _thinkingLevelForWrite(thinkingLevelFast),
+      thinkingLevelDeep: _thinkingLevelForWrite(thinkingLevelDeep),
       updatedBy: updatedBy,
     );
 
@@ -297,11 +359,22 @@ class AiModelConfigService {
       deepAudit: config.deepAuditModel,
       mode: agentMode,
       budget: thinkingBudget,
+      helperModel: config.helperModel,
+      helperFallbackModel: config.helperFallbackModel,
+      thinkingLevelFast: config.thinkingLevelFast,
+      thinkingLevelDeep: config.thinkingLevelDeep,
     );
 
     // Persist to Cloud Firestore for instant propagation to all clients
     await _configDocRef.set(config.toMap(), SetOptions(merge: true));
   }
+}
+
+/// Null leaves the stored value untouched; an unknown level or empty string
+/// clears it (written as an empty string, which readers ignore).
+String? _thinkingLevelForWrite(String? raw) {
+  if (raw == null) return null;
+  return AiModels.normalizeThinkingLevel(raw) ?? '';
 }
 
 /// Riverpod Providers

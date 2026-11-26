@@ -15,11 +15,21 @@ const MODELS = Object.freeze({
   GEMINI_38_FLASH: "gemini-3.8-flash",
   GEMINI_38_PRO: "gemini-3.8-pro",
   GEMINI_38_ULTRA: "gemini-3.8-ultra",
-  GEMINI_40: "gemini-4.0",
+  GEMINI_4_HYDROGEN: "gemini-4-hydrogen",
 });
 
-/** Model used by the legacy server-side receipt_verification endpoint. */
-const RECEIPT_VERIFICATION_MODEL = MODELS.GEMINI_20_FLASH;
+/** True for any Gemini 4 family id (`gemini-4-hydrogen`, `-neon`, `-carbon`, `-argon`). */
+function isGemini4(model) {
+  return /^gemini-4-/.test(String(model || "").trim());
+}
+
+/**
+ * Code default for the server-side receipt verifier (analyzeReceipt + WhatsApp
+ * webhook). The live value comes from the RECEIPT_VERIFICATION_MODEL function
+ * param (see receipt_verification.js); gemini-2.0-flash was shut down on
+ * 2026-06-01 so it is no longer a valid default.
+ */
+const RECEIPT_VERIFICATION_DEFAULT_MODEL = MODELS.GEMINI_38_FLASH;
 
 /**
  * 2.0.150+211: hard cap for one upstream Gemini call made by a Cloud Function
@@ -41,4 +51,11 @@ const ALLOWED_MODEL_IDS = Object.freeze([
   ...LEGACY_ALIASES,
 ]);
 
-module.exports = { MODELS, RECEIPT_VERIFICATION_MODEL, GEMINI_UPSTREAM_TIMEOUT_MS, LEGACY_ALIASES, ALLOWED_MODEL_IDS };
+module.exports = {
+  MODELS,
+  RECEIPT_VERIFICATION_DEFAULT_MODEL,
+  GEMINI_UPSTREAM_TIMEOUT_MS,
+  LEGACY_ALIASES,
+  ALLOWED_MODEL_IDS,
+  isGemini4,
+};

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/config/ai_config.dart';
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:al_mraay/core/services/ai_model_config_service.dart';
 import 'package:al_mraay/core/services/ai_brain_copilot_service.dart';
 
@@ -27,15 +28,16 @@ void main() {
       expect(ids, contains('gemini-3.8-flash'));
       expect(ids, contains('gemini-3.8-pro'));
       expect(ids, contains('gemini-3.6-flash'));
+      expect(ids, contains('gemini-4-hydrogen'));
       expect(ids, contains('gemini-2.5-flash'));
     });
   });
 
   group('AiModelConfig Serialization & Effective Model Resolution', () {
-    test('Default config has gemini-3.7-flash and standardVision', () {
+    test('Default config has gemini-3.8-flash and standardVision', () {
       const config = AiModelConfig();
-      expect(config.primaryModel, equals('gemini-3.7-flash'));
-      expect(config.effectivePrimaryModel, equals('gemini-3.7-flash'));
+      expect(config.primaryModel, equals('gemini-3.8-flash'));
+      expect(config.effectivePrimaryModel, equals('gemini-3.8-flash'));
       expect(config.agentMode, equals(AiAgentMode.standardVision));
       expect(config.mode, equals(AiAgentMode.standardVision));
     });
@@ -68,6 +70,107 @@ void main() {
       expect(reconstructed.primaryModel, equals('gemini-3.8-flash'));
       expect(reconstructed.agentMode, equals(AiAgentMode.ultraSpeed));
       expect(reconstructed.effectivePrimaryModel, equals('custom-model-v1'));
+    });
+  });
+
+  group('AiModelConfig helper and thinking-level fields', () {
+    test('defaults leave every optional field unset', () {
+      const config = AiModelConfig();
+      expect(config.helperModel, isNull);
+      expect(config.helperFallbackModel, isNull);
+      expect(config.thinkingLevelFast, isNull);
+      expect(config.thinkingLevelDeep, isNull);
+      final map = config.toMap();
+      expect(map.containsKey('helper_model'), isFalse);
+      expect(map.containsKey('helper_fallback_model'), isFalse);
+      expect(map.containsKey('thinking_level_fast'), isFalse);
+      expect(map.containsKey('thinking_level_deep'), isFalse);
+    });
+
+    test('fromMap parses helper_model and the thinking fields', () {
+      final config = AiModelConfig.fromMap({
+        'helper_model': ' gemini-4-hydrogen ',
+        'helper_fallback_model': 'gemini-3.8-flash',
+        'thinking_level_fast': 'Medium',
+        'thinking_level_deep': 'high',
+      });
+      expect(config.helperModel, 'gemini-4-hydrogen');
+      expect(config.helperFallbackModel, 'gemini-3.8-flash');
+      expect(config.thinkingLevelFast, 'medium');
+      expect(config.thinkingLevelDeep, 'high');
+    });
+
+    test('empty, wrong-typed and disallowed values are ignored', () {
+      final config = AiModelConfig.fromMap({
+        'primary_model': 'gemini-3.8-flash',
+        'helper_model': '   ',
+        'helper_fallback_model': 7,
+        'thinking_level_fast': 'minimal',
+        'thinking_level_deep': 'xhigh',
+      });
+      expect(config.helperModel, isNull);
+      expect(config.helperFallbackModel, isNull);
+      expect(config.thinkingLevelFast, isNull);
+      expect(config.thinkingLevelDeep, isNull);
+    });
+
+    test('toMap and fromMap round-trip the new fields', () {
+      const config = AiModelConfig(
+        helperModel: 'gemini-4-hydrogen',
+        helperFallbackModel: 'gemini-3.8-flash',
+        thinkingLevelFast: 'low',
+        thinkingLevelDeep: 'high',
+      );
+      final restored = AiModelConfig.fromMap(config.toMap());
+      expect(restored.helperModel, 'gemini-4-hydrogen');
+      expect(restored.helperFallbackModel, 'gemini-3.8-flash');
+      expect(restored.thinkingLevelFast, 'low');
+      expect(restored.thinkingLevelDeep, 'high');
+    });
+
+    test('helper services fall back to the constants when the fields are empty', () {
+      AiConfig.updateActiveModelConfig(
+        primary: 'gemini-3.8-flash',
+        fallback: 'gemini-3.6-flash',
+        helperModel: '',
+        helperFallbackModel: '',
+        thinkingLevelFast: '',
+        thinkingLevelDeep: '',
+      );
+      expect(AiConfig.helperModel, AiModels.helperServices);
+      expect(AiConfig.helperFallbackModel, AiModels.helperServicesFallback);
+      expect(AiConfig.thinkingLevelFast, isNull);
+      expect(AiConfig.thinkingLevelDeep, isNull);
+    });
+
+    test('helper overrides apply, null keeps them and an empty string clears them', () {
+      AiConfig.updateActiveModelConfig(
+        primary: 'gemini-3.8-flash',
+        fallback: 'gemini-3.6-flash',
+        helperModel: 'gemini-4-hydrogen',
+        helperFallbackModel: 'gemini-3.8-flash',
+        thinkingLevelFast: 'medium',
+        thinkingLevelDeep: 'bogus',
+      );
+      expect(AiConfig.helperModel, 'gemini-4-hydrogen');
+      expect(AiConfig.helperFallbackModel, 'gemini-3.8-flash');
+      expect(AiConfig.thinkingLevelFast, 'medium');
+      expect(AiConfig.thinkingLevelDeep, isNull);
+
+      AiConfig.updateActiveModelConfig(primary: 'gemini-3.8-flash', fallback: 'gemini-3.6-flash');
+      expect(AiConfig.helperModel, 'gemini-4-hydrogen');
+      expect(AiConfig.thinkingLevelFast, 'medium');
+
+      AiConfig.updateActiveModelConfig(
+        primary: 'gemini-3.8-flash',
+        fallback: 'gemini-3.6-flash',
+        helperModel: '',
+        helperFallbackModel: '',
+        thinkingLevelFast: '',
+      );
+      expect(AiConfig.helperModel, AiModels.helperServices);
+      expect(AiConfig.helperFallbackModel, AiModels.helperServicesFallback);
+      expect(AiConfig.thinkingLevelFast, isNull);
     });
   });
 

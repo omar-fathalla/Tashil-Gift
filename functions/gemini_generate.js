@@ -5,6 +5,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 const { ALLOWED_MODEL_IDS, GEMINI_UPSTREAM_TIMEOUT_MS } = require("./ai_models");
+const { shapeGenerationConfig, logGeminiUsage } = require("./gemini_request_shaping");
 
 const ALLOWED_MODELS = new Set(ALLOWED_MODEL_IDS);
 
@@ -133,8 +134,9 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
       if (data.systemInstruction) {
         body.systemInstruction = data.systemInstruction;
       }
-      if (data.generationConfig) {
-        body.generationConfig = data.generationConfig;
+      const generationConfig = shapeGenerationConfig(model, data.generationConfig);
+      if (generationConfig) {
+        body.generationConfig = generationConfig;
       }
       if (Array.isArray(data.safetySettings) && data.safetySettings.length > 0) {
         body.safetySettings = data.safetySettings;
@@ -148,6 +150,7 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
         ":generateContent?key=" +
         encodeURIComponent(apiKey);
 
+      const startedAt = Date.now();
       let response;
       try {
         response = await fetch(url, {
@@ -178,6 +181,13 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
           (parsed && parsed.error && parsed.error.message) ||
           `Gemini HTTP ${response.status}`;
         console.error("geminiGenerate upstream error:", response.status, message);
+        logGeminiUsage({
+          source: "geminiGenerate",
+          model,
+          latencyMs: Date.now() - startedAt,
+          payload: parsed,
+          status: response.status,
+        });
         if (response.status === 429) {
           throw new HttpsError("resource-exhausted", message);
         }
@@ -187,6 +197,12 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
         throw new HttpsError("internal", message);
       }
 
+      logGeminiUsage({
+        source: "geminiGenerate",
+        model,
+        latencyMs: Date.now() - startedAt,
+        payload: parsed,
+      });
       return { response: parsed };
     },
   );

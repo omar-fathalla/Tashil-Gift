@@ -202,7 +202,7 @@ void main() {
 
       // Verify Brand Headline & Gemini badge
       expect(find.text('منظومة سويتش بوينت الذكية'), findsOneWidget);
-      expect(find.text('مدعوم بمحرك Gemini 3.7 Flash'), findsOneWidget);
+      expect(find.text('مدعوم بمحرك Gemini 3.8 Flash'), findsOneWidget);
       expect(find.text('حوكمة وحماية من الاحتيال 100%'), findsOneWidget);
 
       // Verify 4 System Pillars
@@ -239,7 +239,7 @@ void main() {
 
       // Verify Mobile Banner & Gemini tag
       expect(find.text('منظومة سويتش بوينت الذكية'), findsOneWidget);
-      expect(find.text('مدعوم بمحرك Gemini 3.7 Flash'), findsOneWidget);
+      expect(find.text('مدعوم بمحرك Gemini 3.8 Flash'), findsOneWidget);
       expect(find.text('تسجيل الدخول للنظام'), findsOneWidget);
     });
   });

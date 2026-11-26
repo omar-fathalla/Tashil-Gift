@@ -1,0 +1,312 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { defineSecret } = require("firebase-functions/params");
+const { createGeminiGenerate } = require("../gemini_generate");
+const { MODELS, ALLOWED_MODEL_IDS, isGemini4 } = require("../ai_models");
+const {
+  GEMINI_4_DEFAULT_THINKING_LEVEL,
+  gemini4Limits,
+  shapeGenerationConfig,
+  summarizeUsage,
+  logGeminiUsage,
+} = require("../gemini_request_shaping");
+
+const HYDROGEN = "gemini-4-hydrogen";
+
+test("isGemini4 matches only the real gemini-4-* ids", () => {
+  for (const id of ["gemini-4-hydrogen", "gemini-4-neon", "gemini-4-carbon", "gemini-4-argon"]) {
+    assert.equal(isGemini4(id), true, id);
+  }
+  for (const id of ["gemini-4.0", "gemini-3.8-flash", "gemini-2.5-flash", "", null, undefined]) {
+    assert.equal(isGemini4(id), false, String(id));
+  }
+});
+
+test("gemini-4.0 is not a registered model id", () => {
+  assert.equal(MODELS.GEMINI_40, undefined);
+  assert.equal(ALLOWED_MODEL_IDS.includes("gemini-4.0"), false);
+  assert.equal(MODELS.GEMINI_4_HYDROGEN, HYDROGEN);
+  assert.ok(ALLOWED_MODEL_IDS.includes(HYDROGEN));
+  assert.equal(MODELS.GEMINI_36_FLASH, "gemini-3.6-flash");
+  assert.equal(MODELS.GEMINI_38_FLASH, "gemini-3.8-flash");
+});
+
+test("Gemini 4: sampling params are removed and the token cap is raised", () => {
+  const input = {
+    temperature: 0.0,
+    topP: 0.9,
+    topK: 40,
+    top_p: 0.9,
+    top_k: 40,
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json",
+    responseSchema: { type: "OBJECT" },
+  };
+  const snapshot = JSON.parse(JSON.stringify(input));
+  const out = shapeGenerationConfig(HYDROGEN, input);
+  for (const key of ["temperature", "topP", "topK", "top_p", "top_k"]) {
+    assert.equal(key in out, false, key);
+  }
+  assert.equal(out.maxOutputTokens, 65536);
+  assert.equal(out.responseMimeType, "application/json");
+  assert.deepEqual(out.responseSchema, { type: "OBJECT" });
+  assert.deepEqual(input, snapshot, "input must not be mutated");
+});
+
+test("Gemini 4: an absent maxOutputTokens stays absent and an over-cap value is clamped", () => {
+  assert.equal("maxOutputTokens" in shapeGenerationConfig(HYDROGEN, { temperature: 0 }), false);
+  assert.equal(shapeGenerationConfig(HYDROGEN, { maxOutputTokens: 100000 }).maxOutputTokens, 65536);
+  assert.equal(shapeGenerationConfig("gemini-4-neon", { maxOutputTokens: 1024 }).maxOutputTokens, 65536);
+});
+
+test("Gemini 4 per-model limits: Hydrogen and Neon 65536 + xhigh, Carbon and Argon 32768 + max high", () => {
+  for (const model of ["gemini-4-hydrogen", "gemini-4-neon"]) {
+    assert.equal(gemini4Limits(model).maxOutputTokens, 65536, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 8192 }).maxOutputTokens, 65536, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 100000 }).maxOutputTokens, 65536, model);
+    const level = (l) => shapeGenerationConfig(model, { thinkingConfig: { thinkingLevel: l } }).thinkingConfig.thinkingLevel;
+    assert.equal(level("xhigh"), "xhigh", model);
+    assert.equal(level("high"), "high", model);
+    assert.equal(level("minimal"), "low", model);
+  }
+  for (const model of ["gemini-4-carbon", "gemini-4-argon"]) {
+    assert.equal(gemini4Limits(model).maxOutputTokens, 32768, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 8192 }).maxOutputTokens, 32768, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 65536 }).maxOutputTokens, 32768, model);
+    const level = (l) => shapeGenerationConfig(model, { thinkingConfig: { thinkingLevel: l } }).thinkingConfig.thinkingLevel;
+    assert.equal(level("xhigh"), "high", model);
+    assert.equal(level("high"), "high", model);
+    assert.equal(level("medium"), "medium", model);
+    assert.equal(level("minimal"), "low", model);
+    assert.equal(
+      shapeGenerationConfig(model, { thinkingConfig: { thinkingBudget: 100000 } }).thinkingConfig.thinkingLevel,
+      "high",
+      model,
+    );
+  }
+  assert.equal(gemini4Limits("gemini-4-future").maxOutputTokens, 32768);
+});
+
+test("Gemini 4 without thinkingConfig or generationConfig defaults to thinkingLevel low", () => {
+  assert.equal(GEMINI_4_DEFAULT_THINKING_LEVEL, "low");
+  for (const model of ["gemini-4-hydrogen", "gemini-4-neon", "gemini-4-carbon", "gemini-4-argon"]) {
+    assert.deepEqual(shapeGenerationConfig(model, undefined), { thinkingConfig: { thinkingLevel: "low" } }, model);
+    assert.deepEqual(shapeGenerationConfig(model, null), { thinkingConfig: { thinkingLevel: "low" } }, model);
+    assert.deepEqual(
+      shapeGenerationConfig(model, { responseMimeType: "application/json" }),
+      { responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "low" } },
+      model,
+    );
+    assert.deepEqual(
+      shapeGenerationConfig(model, { thinkingConfig: { includeThoughts: true } }).thinkingConfig,
+      { includeThoughts: true, thinkingLevel: "low" },
+      model,
+    );
+  }
+  assert.equal(shapeGenerationConfig("gemini-3.8-flash", undefined), undefined);
+});
+
+test("Gemini 4: thinkingLevel minimal becomes low and thinkingBudget maps to a level", () => {
+  const shape = (thinkingConfig) => shapeGenerationConfig(HYDROGEN, { thinkingConfig }).thinkingConfig;
+  assert.deepEqual(shape({ thinkingLevel: "minimal" }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingLevel: "MINIMAL" }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingLevel: "low" }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingLevel: "medium" }), { thinkingLevel: "medium" });
+  assert.deepEqual(shape({ thinkingLevel: "xhigh" }), { thinkingLevel: "xhigh" });
+  assert.deepEqual(shape({ thinkingBudget: 0 }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingBudget: 1024 }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingBudget: 4096 }), { thinkingLevel: "medium" });
+  assert.deepEqual(shape({ thinkingBudget: 24576 }), { thinkingLevel: "high" });
+  assert.deepEqual(shape({ thinkingLevel: "bogus" }), { thinkingLevel: "low" });
+  assert.deepEqual(shape({ thinkingLevel: "medium", thinkingBudget: 1024 }), { thinkingLevel: "medium" });
+  assert.deepEqual(shape({ includeThoughts: true, thinkingBudget: 1024 }), { includeThoughts: true, thinkingLevel: "low" });
+});
+
+test("3.x and 2.x requests are returned untouched (same object)", () => {
+  for (const model of ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-3.8-pro"]) {
+    const input = {
+      temperature: 0.0,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 8192,
+      thinkingConfig: { thinkingLevel: "minimal", thinkingBudget: 0 },
+    };
+    const snapshot = JSON.stringify(input);
+    const out = shapeGenerationConfig(model, input);
+    assert.equal(out, input, model);
+    assert.equal(JSON.stringify(out), snapshot, model);
+  }
+  assert.equal(shapeGenerationConfig("gemini-3.8-flash", undefined), undefined);
+});
+
+test("summarizeUsage and logGeminiUsage emit counts only", () => {
+  const payload = {
+    candidates: [{ content: { parts: [{ text: "SECRET RECEIPT TEXT" }] } }],
+    usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, thoughtsTokenCount: 30, totalTokenCount: 150 },
+  };
+  assert.deepEqual(summarizeUsage(payload), {
+    promptTokens: 100,
+    candidatesTokens: 20,
+    thoughtsTokens: 30,
+    totalTokens: 150,
+  });
+  assert.deepEqual(summarizeUsage(null), { promptTokens: 0, candidatesTokens: 0, thoughtsTokens: 0, totalTokens: 0 });
+
+  const lines = [];
+  const originalLog = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    logGeminiUsage({ source: "test", model: HYDROGEN, latencyMs: 12, payload });
+  } finally {
+    console.log = originalLog;
+  }
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /^gemini_usage /);
+  assert.doesNotMatch(lines[0], /SECRET RECEIPT TEXT/);
+  const logged = JSON.parse(lines[0].slice("gemini_usage ".length));
+  assert.deepEqual(logged, {
+    source: "test",
+    model: HYDROGEN,
+    latencyMs: 12,
+    status: 200,
+    promptTokens: 100,
+    candidatesTokens: 20,
+    thoughtsTokens: 30,
+    totalTokens: 150,
+  });
+});
+
+async function callProxy(model, generationConfig, extra = {}) {
+  const previousKey = process.env.GEMINI_API_KEY;
+  const originalFetch = global.fetch;
+  const originalLog = console.log;
+  process.env.GEMINI_API_KEY = "test-key-not-a-real-secret";
+  console.log = () => {};
+  let seen = null;
+  global.fetch = async (url, init) => {
+    seen = { url: String(url), body: JSON.parse(init.body) };
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        candidates: [{ content: { parts: [{ text: "{}" }] } }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+      }),
+    };
+  };
+  try {
+    const fn = createGeminiGenerate({
+      geminiApiKey: defineSecret("GEMINI_API_KEY"),
+      callableOptions: {},
+    });
+    await fn.run({
+      app: { appId: "test" },
+      auth: { uid: "u1" },
+      rawRequest: {},
+      data: { model, contents: [{ role: "user", parts: [{ text: "hi" }] }], generationConfig, ...extra },
+    });
+  } finally {
+    global.fetch = originalFetch;
+    console.log = originalLog;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+  return seen;
+}
+
+test("geminiGenerate shapes Gemini 4 requests before calling upstream", async () => {
+  const seen = await callProxy(HYDROGEN, {
+    temperature: 0.0,
+    topP: 0.9,
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingLevel: "minimal" },
+  });
+  assert.match(seen.url, /\/models\/gemini-4-hydrogen:generateContent\?key=/);
+  assert.deepEqual(seen.body.generationConfig, {
+    maxOutputTokens: 65536,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingLevel: "low" },
+  });
+});
+
+test("geminiGenerate forwards 3.x generationConfig byte-identical", async () => {
+  const config = {
+    temperature: 0.0,
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingLevel: "low" },
+  };
+  const seen = await callProxy("gemini-3.8-flash", config);
+  assert.equal(JSON.stringify(seen.body.generationConfig), JSON.stringify(config));
+  assert.deepEqual(Object.keys(seen.body).sort(), ["contents", "generationConfig"]);
+});
+
+test("geminiGenerate sends thinkingLevel low for a Gemini 4 request with no generationConfig", async () => {
+  const seen = await callProxy(HYDROGEN, undefined);
+  assert.deepEqual(seen.body.generationConfig, { thinkingConfig: { thinkingLevel: "low" } });
+  const seen3 = await callProxy("gemini-3.8-flash", undefined);
+  assert.equal("generationConfig" in seen3.body, false);
+});
+
+test("geminiGenerate returns prior model turns and thought signatures to Gemini unchanged", async () => {
+  const history = [
+    { role: "user", parts: [{ text: "first question" }] },
+    {
+      role: "model",
+      parts: [
+        { text: "thinking summary", thought: true, thoughtSignature: "c2lnbmF0dXJl" },
+        { text: "answer one", thoughtSignature: "c2lnMg==" },
+        { functionCall: { name: "lookup", args: { q: 1 } }, thoughtSignature: "c2lnMw==" },
+      ],
+    },
+    { role: "user", parts: [{ text: "follow-up" }] },
+  ];
+  const snapshot = JSON.stringify(history);
+  const previousKey = process.env.GEMINI_API_KEY;
+  const originalFetch = global.fetch;
+  const originalLog = console.log;
+  process.env.GEMINI_API_KEY = "test-key-not-a-real-secret";
+  console.log = () => {};
+  let sent = null;
+  global.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return { ok: true, status: 200, text: async () => "{}" };
+  };
+  try {
+    const fn = createGeminiGenerate({ geminiApiKey: defineSecret("GEMINI_API_KEY"), callableOptions: {} });
+    await fn.run({
+      app: { appId: "test" },
+      auth: { uid: "u1" },
+      rawRequest: {},
+      data: { model: HYDROGEN, contents: history, generationConfig: { temperature: 0 } },
+    });
+  } finally {
+    global.fetch = originalFetch;
+    console.log = originalLog;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+  assert.equal(JSON.stringify(sent.contents), snapshot);
+});
+
+test("functions/ declares no non-secret define* params (a prod deploy runs --non-interactive)", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "..");
+  const skip = new Set(["node_modules", "test", "scripts"]);
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!skip.has(entry.name)) walk(path.join(dir, entry.name));
+      } else if (entry.name.endsWith(".js")) {
+        const source = fs.readFileSync(path.join(dir, entry.name), "utf8");
+        const matches = source.match(/\bdefine(?:String|Int|Float|Boolean|List)\s*\(/g);
+        if (matches) offenders.push(`${path.relative(root, path.join(dir, entry.name))}: ${matches.join(", ")}`);
+      }
+    }
+  };
+  walk(root);
+  assert.deepEqual(offenders, []);
+});

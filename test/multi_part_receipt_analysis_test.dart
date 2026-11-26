@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:al_mraay/core/localization/app_strings.dart';
 import 'package:al_mraay/core/services/ai_receipt_service.dart';
@@ -35,7 +36,7 @@ void main() {
       expect(map['code'], 'MULTI_PART_LONG_RECEIPT_STITCHING_AND_DEDUPLICATION_STANDARD');
       expect(map['order_index'], 39);
       expect(map['category'], 'fraud_security');
-      expect(map['primary_model'], 'Gemini 3.7 Flash');
+      expect(map['primary_model'], AiModels.defaultPrimaryLabel);
 
       final restored = AiDirectiveModel.fromMap(map, 'AIR-39');
       expect(restored.id, 'AIR-39');

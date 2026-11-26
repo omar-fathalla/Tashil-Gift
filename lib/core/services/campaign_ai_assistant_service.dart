@@ -1,4 +1,4 @@
-import 'package:al_mraay/core/constants/ai_models.dart';
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -53,8 +53,8 @@ class CampaignAiAssistantService {
   late final CloudGenerativeModel _fallbackModel;
 
   CampaignAiAssistantService() {
-    _model = _createModel(AiModels.helperServices);
-    _fallbackModel = _createModel(AiModels.helperServicesFallback);
+    _model = _createModel(AiConfig.helperModel);
+    _fallbackModel = _createModel(AiConfig.helperFallbackModel);
   }
 
   static CloudGenerativeModel _createModel(String modelName) {

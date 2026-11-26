@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -7,7 +8,7 @@ import 'whatsapp_gateway_config_model.dart';
 import 'whatsapp_gateway_service.dart';
 
 /// Service for Intelligent WhatsApp Customer Service & AI Auto-Reply
-/// Powered strictly by [AiModels.helperServices] at temperature 0.0 (Rule 5 & Rule 10)
+/// Powered strictly by [AiConfig.helperModel] at temperature 0.0 (Rule 5 & Rule 10)
 class WhatsAppAiAutoReplyService {
   late final CloudGenerativeModel _primaryModel;
   late final CloudGenerativeModel _fallbackModel;
@@ -18,8 +19,8 @@ class WhatsAppAiAutoReplyService {
     CloudGenerativeModel? primaryModel,
     CloudGenerativeModel? fallbackModel,
   })  : _gatewayService = gatewayService ?? WhatsAppGatewayService() {
-    _primaryModel = primaryModel ?? _buildModel(AiModels.helperServices);
-    _fallbackModel = fallbackModel ?? _buildModel(AiModels.helperServicesFallback);
+    _primaryModel = primaryModel ?? _buildModel(AiConfig.helperModel);
+    _fallbackModel = fallbackModel ?? _buildModel(AiConfig.helperFallbackModel);
   }
 
   static CloudGenerativeModel _buildModel(String modelName) {
@@ -41,7 +42,7 @@ class WhatsAppAiAutoReplyService {
     );
   }
 
-  /// Generates an AI reply for an incoming customer inquiry using [AiModels.helperServices]
+  /// Generates an AI reply for an incoming customer inquiry using [AiConfig.helperModel]
   Future<String> generateReply({
     required String customerMessage,
     String? customerName,
@@ -90,7 +91,7 @@ class WhatsAppAiAutoReplyService {
         return reply;
       }
     } catch (e) {
-      debugPrint('${AiModels.helperServicesLabel} Auto-Reply error: $e. Falling back to ${AiModels.helperServicesFallbackLabel}...');
+      debugPrint('${AiModels.displayName(AiConfig.helperModel)} Auto-Reply error: $e. Falling back to ${AiModels.displayName(AiConfig.helperFallbackModel)}...');
     }
 
     // Try fallback helper model
@@ -101,7 +102,7 @@ class WhatsAppAiAutoReplyService {
         return fallbackReply;
       }
     } catch (e) {
-      debugPrint('${AiModels.helperServicesFallbackLabel} Auto-Reply error: $e');
+      debugPrint('${AiModels.displayName(AiConfig.helperFallbackModel)} Auto-Reply error: $e');
     }
 
     // Polite deterministic fallback if AI network fails

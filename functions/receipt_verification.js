@@ -1,5 +1,78 @@
 const { analyzeReceiptWithGateway } = require("./gemini_gateway");
-const { RECEIPT_VERIFICATION_MODEL, GEMINI_UPSTREAM_TIMEOUT_MS } = require("./ai_models");
+const {
+  RECEIPT_VERIFICATION_DEFAULT_MODEL,
+  GEMINI_UPSTREAM_TIMEOUT_MS,
+  isGemini4,
+} = require("./ai_models");
+const { shapeGenerationConfig, logGeminiUsage } = require("./gemini_request_shaping");
+
+/**
+ * Model for the server-side verifier, read from process.env when the function
+ * runs. Set per project in functions/.env.<projectId> (dev only); projects
+ * without a value (prod) keep the code default. Deliberately not a define*
+ * param: a param without a prod value would fail a --non-interactive deploy.
+ */
+function resolveReceiptVerificationModel() {
+  const value = String(process.env.RECEIPT_VERIFICATION_MODEL || "").trim();
+  return value || RECEIPT_VERIFICATION_DEFAULT_MODEL;
+}
+
+const RECEIPT_MAX_OUTPUT_TOKENS = 4096;
+
+const RECEIPT_RESPONSE_SCHEMA = Object.freeze({
+  type: "OBJECT",
+  properties: {
+    isValid: { type: "BOOLEAN" },
+    receiptNumber: { type: "STRING" },
+    storeChainDetected: { type: "STRING" },
+    branchDetected: { type: "STRING" },
+    isBranchMatched: { type: "BOOLEAN" },
+    confidence: { type: "NUMBER" },
+    message: { type: "STRING" },
+  },
+  required: [
+    "isValid",
+    "receiptNumber",
+    "storeChainDetected",
+    "branchDetected",
+    "isBranchMatched",
+    "message",
+  ],
+  propertyOrdering: [
+    "isValid",
+    "receiptNumber",
+    "storeChainDetected",
+    "branchDetected",
+    "isBranchMatched",
+    "confidence",
+    "message",
+  ],
+});
+
+/** Builds the generateContent body. Exported so tests and the eval can reuse it. */
+function buildReceiptRequest({ model, prompt, mimeType, base64Data }) {
+  const generationConfig = {
+    temperature: 0.1,
+    maxOutputTokens: RECEIPT_MAX_OUTPUT_TOKENS,
+    responseMimeType: "application/json",
+    responseSchema: RECEIPT_RESPONSE_SCHEMA,
+  };
+  if (isGemini4(model)) {
+    generationConfig.thinkingConfig = { thinkingLevel: "low" };
+  }
+  return {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64Data } },
+        ],
+      },
+    ],
+    generationConfig: shapeGenerationConfig(model, generationConfig),
+  };
+}
 
 /**
  * Gemini callback shared by the analyzeReceipt callable and the WhatsApp webhook.
@@ -24,41 +97,45 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
     "Known branches: " + JSON.stringify(branches || []) + ". " +
     "Eligible products: " + JSON.stringify(products || []) + ". " +
     "Respond with ONLY compact JSON keys: isValid (bool), receiptNumber, storeChainDetected, " +
-    "branchDetected, isBranchMatched (bool), message.";
+    "branchDetected, isBranchMatched (bool), confidence (number 0 to 1), message.";
 
+  const model = resolveReceiptVerificationModel();
   const url =
     "https://generativelanguage.googleapis.com/v1beta/models/" +
-    RECEIPT_VERIFICATION_MODEL +
+    encodeURIComponent(model) +
     ":generateContent?key=" +
     encodeURIComponent(apiKey);
 
+  const startedAt = Date.now();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mimeType, data: base64Data } },
-          ],
-        },
-      ],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-    }),
+    body: JSON.stringify(buildReceiptRequest({ model, prompt, mimeType, base64Data })),
     // 2.0.150+211: never hang on a slow upstream call.
     signal: AbortSignal.timeout(GEMINI_UPSTREAM_TIMEOUT_MS),
   });
 
   if (!response.ok) {
     const errBody = await response.text();
+    logGeminiUsage({
+      source: "receiptVerification",
+      model,
+      latencyMs: Date.now() - startedAt,
+      payload: null,
+      status: response.status,
+    });
     const error = new Error("Gemini HTTP " + response.status + ": " + errBody.slice(0, 300));
     error.code = response.status;
     throw error;
   }
 
   const payload = await response.json();
+  logGeminiUsage({
+    source: "receiptVerification",
+    model,
+    latencyMs: Date.now() - startedAt,
+    payload,
+  });
   const text =
     (((payload || {}).candidates || [])[0] || {}).content?.parts
       ?.map((p) => p.text || "")
@@ -87,6 +164,7 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
     storeChainDetected: "",
     branchDetected: branches[0] || "",
     isBranchMatched: false,
+    confidence: null,
     message: "تعذر تفسير رد Gemini",
     rawText: text.slice(0, 500),
   };
@@ -132,6 +210,10 @@ async function verifyReceiptImage({
 }
 
 module.exports = {
+  RECEIPT_RESPONSE_SCHEMA,
+  RECEIPT_MAX_OUTPUT_TOKENS,
+  buildReceiptRequest,
+  resolveReceiptVerificationModel,
   callGeminiForReceipt,
   verifyReceiptImage,
 };
