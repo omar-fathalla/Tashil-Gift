@@ -20,16 +20,27 @@
 | TAG-20 | Required reviewer على environment `production` |
 | TAG-21 | Branch protection على `main` و `dev` |
 | TAG-10 | شيل المفاتيح المكتوبة في خدمات الـ AI (In Review) |
-| مقترح | تشفير (hash) باسوردات البوابات |
-| مقترح | مراجعة صلاحيات القراية للجلسات الـ anonymous |
+| TAG-70 | تشفير (hash) باسوردات البوابات |
+| TAG-71 | مراجعة صلاحيات القراية للجلسات الـ anonymous |
 
 ## 3. بيئة التطوير (مشروع `P-TAG-16`)
 
 M1 Firebase dev project ← M2 فصل الإعدادات ← M3 البيانات والـ rules ← M4 CI/CD ← M5 الاختبار والتحويل.
 
-* معظم كود M2/M3/M4 جاهز على فرع `feat/dev-environment` (TAG-3، 7، 8، 9، 10، 11، 12، 13، 14، 15، 17، 23، 25 كلهم In Review).
-* الناقص يدوي من محمد: TAG-1 (إنشاء المشروع)، TAG-2، TAG-4، TAG-5، TAG-6، TAG-16، TAG-19.
-* بعد كده: TAG-24 (smoke tests)، TAG-26، TAG-27 (قرار التحويل)، TAG-22.
+الحالة يوم 2026-11-26 (من الكود ومن تشغيلات GitHub Actions على PR #44):
+
+| | الحالة |
+|---|---|
+| مشروع `tashil-gift-dev` و web app و config في الكود (TAG-3) | جاهز |
+| Service account و GitHub secret للـ dev (TAG-16، TAG-19) | جاهزين فعليًا (معاينة `pr-44` اتنشرت على dev)، لكن التيكتات لسه Backlog |
+| فصل الإعدادات في الكود (`APP_ENV`، functions env، seed، workflows) | جاهز على `feat/dev-environment` (PR #44)، ومش متدمج |
+| Firestore/Storage rules و indexes على dev (TAG-12) | فشل: `403 The caller does not have permission` على Firebase Rules API. الـ service account ناقصه دور **Firebase Rules Admin** (أو الـ API مش متفعّل) |
+| Cloud Functions على dev | ما اتنشرتش؛ محتاجة الـ secrets الأول (TAG-4). من غيرها قراية الفاتورة وصرف الهدية ما يشتغلوش على dev |
+| App Check على dev | مش متأكد إن `DEV_APP_CHECK_RECAPTCHA_SITE_KEY` متحط؛ من غيره كل الـ callables بترفض |
+| البيانات الوهمية (TAG-15) | محتاجة الـ rules والـ functions الأول |
+| PR #44 | فيه تعارض بسيط في `web/version.json` مع `dev` بعد 2.0.191 |
+
+بعد كده: TAG-24 (smoke tests)، TAG-26، TAG-27 (قرار التحويل)، TAG-22، TAG-5، TAG-6.
 
 ## 4. ديون تقنية ومنتج
 
@@ -41,12 +52,12 @@ M1 Firebase dev project ← M2 فصل الإعدادات ← M3 البيانات
 | TAG-36 | تقسيم صفحة إنشاء الحملة لخطوات |
 | TAG-37 (38–42) | مؤجلات حفظ الحملة C-02 |
 | TAG-34 | تعديل الكلام في لوحة الأدمن وكتالوج الهدايا |
-| مقترح | اختبار تطابق الأهلية بين Dart و Cloud Functions |
-| مقترح | إصلاح الـ 7 ملفات اختبار الفاشلة |
-| مقترح | مراقبة وتنبيهات لفشل حفظ الفواتير وصرف الهدايا |
-| مقترح | تنظيف الريبو وتصحيح AGENTS.md |
-| مقترح | نشر Firestore indexes بخطوة محكومة |
+| TAG-72 | اختبار تطابق الأهلية بين Dart و Cloud Functions |
+| TAG-73 | إصلاح الـ 7 ملفات اختبار الفاشلة |
+| TAG-74 | مراقبة وتنبيهات لفشل حفظ الفواتير وصرف الهدايا |
+| TAG-75 | تنظيف الريبو وتصحيح AGENTS.md |
+| TAG-76 | نشر Firestore indexes بخطوة محكومة |
 
-## تنظيف مطلوب في Linear
+## تنظيف Linear (اتعمل 2026-11-26)
 
-* TAG-51 و TAG-56 اتلغوا (اتعوّضوا بـ TAG-61)، لكن فرعياتهم لسه مفتوحة: TAG-52 (In Progress)، TAG-53، TAG-54، TAG-55، TAG-58، TAG-59، TAG-60 (Todo). المفروض تتلغي كـ duplicate لـ TAG-62/63/64.
+* فرعيات TAG-51 و TAG-56 الملغيين (TAG-52..55، TAG-58..60) اتقفلت Duplicate لـ TAG-62/63/64.
