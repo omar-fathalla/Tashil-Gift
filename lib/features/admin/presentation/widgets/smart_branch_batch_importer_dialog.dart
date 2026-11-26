@@ -1,3 +1,4 @@
+import 'package:al_mraay/core/config/ai_config.dart';
 import 'package:al_mraay/core/constants/ai_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -198,7 +199,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
         if (_imageBytes == null) {
           throw const FormatException('يرجى اختيار صورة الجدول أو ملف PDF أولاً.');
         }
-        setState(() => _analyzingMessage = 'جارٍ فحص صورة الجدول واستخراج الفروع عبر عقل ${AiModels.helperServicesLabel}...');
+        setState(() => _analyzingMessage = 'جارٍ فحص صورة الجدول واستخراج الفروع عبر عقل ${AiModels.displayName(AiConfig.helperModel)}...');
         rawItems = await SmartBranchMatcherService.parseImageOrPdfWithGemini(
           fileBytes: _imageBytes!,
           mimeType: _imageMimeType,
@@ -730,7 +731,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
               ButtonSegment(
                 value: 2,
                 icon: Icon(Icons.document_scanner_rounded, size: 18),
-                label: Text('صورة / PDF (${AiModels.familyName(AiModels.helperServices)})'),
+                label: Text('صورة / PDF (${AiModels.familyName(AiConfig.helperModel)})'),
               ),
             ],
             selected: {_activeTab},
@@ -838,7 +839,7 @@ class _SmartBranchBatchImporterDialogState extends ConsumerState<SmartBranchBatc
                       Icon(Icons.bolt_rounded, size: 14, color: colorScheme.tertiary),
                       const SizedBox(width: 4),
                       Text(
-                        '${AiModels.helperServicesConstLabel} Vision',
+                        '${AiModels.displayName(AiConfig.helperModel)} Vision',
                         style: GoogleFonts.cairo(fontSize: 10.5, fontWeight: FontWeight.bold, color: colorScheme.onTertiaryContainer),
                       ),
                     ],

@@ -24,6 +24,8 @@ final aiReceiptServiceProvider = Provider<AiReceiptService>((ref) {
     modelName: config?.effectivePrimaryModel ?? AiConfig.primaryModel,
     fastTierModelName: config?.fastTierModel ?? AiConfig.fastTierModel,
     deepAuditModelName: config?.deepAuditModel ?? AiConfig.deepAuditModel,
+    thinkingLevelFast: config?.thinkingLevelFast ?? AiConfig.thinkingLevelFast,
+    thinkingLevelDeep: config?.thinkingLevelDeep ?? AiConfig.thinkingLevelDeep,
   );
 });
 
@@ -750,20 +752,38 @@ class AiReceiptService {
   final String fastTierModelName;
   final String deepAuditModelName;
 
+  /// Admin thinking level for the fast tier (`low`, `medium`, `high`) or null.
+  final String? thinkingLevelFast;
+
+  /// Admin thinking level for the deep-audit tier (`low`, `medium`, `high`) or null.
+  final String? thinkingLevelDeep;
+
   CloudGenerativeModel get _model => _modelCache ??= _createModel(modelName);
-  CloudGenerativeModel get _fastModel => _fastModelCache ??= _createFastTierModel(fastTierModelName);
+  CloudGenerativeModel get _fastModel => _fastModelCache ??=
+      _createFastTierModel(fastTierModelName, thinkingLevel: thinkingLevelFast);
   CloudGenerativeModel get _deepAuditModel =>
-      _deepAuditModelCache ??= _createDeepAuditModel(deepAuditModelName);
+      _deepAuditModelCache ??=
+          _createDeepAuditModel(deepAuditModelName, thinkingLevel: thinkingLevelDeep);
   CloudGenerativeModel get _fallbackModel1 =>
-      _fallbackModel1Cache ??= _createFastTierModel(AiConfig.fallbackModel);
+      _fallbackModel1Cache ??= _createFastTierModel(
+        AiConfig.fallbackModel,
+        thinkingLevel: thinkingLevelFast,
+      );
   CloudGenerativeModel get _fallbackModel2 =>
-      _fallbackModel2Cache ??= _createFastTierModel(AiModels.defaultFallback);
+      _fallbackModel2Cache ??= _createFastTierModel(
+        AiModels.defaultFallback,
+        thinkingLevel: thinkingLevelFast,
+      );
 
   AiReceiptService({
     String? modelName,
     String? fastTierModelName,
     String? deepAuditModelName,
-  })  : modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel,
+    String? thinkingLevelFast,
+    String? thinkingLevelDeep,
+  })  : thinkingLevelFast = AiModels.normalizeThinkingLevel(thinkingLevelFast),
+        thinkingLevelDeep = AiModels.normalizeThinkingLevel(thinkingLevelDeep),
+        modelName = (modelName != null && modelName.isNotEmpty) ? modelName : AiConfig.primaryModel,
         fastTierModelName = (fastTierModelName != null && fastTierModelName.isNotEmpty) ? fastTierModelName : AiConfig.fastTierModel,
         deepAuditModelName = (deepAuditModelName != null && deepAuditModelName.isNotEmpty) ? deepAuditModelName : AiConfig.deepAuditModel;
 
@@ -1157,7 +1177,7 @@ class AiReceiptService {
     ],
   );
 
-  static CloudGenerativeModel _createFastTierModel(String name) {
+  static CloudGenerativeModel _createFastTierModel(String name, {String? thinkingLevel}) {
     return CloudGenerativeModel(
       model: name,
       systemInstruction: Content.system(
@@ -1181,19 +1201,36 @@ class AiReceiptService {
         maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
-      thinkingConfig: fastTierThinkingConfig(name),
+      thinkingConfig: fastTierThinkingConfig(name, level: thinkingLevel),
     );
   }
 
-  /// 2.0.148+208: bounded reasoning for the fast OCR tier. Gemini 3.x models
-  /// take `thinkingLevel`; 2.x models take a token `thinkingBudget`. Output
-  /// schema and maxOutputTokens are unchanged. The deep-audit tier keeps the
-  /// model's default thinking.
+  /// 2.0.148+208: bounded reasoning for the fast OCR tier. Gemini 3.x and 4
+  /// models take `thinkingLevel`; 2.x models take a token `thinkingBudget`.
+  /// Output schema and maxOutputTokens are unchanged. The deep-audit tier keeps
+  /// the model's default thinking.
+  ///
+  /// [level] is the optional admin override (`thinking_level_fast`): only
+  /// `low`, `medium` or `high` are honored, anything else falls back to `low`.
+  /// Gemini 4 defaults to `high` server-side and rejects `minimal`, so the
+  /// level is always sent explicitly.
   @visibleForTesting
-  static Map<String, dynamic> fastTierThinkingConfig(String modelName) {
+  static Map<String, dynamic> fastTierThinkingConfig(String modelName, {String? level}) {
     final n = modelName.toLowerCase();
     if (n.contains('gemini-2')) return {'thinkingBudget': 1024};
-    return {'thinkingLevel': 'low'};
+    return {'thinkingLevel': AiModels.normalizeThinkingLevel(level) ?? 'low'};
+  }
+
+  /// Thinking config for the deep-audit tier. Null keeps the model default for
+  /// 3.x/2.x; Gemini 4 always gets an explicit level (`high` unless overridden
+  /// by `thinking_level_deep`).
+  @visibleForTesting
+  static Map<String, dynamic>? deepAuditThinkingConfig(String modelName, {String? level}) {
+    final n = modelName.toLowerCase();
+    if (n.contains('gemini-2')) return null;
+    final normalized = AiModels.normalizeThinkingLevel(level);
+    if (AiModels.isGemini4(n)) return {'thinkingLevel': normalized ?? 'high'};
+    return normalized == null ? null : {'thinkingLevel': normalized};
   }
 
   /// 2.0.150+211: strict client wait for one Gemini call (was 90s). Server
@@ -1225,7 +1262,7 @@ class AiReceiptService {
     return remaining < perCall ? remaining : perCall;
   }
 
-  static CloudGenerativeModel _createDeepAuditModel(String name) {
+  static CloudGenerativeModel _createDeepAuditModel(String name, {String? thinkingLevel}) {
     return CloudGenerativeModel(
       model: name,
       systemInstruction: Content.system(
@@ -1244,6 +1281,7 @@ class AiReceiptService {
         maxOutputTokens: 8192,
         responseSchema: _fastTierSchema,
       ),
+      thinkingConfig: deepAuditThinkingConfig(name, level: thinkingLevel),
     );
   }
 
