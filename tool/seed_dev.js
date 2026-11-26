@@ -16,7 +16,9 @@
  *
  * Options: --dry-run (print the plan, write nothing), --skip-storage,
  *          --skip-auth, --credentials-out <file> (write new passwords to a
- *          file instead of stdout; used by CI). Optional env: DEV_ADMIN_PASSWORD (else a random one is
+ *          file instead of stdout; used by CI; existing portal passwords are
+ *          included), --reset-passwords (give existing test users a new
+ *          password; used by CI so a lost password is never a dead end). Optional env: DEV_ADMIN_PASSWORD (else a random one is
  *          generated and printed ONCE, when the user is first created).
  *
  * Idempotent: fixed document ids + merge writes; existing passwords are kept.
@@ -65,6 +67,9 @@ async function main() {
   assertFakeOnly(data);
   const skipStorage = argv.includes("--skip-storage");
   const skipAuth = argv.includes("--skip-auth");
+  const resetPasswords = argv.includes("--reset-passwords");
+  const outIdx = argv.indexOf("--credentials-out");
+  const credentialsOut = outIdx >= 0 ? argv[outIdx + 1] : "";
   const receipts = fs.existsSync(RECEIPTS_DIR) ? fs.readdirSync(RECEIPTS_DIR).filter((f) => f.endsWith(".png")).sort() : [];
 
   console.log(`Target: ${target.projectId}${target.emulator ? " (local emulators)" : ""}${target.dryRun ? " [dry run]" : ""}`);
@@ -84,6 +89,22 @@ async function main() {
   const db = getFirestore(app);
   const now = FieldValue.serverTimestamp();
   const printed = [];
+  let credentialsWritten = false;
+  function writeCredentials() {
+    if (credentialsWritten) return;
+    credentialsWritten = true;
+    if (printed.length && credentialsOut) {
+      // CI: never print passwords to the job log; write them to a private file
+      // that the workflow uploads as a short-lived artifact.
+      fs.writeFileSync(credentialsOut, printed.join("\n") + "\n", { mode: 0o600 });
+      console.log(`\nCredentials written to ${path.basename(credentialsOut)} (not printed here).`);
+    } else if (printed.length) {
+      console.log("\nNEW credentials (shown once; save them in your password manager, never in the repo or a ticket):");
+      for (const line of printed) console.log(`  ${line}`);
+    } else {
+      console.log("\nCredentials unchanged (users and companies already existed).");
+    }
+  }
 
   const batch = db.batch();
   const put = (col, id, doc) => batch.set(db.collection(col).doc(id), { ...doc, ...FIXTURE, seededAt: now }, { merge: true });
@@ -96,8 +117,8 @@ async function main() {
       agencyOpsUsername: existing.agencyOpsUsername || `ops_${c.slug}`,
       agencyOpsPassword: existing.agencyOpsPassword || randomPassword("Op#dev"),
     };
-    if (!existing.brandManagerPassword) printed.push(`company ${c.slug}: /portal/${c.slug}  ${creds.brandManagerUsername} / ${creds.brandManagerPassword}`);
-    if (!existing.agencyOpsPassword) printed.push(`company ${c.slug}: /ops/${c.slug}     ${creds.agencyOpsUsername} / ${creds.agencyOpsPassword}`);
+    if (!existing.brandManagerPassword || credentialsOut) printed.push(`company ${c.slug}: /portal/${c.slug}  ${creds.brandManagerUsername} / ${creds.brandManagerPassword}`);
+    if (!existing.agencyOpsPassword || credentialsOut) printed.push(`company ${c.slug}: /ops/${c.slug}     ${creds.agencyOpsUsername} / ${creds.agencyOpsPassword}`);
     put("companies", c.slug, {
       name: c.name, slug: c.slug, logoUrl: "", productsCount: data.products.filter((p) => p.companySlug === c.slug).length,
       brandCredentialVersion: existing.brandCredentialVersion || 1, agencyCredentialVersion: existing.agencyCredentialVersion || 1,
@@ -140,6 +161,11 @@ async function main() {
       let user;
       try {
         user = await auth.getUserByEmail(u.email);
+        if (resetPasswords) {
+          const password = randomPassword("Dev#");
+          await auth.updateUser(user.uid, { password });
+          printed.push(`${u.key}: ${u.email} / ${password} (reset)`);
+        }
       } catch (err) {
         if (err.code !== "auth/user-not-found") throw err;
         const password = process.env.DEV_ADMIN_PASSWORD || randomPassword("Dev#");
@@ -153,10 +179,15 @@ async function main() {
     }
     console.log("Auth: test users ready.");
   }
+  writeCredentials();
 
   if (!skipStorage && receipts.length) {
     const bucket = getStorage(app).bucket(bucketName);
-    for (const f of receipts) {
+    const [bucketExists] = await bucket.exists();
+    if (!bucketExists) {
+      console.log(`::warning::Storage bucket gs://${bucketName} does not exist. Open https://console.firebase.google.com/project/${target.projectId}/storage and click "Get started", then seed again. Sample receipts were NOT uploaded.`);
+    }
+    for (const f of bucketExists ? receipts : []) {
       await bucket.upload(path.join(RECEIPTS_DIR, f), { destination: `dev_fixtures/receipts/${f}`, metadata: { contentType: "image/png", metadata: { devFixture: "true" } } });
     }
     console.log(`Storage: ${receipts.length} sample receipts uploaded to gs://${bucketName}/dev_fixtures/receipts/`);
@@ -165,19 +196,7 @@ async function main() {
   const site = target.emulator ? "http://127.0.0.1:<port>" : `https://${target.projectId}.web.app`;
   console.log("\nPromoter (مندوب) links - anonymous, no password:");
   for (const e of data.events.filter((x) => x.isActive)) console.log(`  ${e.eventName}: ${site}/c/${e.companySlug}?event=${e.id}`);
-  const outIdx = argv.indexOf("--credentials-out");
-  const credentialsOut = outIdx >= 0 ? argv[outIdx + 1] : "";
-  if (printed.length && credentialsOut) {
-    // CI: never print passwords to the job log; write them to a private file
-    // that the workflow uploads as a short-lived artifact.
-    fs.writeFileSync(credentialsOut, printed.join("\n") + "\n", { mode: 0o600 });
-    console.log(`\nNEW credentials written to ${path.basename(credentialsOut)} (not printed here).`);
-  } else if (printed.length) {
-    console.log("\nNEW credentials (shown once; save them in your password manager, never in the repo or a ticket):");
-    for (const line of printed) console.log(`  ${line}`);
-  } else {
-    console.log("\nCredentials unchanged (users and companies already existed).");
-  }
+  writeCredentials();
 }
 
 main().catch((err) => {

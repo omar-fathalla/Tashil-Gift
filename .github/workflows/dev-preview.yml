@@ -167,7 +167,7 @@ jobs:
         run: |
           (cd functions && npm ci)
           umask 077
-          node tool/seed_dev.js --project "$PROJECT" --confirm "$PROJECT" --credentials-out "$RUNNER_TEMP/dev-seed-credentials.txt"
+          node tool/seed_dev.js --project "$PROJECT" --confirm "$PROJECT" --reset-passwords --credentials-out "$RUNNER_TEMP/dev-seed-credentials.txt"
           touch "$RUNNER_TEMP/dev-seed-credentials.txt"
 
       - name: Upload the new seed credentials (1 day)
