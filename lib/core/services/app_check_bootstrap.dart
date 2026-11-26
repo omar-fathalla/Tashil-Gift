@@ -2,6 +2,8 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../config/app_env.dart';
+
 /// Public reCAPTCHA Enterprise site key registered for the Tashil Gift web app
 /// in Firebase App Check (project tashil-gift). Site keys are public by design.
 const String kDefaultAppCheckRecaptchaSiteKey =
@@ -10,9 +12,13 @@ const String kDefaultAppCheckRecaptchaSiteKey =
 /// Web reCAPTCHA Enterprise site key. Override at build time with
 /// `--dart-define=APP_CHECK_RECAPTCHA_SITE_KEY=<key>`; pass an empty value
 /// to disable web App Check (e.g. for local experiments).
+///
+/// The default key is registered for the production project only, so an
+/// APP_ENV=dev build has no default: CI passes the dev project's own key
+/// (GitHub Actions variable DEV_APP_CHECK_RECAPTCHA_SITE_KEY).
 const String kAppCheckRecaptchaSiteKey = String.fromEnvironment(
   'APP_CHECK_RECAPTCHA_SITE_KEY',
-  defaultValue: kDefaultAppCheckRecaptchaSiteKey,
+  defaultValue: kIsDevEnv ? '' : kDefaultAppCheckRecaptchaSiteKey,
 );
 
 /// Activates Firebase App Check.

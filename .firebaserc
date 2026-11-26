@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "tashil-gift"
+    "default": "tashil-gift",
+    "prod": "tashil-gift",
+    "dev": "tashil-gift-dev"
   }
 }
