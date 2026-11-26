@@ -102,6 +102,8 @@ https://console.cloud.google.com/security/secret-manager?project=tashil-gift-dev
    * **API restrictions**: Identity Toolkit و Token Service و Cloud Firestore و Firebase Storage و Firebase Installations و Firebase App Check و Cloud Functions، ومن غير Generative Language API.
 
 ### خطوة 7 — Service account للنشر (TAG-16)
+> **الحالة الفعلية (2026-11-26):** الـ secret في GitHub شايل مفتاح `firebase-adminsdk-fbsvc@tashil-gift-dev.iam.gserviceaccount.com`، ومفيش `github-deployer-dev`. اتضافتله أدوار النشر اللي تحت، وهو اللي شغال دلوقتي. لو حبيت تفصل حساب للنشر بعدين، اتبع الخطوات دي وغيّر الـ secret.
+
 1. IAM ← Service accounts ← Create، والاسم `github-deployer-dev`:
    https://console.cloud.google.com/iam-admin/serviceaccounts?project=tashil-gift-dev
 2. اديله **نفس أدوار** `github-deployer` في الإنتاج. تقدر تشوفها هنا: https://console.cloud.google.com/iam-admin/iam?project=tashil-gift

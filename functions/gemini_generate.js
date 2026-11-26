@@ -5,6 +5,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { consumeRateLimit, clientKey, RateLimitError } = require("./rate_limit");
 const { ALLOWED_MODEL_IDS, GEMINI_UPSTREAM_TIMEOUT_MS } = require("./ai_models");
+const { warmMinInstances } = require("./env_config");
 
 const ALLOWED_MODELS = new Set(ALLOWED_MODEL_IDS);
 
@@ -61,10 +62,11 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
       ...callableOptions,
       secrets: [geminiApiKey],
       // 2.0.150+211: upstream call aborts at 38s; function cap 60s; one warm
-      // instance so a rep's scan never waits for a cold start.
+      // instance so a rep's scan never waits for a cold start (prod only;
+      // dev uses 0, see warmMinInstances in env_config.js).
       timeoutSeconds: 60,
       memory: "256MiB",
-      minInstances: 1,
+      minInstances: warmMinInstances(),
     },
     async (request) => {
       if (!request.app) {

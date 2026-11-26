@@ -2,16 +2,22 @@
 
 حلول الترويج والتحقق الذكي متعدد الشركات.
 
-## Getting Started
+منصة Flutter Web على Firebase: المندوب بيصوّر فاتورة العميل، Gemini بيقراها ويتأكد من شروط الحملة، والعميل بيكسب هدية من خلال لعبة، والسيرفر بيخصم من رصيد الفرع.
 
-This project is a starting point for a Flutter application.
+* الإنتاج: https://tashil-gift.web.app
+* Firebase: `tashil-gift`
+* Linear: فريق **Tashil Gift** (`TAG`)
 
-A few resources to get you started if this is your first Flutter project:
+## ابدأ من هنا
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+* [docs/README.md](docs/README.md): فهرس التوثيق كله (المعمارية، البيانات، رحلة الفاتورة، الـ functions، الـ AI، التشغيل، النشر، القواعد، النواقص، والخطة).
+* [docs/07-dev-setup.md](docs/07-dev-setup.md): تجهيز الجهاز والتشغيل والاختبارات.
+* [AGENTS.md](AGENTS.md): القواعد الإلزامية (ممنوع push أو deploy من غير طلب صريح).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## تشغيل سريع
+
+```bash
+fvm install && fvm flutter pub get        # Flutter 3.44.5 من .fvmrc
+(cd functions && npm ci && npm test)      # Node 22
+fvm flutter run -d chrome --web-port 8080 # تحذير: متوصّل بالإنتاج، شوف docs/07-dev-setup.md للـ emulators
+```
