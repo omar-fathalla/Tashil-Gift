@@ -840,10 +840,15 @@ class _ClientReceiptUploadScreenState
       UpdatePromptGuard.begin();
       try {
         _pendingSessionRetry = false;
-        await _submitAndValidateReceiptImpl();
+        // TAG-77: each scan runs in its own matcher memo, so the AI step, the
+        // gift step and the unfulfilled-reasons step reuse one rule match
+        // (same inputs -> same answer). A retry is a new scan.
+        await PromotionalMatchScope.run(() => _submitAndValidateReceiptImpl());
         if (_pendingSessionRetry && mounted) {
           _pendingSessionRetry = false;
-          await _submitAndValidateReceiptImpl(isSessionRetry: true);
+          await PromotionalMatchScope.run(
+            () => _submitAndValidateReceiptImpl(isSessionRetry: true),
+          );
         }
       } finally {
         _pendingSessionRetry = false;

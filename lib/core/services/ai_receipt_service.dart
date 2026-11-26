@@ -1428,6 +1428,67 @@ class AiReceiptService {
     bool forceDeepAudit = false,
     bool forceRefresh = false,
     bool reuseStoredAnalysis = false,
+  }) {
+    // TAG-77: one scan = one matcher memo (see PromotionalMatchScope).
+    return PromotionalMatchScope.run(() => _analyzeReceiptImageInScope(
+          imageBytes,
+          mimeType,
+          additionalImagesBytes: additionalImagesBytes,
+          additionalMimeTypes: additionalMimeTypes,
+          targetCompany: targetCompany,
+          minimumSpend: minimumSpend,
+          requiredProducts: requiredProducts,
+          registeredBarcodes: registeredBarcodes,
+          catalogBarcodeMap: catalogBarcodeMap,
+          retailChainName: retailChainName,
+          allowedBranches: allowedBranches,
+          isAllBranches: isAllBranches,
+          registeredBranches: registeredBranches,
+          campaignBranchIds: campaignBranchIds,
+          campaignBranchNames: campaignBranchNames,
+          startDate: startDate,
+          endDate: endDate,
+          customPrompt: customPrompt,
+          allowMultipleChances: allowMultipleChances,
+          multiplierBasis: multiplierBasis,
+          maxChancesPerReceipt: maxChancesPerReceipt,
+          promotionalRules: promotionalRules,
+          spendLadderMode: spendLadderMode,
+          allowComplementaryReceipts: allowComplementaryReceipts,
+          forceDeepAudit: forceDeepAudit,
+          forceRefresh: forceRefresh,
+          reuseStoredAnalysis: reuseStoredAnalysis,
+        ));
+  }
+
+  Future<AiReceiptAnalysisResult> _analyzeReceiptImageInScope(
+    Uint8List imageBytes,
+    String mimeType, {
+    List<Uint8List> additionalImagesBytes = const [],
+    List<String> additionalMimeTypes = const [],
+    required String targetCompany,
+    required double minimumSpend,
+    List<String> requiredProducts = const [],
+    List<String> registeredBarcodes = const [],
+    Map<String, String> catalogBarcodeMap = const {},
+    String retailChainName = '',
+    List<String> allowedBranches = const [],
+    bool isAllBranches = true,
+    List<BranchModel> registeredBranches = const [],
+    List<String> campaignBranchIds = const [],
+    List<String> campaignBranchNames = const [],
+    DateTime? startDate,
+    DateTime? endDate,
+    String customPrompt = '',
+    bool allowMultipleChances = false,
+    String multiplierBasis = 'both',
+    int maxChancesPerReceipt = 0,
+    List<PromotionalRuleItem> promotionalRules = const [],
+    String spendLadderMode = 'exclusive',
+    bool allowComplementaryReceipts = false,
+    bool forceDeepAudit = false,
+    bool forceRefresh = false,
+    bool reuseStoredAnalysis = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -3580,7 +3641,7 @@ class PromotionalRuleMatcher {
     int? maxUnitsPerReceipt,
     String spendLadderMode = 'exclusive',
   }) {
-    final raw = _matchAllUncapped(
+    final raw = _matchAllUncappedInScope(
       result: result,
       extractedProducts: extractedProducts,
       promotionalRules: promotionalRules,
@@ -3768,6 +3829,92 @@ class PromotionalRuleMatcher {
       remaining -= newCount;
     }
     return out;
+  }
+
+  /// TAG-77: [_matchAllUncapped] with a per-scan memo. Inside a
+  /// [PromotionalMatchScope] (one receipt scan) a call with exactly the same
+  /// inputs returns a copy of the earlier answer instead of re-running the
+  /// matcher. Outside a scope it always computes. The key holds every input
+  /// the matcher reads: the identity of each rule object (so a combined
+  /// multi-scan rule list and one campaign's list never share an entry), every
+  /// field of every receipt line, the AI total and rule ids, and the flags.
+  static List<MatchedPromotionalRuleResult> _matchAllUncappedInScope({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
+    String spendLadderMode = 'exclusive',
+  }) {
+    List<MatchedPromotionalRuleResult> compute() => _matchAllUncapped(
+          result: result,
+          extractedProducts: extractedProducts,
+          promotionalRules: promotionalRules,
+          allowCampaignMultipliers: allowCampaignMultipliers,
+          capSpendToAiTotal: capSpendToAiTotal,
+          spendLadderMode: spendLadderMode,
+        );
+    final scope = PromotionalMatchScope.current;
+    if (scope == null || promotionalRules.isEmpty) return compute();
+    final effectiveProducts =
+        (result != null && result.extractedProducts.isNotEmpty)
+        ? result.extractedProducts
+        : extractedProducts;
+    // The no-lines path reads more of the AI result and is cheap: no memo.
+    if (effectiveProducts.isEmpty) return compute();
+    final key = matchMemoKey(
+      result: result,
+      effectiveProducts: effectiveProducts,
+      allowCampaignMultipliers: allowCampaignMultipliers,
+      capSpendToAiTotal: capSpendToAiTotal,
+      spendLadderMode: spendLadderMode,
+    );
+    return scope._lookup(key, promotionalRules, compute);
+  }
+
+  @visibleForTesting
+  static String matchMemoKey({
+    required AiReceiptAnalysisResult? result,
+    required List<ExtractedProductItem> effectiveProducts,
+    required bool allowCampaignMultipliers,
+    required bool capSpendToAiTotal,
+    required String spendLadderMode,
+  }) {
+    final b = StringBuffer()
+      ..write(allowCampaignMultipliers ? 'M1' : 'M0')
+      ..write(capSpendToAiTotal ? 'C1' : 'C0')
+      ..write('|')
+      ..write(spendLadderMode);
+    if (result == null) {
+      b.write('|R-');
+    } else {
+      b
+        ..write('|R')
+        ..write(result.targetCompanyTotal)
+        ..write('|')
+        ..write(jsonEncode(result.matchedRuleId))
+        ..write(jsonEncode(result.matchedRuleIds));
+    }
+    for (final p in effectiveProducts) {
+      b
+        ..write('|P')
+        ..write(jsonEncode(p.name))
+        ..write(',')
+        ..write(p.price)
+        ..write(',')
+        ..write(p.quantity)
+        ..write(',')
+        ..write(p.isTargetCompany ? 1 : 0)
+        ..write(',')
+        ..write(jsonEncode(p.barcode))
+        ..write(',')
+        ..write(p.originalPrice)
+        ..write(',')
+        ..write(p.discountAmount)
+        ..write(',')
+        ..write(p.discountPercent);
+    }
+    return b.toString();
   }
 
   static List<MatchedPromotionalRuleResult> _matchAllUncapped({
@@ -5070,7 +5217,18 @@ class PromotionalRuleMatcher {
     }
 
     // 0.06 Selected Product Names from catalog match:
+    // TAG-77: same checks as before, in the same order. The receipt-line words
+    // are computed once (they do not depend on the catalog name) and each
+    // catalog name's normalized form and core words come from a pure cache.
     if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      final pWords = pNorm
+          .split(' ')
+          .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+          .toList();
+      final pCoreWords = pWords
+          .where((w) => !_optionalNameDescriptors.contains(w))
+          .toList();
+      final bool pCoreAllInSel = pWords.length >= 2 && pCoreWords.length >= 2;
       for (final selName in rule.selectedProductNames) {
         final selNorm = _normalize(selName);
         if (pNorm == selNorm ||
@@ -5081,43 +5239,9 @@ class PromotionalRuleMatcher {
 
         // Token-based matching: handles supermarket POS descriptor omissions / additions
         // (e.g. POS prints "الضحى أرز 1كجم" while catalog has "الضحى ارز مصرى 1ك")
-        final pWords = pNorm
-            .split(' ')
-            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
-            .toList();
-        final selWords = selNorm
-            .split(' ')
-            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
-            .toSet();
-
         if (pWords.length >= 2) {
-          const optionalDescriptors = {
-            'مصري',
-            'مصرى',
-            'فاخر',
-            'ممتاز',
-            'سادة',
-            'ساده',
-            'طبيعي',
-            'طبيعى',
-            'اصلي',
-            'اصلى',
-            'نقي',
-            'نقى',
-            'عادي',
-            'عادى',
-            'ابيض',
-            'بلدي',
-            'بلدى',
-          };
-          final pCoreWords = pWords
-              .where((w) => !optionalDescriptors.contains(w))
-              .toList();
-          final selCoreWords = selWords
-              .where((w) => !optionalDescriptors.contains(w))
-              .toSet();
-
-          if (pCoreWords.length >= 2 &&
+          final selCoreWords = _selectedNameCoreWords(selNorm);
+          if (pCoreAllInSel &&
               pCoreWords.every((w) => selCoreWords.contains(w))) {
             return true;
           }
@@ -5348,7 +5472,73 @@ class PromotionalRuleMatcher {
     return v1[t.length];
   }
 
+  // TAG-77: _normalize is a pure String -> String function (~45 regex
+  // passes). The matcher used to re-run it on every catalog name of a rule
+  // for every receipt line and every rule (3 x 3,331 names on Unilever), so
+  // it is memoized by its input. Same input -> same output, so results are
+  // unchanged and nothing can leak between campaigns.
+  static const int _normalizeCacheLimit = 20000;
+  static final Map<String, String> _normalizeCache = <String, String>{};
+
   static String _normalize(String s) {
+    final cached = _normalizeCache[s];
+    if (cached != null) return cached;
+    final out = _normalizeUncached(s);
+    if (_normalizeCache.length >= _normalizeCacheLimit) _normalizeCache.clear();
+    _normalizeCache[s] = out;
+    return out;
+  }
+
+  /// Words of a normalized catalog name used by the 0.06 token match, minus
+  /// noise words and optional descriptors. Pure function of [selNorm].
+  static const int _coreWordsCacheLimit = 20000;
+  static final Map<String, Set<String>> _selCoreWordsCache = <String, Set<String>>{};
+
+  static Set<String> _selectedNameCoreWords(String selNorm) {
+    final cached = _selCoreWordsCache[selNorm];
+    if (cached != null) return cached;
+    final words = Set<String>.unmodifiable(selNorm
+        .split(' ')
+        .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+        .where((w) => !_optionalNameDescriptors.contains(w)));
+    if (_selCoreWordsCache.length >= _coreWordsCacheLimit) _selCoreWordsCache.clear();
+    _selCoreWordsCache[selNorm] = words;
+    return words;
+  }
+
+  static const Set<String> _optionalNameDescriptors = {
+    'مصري',
+    'مصرى',
+    'فاخر',
+    'ممتاز',
+    'سادة',
+    'ساده',
+    'طبيعي',
+    'طبيعى',
+    'اصلي',
+    'اصلى',
+    'نقي',
+    'نقى',
+    'عادي',
+    'عادى',
+    'ابيض',
+    'بلدي',
+    'بلدى',
+  };
+
+  @visibleForTesting
+  static void clearNormalizeCachesForTest() {
+    _normalizeCache.clear();
+    _selCoreWordsCache.clear();
+  }
+
+  @visibleForTesting
+  static int get normalizeCacheSizeForTest => _normalizeCache.length;
+
+  @visibleForTesting
+  static String normalizeUncachedForTest(String s) => _normalizeUncached(s);
+
+  static String _normalizeUncached(String s) {
     var str = s.toEnglishDigits(convertDecimal: false).toLowerCase().trim();
     // Normalize Arabic diacritics / tatweel
     str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
@@ -6037,5 +6227,80 @@ class CompositePromotionalBundle {
       baseLinkedGifts: consolidateLinkedGifts(baseGifts),
       rewardChoiceGroups: choiceGroups,
     );
+  }
+}
+
+/// TAG-77: memo for the promotional matcher during ONE receipt scan.
+///
+/// Run the scan inside [run]; every [PromotionalRuleMatcher.matchAllWithMultipliers]
+/// call (and [PromotionalRuleMatcher.getUnfulfilledPromotionReasons], which
+/// calls it) with exactly the same inputs is then computed once. An entry is
+/// only reused when the rule list holds the very same rule objects in the same
+/// order, so a multi-scan's combined rules and each campaign's own (TAG-67
+/// scoped) rules never share an answer. The memo stops serving when the scan
+/// ends, and callers always get a fresh list.
+class PromotionalMatchScope {
+  PromotionalMatchScope._();
+
+  static final Object _zoneKey = Object();
+  final Map<String, List<_PromotionalMatchMemoEntry>> _memo = {};
+  bool _open = true;
+  int _hits = 0;
+  int _misses = 0;
+
+  /// Scope of the current zone, or null (no memo) outside a scan.
+  static PromotionalMatchScope? get current {
+    final s = Zone.current[_zoneKey];
+    return (s is PromotionalMatchScope && s._open) ? s : null;
+  }
+
+  /// Runs [body] as one scan. A nested call reuses the outer scan's memo.
+  static Future<T> run<T>(Future<T> Function() body) {
+    if (current != null) return body();
+    final scope = PromotionalMatchScope._();
+    return runZoned(
+      () => body().whenComplete(scope._close),
+      zoneValues: {_zoneKey: scope},
+    );
+  }
+
+  @visibleForTesting
+  static ({int hits, int misses}) statsOf(PromotionalMatchScope s) => (hits: s._hits, misses: s._misses);
+
+  void _close() {
+    _open = false;
+    _memo.clear();
+  }
+
+  List<MatchedPromotionalRuleResult> _lookup(
+    String key,
+    List<PromotionalRuleItem> rules,
+    List<MatchedPromotionalRuleResult> Function() compute,
+  ) {
+    final bucket = _memo.putIfAbsent(key, () => <_PromotionalMatchMemoEntry>[]);
+    for (final e in bucket) {
+      if (e.sameRules(rules)) {
+        _hits++;
+        return List<MatchedPromotionalRuleResult>.of(e.value);
+      }
+    }
+    _misses++;
+    final value = compute();
+    bucket.add(_PromotionalMatchMemoEntry(List<PromotionalRuleItem>.of(rules), List<MatchedPromotionalRuleResult>.of(value)));
+    return value;
+  }
+}
+
+class _PromotionalMatchMemoEntry {
+  _PromotionalMatchMemoEntry(this.rules, this.value);
+  final List<PromotionalRuleItem> rules;
+  final List<MatchedPromotionalRuleResult> value;
+
+  bool sameRules(List<PromotionalRuleItem> other) {
+    if (other.length != rules.length) return false;
+    for (var i = 0; i < rules.length; i++) {
+      if (!identical(rules[i], other[i])) return false;
+    }
+    return true;
   }
 }
