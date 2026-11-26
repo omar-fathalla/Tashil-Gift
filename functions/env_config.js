@@ -76,6 +76,16 @@ function isWahaProxyOriginAllowed(origin, env = process.env) {
   return new RegExp(`^https://${id}--[a-z0-9-]+\\.web\\.app$`).test(origin);
 }
 
+/**
+ * Warm instances for latency-critical callables (geminiGenerate).
+ * prod keeps 1 (unchanged). dev uses 0: a warm instance costs money every
+ * hour, and firebase-tools refuses to deploy a min-bill increase without
+ * --force, which we never use.
+ */
+function warmMinInstances(env = process.env) {
+  return isDev(env) ? 0 : 1;
+}
+
 module.exports = {
   PROD_PROJECT_ID,
   DEV_PROJECT_ID,
@@ -85,4 +95,5 @@ module.exports = {
   publicSiteOrigin,
   wahaProxyAllowedOrigins,
   isWahaProxyOriginAllowed,
+  warmMinInstances,
 };

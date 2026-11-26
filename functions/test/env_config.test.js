@@ -51,3 +51,10 @@ test("the dev env file holds no secrets and the code has no hard-coded prod URL"
     assert.doesNotMatch(src, /https:\/\/tashil-gift\.(web\.app|firebaseapp\.com)/, `${f} hard-codes a production URL`);
   }
 });
+
+test("geminiGenerate keeps 1 warm instance on prod and 0 on dev", () => {
+  assert.strictEqual(env.warmMinInstances({}), 1);
+  assert.strictEqual(env.warmMinInstances({ GCLOUD_PROJECT: "tashil-gift" }), 1);
+  assert.strictEqual(env.warmMinInstances({ GCLOUD_PROJECT: "tashil-gift-dev" }), 0);
+  assert.strictEqual(env.warmMinInstances({ TASHIL_ENV: "dev" }), 0);
+});
