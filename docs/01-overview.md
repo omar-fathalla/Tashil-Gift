@@ -40,6 +40,8 @@
 
 لو الحملة أو البوابة موقوفة بيظهر `CampaignSuspendedScreen`.
 
+في رابط المندوب (`ClientReceiptUploadScreen`) الحالة بتتحدد بـ `CampaignLoadState` (TAG-81، `lib/features/client_portal/domain/campaign_load_state.dart`). شاشة الإيقاف بتظهر بس لو الحملة موقوفة فعلًا: permission-denied على مستند حملة واحدة وفيه جلسة، أو كل حملات الشركة `isPromoterActive == false`. أما مفيش جلسة، أو خطأ تحميل، أو مفيش حملة، أو رابط ناقص، فبيظهروا في `PortalDataErrorView` برسالة واضحة وزرار «إعادة المحاولة».
+
 ## الأجزاء الكبيرة في المنتج
 
 1. **إدارة الحملات** (`create_event_screen.dart`): شروط الحملة، قواعد العروض (promotional rules)، توزيع الهدايا على الفروع، الألعاب، الشرائح (spend ladder)، المسودات، و«جرّب على فاتورة» (dry-run).
