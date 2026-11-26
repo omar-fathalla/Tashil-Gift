@@ -190,7 +190,7 @@ async function main() {
     for (const f of bucketExists ? receipts : []) {
       await bucket.upload(path.join(RECEIPTS_DIR, f), { destination: `dev_fixtures/receipts/${f}`, metadata: { contentType: "image/png", metadata: { devFixture: "true" } } });
     }
-    console.log(`Storage: ${receipts.length} sample receipts uploaded to gs://${bucketName}/dev_fixtures/receipts/`);
+    if (bucketExists) console.log(`Storage: ${receipts.length} sample receipts uploaded to gs://${bucketName}/dev_fixtures/receipts/`);
   }
 
   const site = target.emulator ? "http://127.0.0.1:<port>" : `https://${target.projectId}.web.app`;
