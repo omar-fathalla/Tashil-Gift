@@ -164,6 +164,9 @@ https://github.com/omar-fathalla/Tashil-Gift/settings/variables/actions
 * على `demo-*` من غير emulators على localhost.
 
 ### التشغيل
+**أسهل طريقة (من غير Cloud Shell):** أي دمج في `dev` رسالته فيها `[seed]` بيشغّل السكربت في GitHub Actions بحساب النشر بتاع dev. كلمات السر الجديدة ما بتظهرش في الـ log؛ بتتحط في artifact اسمه `dev-seed-credentials` بيتمسح بعد يوم. نزّله من صفحة الـ run (Summary ← Artifacts).
+
+**يدوي:**
 ```bash
 cd functions && npm ci && cd ..
 # 1) شوف الخطة من غير كتابة

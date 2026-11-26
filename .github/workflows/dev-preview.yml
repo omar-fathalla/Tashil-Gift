@@ -152,13 +152,37 @@ jobs:
             echo "url=$url" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Deploy functions + rules + indexes to tashil-gift-dev (DEV_AUTO_DEPLOY_BACKEND)
+      - name: Deploy rules + indexes to tashil-gift-dev (DEV_AUTO_DEPLOY_BACKEND)
         if: github.event_name == 'push' && vars.DEV_AUTO_DEPLOY_BACKEND == 'true'
         run: |
           # Rules first: they are quick and independent, so a functions
           # problem never leaves dev on stale rules.
           bash tool/dev/deploy_dev.sh rules
+
+      # Fake demo data (tool/seed_dev.js) on a push to dev whose commit message
+      # contains [seed]. Idempotent. Passwords never reach the job log: they go
+      # to a 1-day artifact named dev-seed-credentials.
+      - name: Seed fake demo data on tashil-gift-dev ([seed] in the commit message)
+        if: github.event_name == 'push' && vars.DEV_AUTO_DEPLOY_BACKEND == 'true' && contains(github.event.head_commit.message, '[seed]')
+        run: |
           (cd functions && npm ci)
+          umask 077
+          node tool/seed_dev.js --project "$PROJECT" --confirm "$PROJECT" --credentials-out "$RUNNER_TEMP/dev-seed-credentials.txt"
+          touch "$RUNNER_TEMP/dev-seed-credentials.txt"
+
+      - name: Upload the new seed credentials (1 day)
+        if: github.event_name == 'push' && vars.DEV_AUTO_DEPLOY_BACKEND == 'true' && contains(github.event.head_commit.message, '[seed]')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-seed-credentials
+          path: ${{ runner.temp }}/dev-seed-credentials.txt
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Deploy functions to tashil-gift-dev (DEV_AUTO_DEPLOY_BACKEND)
+        if: github.event_name == 'push' && vars.DEV_AUTO_DEPLOY_BACKEND == 'true'
+        run: |
+          [ -d functions/node_modules ] || (cd functions && npm ci)
           bash tool/dev/deploy_dev.sh functions
 
       - name: Verify the preview serves this build (env=dev)
