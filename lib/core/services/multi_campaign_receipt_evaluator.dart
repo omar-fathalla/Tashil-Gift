@@ -136,6 +136,12 @@ class MultiCampaignReceiptEvaluator {
       );
     }
 
+    // TAG-67: one AI analysis is shared by every campaign of the company, and
+    // its company flag means "any product of this company". A campaign scoped
+    // to one brand must only count its own products, so the flags and the
+    // spend total are rebuilt from this campaign's rules.
+    result = scopeResultToCampaign(result, campaign);
+
     // A readable receipt still does not qualify a consuming campaign that has
     // no spend rule. A company flag or a quantity rule is not eligibility.
     if (EventModel.normalizeSpendLadderMode(campaign.spendLadderMode) == 'consuming' &&
@@ -359,6 +365,37 @@ class MultiCampaignReceiptEvaluator {
       resolvedBranchId: branchResolution.branchId,
       resolvedBranchName: branchResolution.branchName,
       qualifyingSpend: targetSpend,
+    );
+  }
+
+  /// Rebuilds the company flags and the target spend of [result] from
+  /// [campaign]'s own spend rules (TAG-67).
+  ///
+  /// Exception: a campaign with at least one rule that covers all of the
+  /// company's products (e.g. «اشتري ب 200 من منتجات شركه يونيلفر») keeps the
+  /// AI flags, since there the company flag is exactly the rule's scope and it
+  /// also covers OCR-misspelled names. Its brand-scoped rules are still
+  /// protected inside the matcher, which refuses the company bypass for them.
+  /// Campaigns without spend rules are left unchanged.
+  static AiReceiptAnalysisResult scopeResultToCampaign(
+    AiReceiptAnalysisResult result,
+    EventModel campaign,
+  ) {
+    final spendRules = campaign.promotionalRules.where((r) => r.isSpendBased).toList();
+    if (spendRules.isEmpty || result.extractedProducts.isEmpty) return result;
+    if (spendRules.any(PromotionalRuleMatcher.isCompanyWideSpendRule)) return result;
+    final cleared = PromotionalRuleMatcher.clearUnprovenCompanyFlags(
+      products: result.extractedProducts,
+      rules: campaign.promotionalRules,
+    );
+    final totals = PromotionalRuleMatcher.spendTotals(
+      products: cleared,
+      rules: campaign.promotionalRules,
+      spendLadderMode: campaign.spendLadderMode,
+    );
+    return result.copyWith(
+      extractedProducts: cleared,
+      targetCompanyTotal: totals.eligibleNet,
     );
   }
 
