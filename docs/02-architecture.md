@@ -42,7 +42,7 @@ lib/
     ├── company_portal/       # بوابة البراند/العمليات + WhatsApp + التسويق
     │   └── domain/           # خدمات WhatsApp والمشرفين والمبيعات اليومية
     ├── games/                # العجلة، الكشط، الصندوق، اختيار الهدية، الهدية المباشرة
-    └── validation/           # سجل الفواتير (invoices_log) وشاشة التحقق اليدوي
+    └── validation/           # سجل الفواتير (invoices_log) ودايالوج نتيجة تحليل الفاتورة (receipt_validation_dialog)
 ```
 
 النمط تقريبًا feature-first مع `domain/` و `presentation/`، لكن معظم منطق الأعمال في `core/services/` مش جوه الـ features.
