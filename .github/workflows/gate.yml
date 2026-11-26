@@ -1,0 +1,71 @@
+# Test gate (TAG-82): runs only the tools a change needs, picked from the
+# changed files by tool/ci/gate_buckets.py. Here in CI that means the static
+# guards and the rules/functions emulator suites; analyze, flutter test and
+# the functions unit tests already run in checks.yml through dev-preview.yml.
+#
+# Separate on purpose: checks.yml is also called by deploy-production.yml
+# (deploys and rollbacks), so nothing from the gate may live there.
+# No secrets, no Google credentials, demo-* emulator projects only. Never
+# deploys. To make it block merges, add "gate" as a required check on dev.
+name: gate
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FIREBASE_TOOLS_VERSION: 15.37.0
+      GOOGLE_APPLICATION_CREDENTIALS: ""
+      GATE_OUT: ${{ runner.temp }}/gate
+    steps:
+      - name: Checkout (full history, for the diff against the base)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Base of the change
+        id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then base="$PR_BASE"; else base="$BEFORE"; fi
+          # A new branch pushes with an all-zero "before": fall back to the parent.
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then base="HEAD~1"; fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          python3 tool/ci/gate_buckets.py --base "$base"
+
+      - name: Java 21 (Firestore emulator)
+        run: |
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            rules-tests/package-lock.json
+
+      - name: Run the gate (tools for this change)
+        env:
+          BASE: ${{ steps.base.outputs.base }}
+        run: bash tool/ci/run_gate.sh --ci --base "$BASE"

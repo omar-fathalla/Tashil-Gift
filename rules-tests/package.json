@@ -2,7 +2,7 @@
   "name": "tashil-gift-rules-tests",
   "private": true,
   "scripts": {
-    "test": "cp ../firestore.rules ./firestore.rules && cp ../storage.rules ./storage.rules && firebase emulators:exec --only firestore,storage --project demo-tashil-gift \"npx jest --runInBand --forceExit --testTimeout=180000\""
+    "test": "cp ../firestore.rules ./firestore.rules && cp ../storage.rules ./storage.rules && npx -y firebase-tools@${FIREBASE_TOOLS_VERSION:-15.37.0} emulators:exec --only firestore,storage --project demo-tashil-gift \"npx jest --runInBand --forceExit --testTimeout=180000\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",

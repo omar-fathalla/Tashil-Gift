@@ -5,6 +5,7 @@
 | PR into `dev` | `dev-preview.yml` | `checks.yml` (APP_ENV=dev once tashil-gift-dev is ready) | `pr-<N>` channel on **tashil-gift-dev** (7 days) + PR comment; until dev is ready: legacy `pr-<N>` channel on tashil-gift |
 | push to `dev` (merged PR) | `dev-preview.yml` | same | live **https://tashil-gift-dev.web.app** (+ functions/rules if `DEV_AUTO_DEPLOY_BACKEND=true`); until dev is ready: legacy `dev` channel on tashil-gift |
 | manual | `dev-deploy.yml` (`ref`, `what`) | `checks.yml` APP_ENV=dev | tashil-gift-dev only: hosting, functions, Firestore rules + indexes, Storage rules |
+| PR into / push to `dev` | `gate.yml` | `run_gate.sh --ci`: static guards, rules + functions emulator suites, picked by `gate_buckets.py` from the changed files | nothing |
 | push to `main` | `deploy-production.yml` | `checks.yml` | after the `production` environment approval: `hosting,functions,firestore:rules` |
 | manual (rollback) | `deploy-production.yml` (`ref`, `allow_older_version`) | `checks.yml` on that ref | same as above, for that ref |
 
@@ -32,3 +33,9 @@ manual rollback with `allow_older_version = true`.
 Credentials: the `FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT` secret is written to
 `$RUNNER_TEMP` only for the deploy step and deleted afterwards. Never indexes,
 never `--force`.
+
+Test gate (TAG-82): `run_gate.sh` runs only the tools a change needs
+(`gate_buckets.py`), `--all` runs every tool. `static_guards.py` is read-only;
+intended findings live in `guards_allowlist.txt` with a reason. `gate.yml` is
+separate from `checks.yml` on purpose: `checks.yml` also gates production
+deploys and rollbacks.
