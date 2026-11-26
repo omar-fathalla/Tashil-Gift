@@ -1222,14 +1222,14 @@ class AiReceiptService {
   }
 
   /// Thinking config for the deep-audit tier. Null keeps the model default for
-  /// 3.x/2.x; Gemini 4 always gets an explicit level (`high` unless overridden
+  /// 3.x/2.x; Gemini 4 always gets an explicit level (`medium` unless overridden
   /// by `thinking_level_deep`).
   @visibleForTesting
   static Map<String, dynamic>? deepAuditThinkingConfig(String modelName, {String? level}) {
     final n = modelName.toLowerCase();
     if (n.contains('gemini-2')) return null;
     final normalized = AiModels.normalizeThinkingLevel(level);
-    if (AiModels.isGemini4(n)) return {'thinkingLevel': normalized ?? 'high'};
+    if (AiModels.isGemini4(n)) return {'thinkingLevel': normalized ?? 'medium'};
     return normalized == null ? null : {'thinkingLevel': normalized};
   }
 

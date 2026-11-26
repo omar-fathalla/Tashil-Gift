@@ -1,4 +1,3 @@
-const { defineString } = require("firebase-functions/params");
 const { analyzeReceiptWithGateway } = require("./gemini_gateway");
 const {
   RECEIPT_VERIFICATION_DEFAULT_MODEL,
@@ -8,15 +7,13 @@ const {
 const { shapeGenerationConfig, logGeminiUsage } = require("./gemini_request_shaping");
 
 /**
- * Model for the server-side verifier. Set per project in functions/.env.<projectId>;
- * projects without a value (prod) keep the code default.
+ * Model for the server-side verifier, read from process.env when the function
+ * runs. Set per project in functions/.env.<projectId> (dev only); projects
+ * without a value (prod) keep the code default. Deliberately not a define*
+ * param: a param without a prod value would fail a --non-interactive deploy.
  */
-const receiptVerificationModel = defineString("RECEIPT_VERIFICATION_MODEL", {
-  default: RECEIPT_VERIFICATION_DEFAULT_MODEL,
-});
-
 function resolveReceiptVerificationModel() {
-  const value = String(receiptVerificationModel.value() || "").trim();
+  const value = String(process.env.RECEIPT_VERIFICATION_MODEL || "").trim();
   return value || RECEIPT_VERIFICATION_DEFAULT_MODEL;
 }
 
@@ -167,6 +164,7 @@ async function callGeminiForReceipt({ apiKey, imagePayload, branches, products, 
     storeChainDetected: "",
     branchDetected: branches[0] || "",
     isBranchMatched: false,
+    confidence: null,
     message: "تعذر تفسير رد Gemini",
     rawText: text.slice(0, 500),
   };

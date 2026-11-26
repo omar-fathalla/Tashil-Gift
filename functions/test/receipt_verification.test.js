@@ -50,6 +50,7 @@ test("callGeminiForReceipt parses Gemini JSON and fails closed on a bad body", a
       imageHash: "abcdef1234567890",
     });
     assert.equal(rejected.isValid, false);
+    assert.equal(rejected.confidence, null);
     assert.equal(rejected.message, "تعذر تفسير رد Gemini");
   } finally {
     global.fetch = original;
@@ -121,7 +122,7 @@ test("the verifier model is the shut-down-safe default, never gemini-2.0-flash",
   });
 });
 
-test("the verifier model comes from the RECEIPT_VERIFICATION_MODEL param", async () => {
+test("the verifier model is read from process.env when the function runs", async () => {
   const original = global.fetch;
   try {
     await withModelEnv("gemini-4-hydrogen", async () => {
@@ -156,6 +157,9 @@ test("the verifier model comes from the RECEIPT_VERIFICATION_MODEL param", async
     });
     await withModelEnv("   ", () => {
       assert.equal(resolveReceiptVerificationModel(), "gemini-3.8-flash");
+    });
+    await withModelEnv("  gemini-3.6-flash \n", () => {
+      assert.equal(resolveReceiptVerificationModel(), "gemini-3.6-flash");
     });
   } finally {
     global.fetch = original;

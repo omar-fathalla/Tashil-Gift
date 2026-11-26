@@ -4,20 +4,40 @@
  *
  * Gemini 4 migration rules (https://ai.google.dev/gemini-api/docs/whats-new-gemini-4-hydrogen):
  *  - temperature / topP / topK must be removed (out-of-range values return 400).
- *  - output cap is 65,536 per request; low caps truncate because thinking
- *    tokens count toward it.
- *  - thinking is controlled by `thinkingLevel` (low | medium | high | xhigh);
- *    `minimal` returns an error.
+ *  - output cap is per model (65,536 Hydrogen/Neon, 32,768 Carbon/Argon); low
+ *    caps truncate because thinking tokens count toward it.
+ *  - thinking is controlled by `thinkingLevel` (low | medium | high, plus xhigh
+ *    on Hydrogen/Neon); `minimal` returns an error. A request without a usable
+ *    level gets `low` (the API default is `high`).
  * Requests for every other model are returned untouched (same object).
  */
 const { isGemini4 } = require("./ai_models");
 
-/** Output token cap for Gemini 4. Lower to 32768 if eval cost per call grows too much. */
-const GEMINI_4_MAX_OUTPUT_TOKENS = 65536;
-
-const GEMINI_4_THINKING_LEVELS = Object.freeze(["low", "medium", "high", "xhigh"]);
-
 const SAMPLING_KEYS = Object.freeze(["temperature", "topP", "topK", "top_p", "top_k"]);
+
+/** Thinking level sent when a Gemini 4 request does not carry a usable one (the API default is `high`). */
+const GEMINI_4_DEFAULT_THINKING_LEVEL = "low";
+
+const HYDROGEN_NEON_LIMITS = Object.freeze({
+  maxOutputTokens: 65536,
+  thinkingLevels: Object.freeze(["low", "medium", "high", "xhigh"]),
+});
+
+const CARBON_ARGON_LIMITS = Object.freeze({
+  maxOutputTokens: 32768,
+  thinkingLevels: Object.freeze(["low", "medium", "high"]),
+});
+
+/**
+ * Per-model Gemini 4 limits. Hydrogen and Neon: 65,536 output tokens and
+ * `xhigh` allowed. Carbon and Argon: 32,768 and `high` is the maximum level.
+ * Any other gemini-4-* id gets the conservative Carbon/Argon limits.
+ */
+function gemini4Limits(model) {
+  const id = String(model || "").trim();
+  if (/^gemini-4-(hydrogen|neon)$/.test(id)) return HYDROGEN_NEON_LIMITS;
+  return CARBON_ARGON_LIMITS;
+}
 
 /** thinkingBudget (tokens, 2.x/3.x style) -> thinkingLevel. 0 means "off", which Gemini 4 cannot do. */
 function thinkingLevelForBudget(budget) {
@@ -26,46 +46,42 @@ function thinkingLevelForBudget(budget) {
   return "high";
 }
 
-function shapeThinkingConfig(thinkingConfig) {
-  if (!thinkingConfig || typeof thinkingConfig !== "object") return thinkingConfig;
-  const shaped = { ...thinkingConfig };
+function shapeThinkingConfig(thinkingConfig, limits) {
+  const shaped = thinkingConfig && typeof thinkingConfig === "object" ? { ...thinkingConfig } : {};
   const hasBudget = Object.prototype.hasOwnProperty.call(shaped, "thinkingBudget");
   const budget = shaped.thinkingBudget;
   delete shaped.thinkingBudget;
 
   let level = typeof shaped.thinkingLevel === "string" ? shaped.thinkingLevel.trim().toLowerCase() : undefined;
   if (level === "minimal") level = "low";
-  if (level !== undefined && !GEMINI_4_THINKING_LEVELS.includes(level)) level = undefined;
+  if (level === "xhigh" && !limits.thinkingLevels.includes("xhigh")) level = "high";
+  if (level !== undefined && !limits.thinkingLevels.includes(level)) level = undefined;
   if (level === undefined && hasBudget) level = thinkingLevelForBudget(Number(budget));
 
-  if (level === undefined) {
-    delete shaped.thinkingLevel;
-  } else {
-    shaped.thinkingLevel = level;
-  }
+  shaped.thinkingLevel = level === undefined ? GEMINI_4_DEFAULT_THINKING_LEVEL : level;
   return shaped;
 }
 
 /**
  * @param {string} model normalized model id
  * @param {object|undefined} generationConfig request generationConfig
- * @returns {object|undefined} the same object for non-Gemini-4 models, a shaped copy otherwise
+ * @returns {object|undefined} the same value for non-Gemini-4 models. For Gemini 4 a shaped
+ *   copy that always carries an explicit thinkingLevel, even when the request had no
+ *   generationConfig or no thinkingConfig.
  */
 function shapeGenerationConfig(model, generationConfig) {
   if (!isGemini4(model)) return generationConfig;
-  if (!generationConfig || typeof generationConfig !== "object") return generationConfig;
+  const limits = gemini4Limits(model);
 
-  const shaped = { ...generationConfig };
+  const shaped = generationConfig && typeof generationConfig === "object" ? { ...generationConfig } : {};
   for (const key of SAMPLING_KEYS) delete shaped[key];
 
   const cap = Number(shaped.maxOutputTokens);
   if (shaped.maxOutputTokens !== undefined && Number.isFinite(cap)) {
-    shaped.maxOutputTokens = GEMINI_4_MAX_OUTPUT_TOKENS;
+    shaped.maxOutputTokens = limits.maxOutputTokens;
   }
 
-  if (shaped.thinkingConfig !== undefined) {
-    shaped.thinkingConfig = shapeThinkingConfig(shaped.thinkingConfig);
-  }
+  shaped.thinkingConfig = shapeThinkingConfig(shaped.thinkingConfig, limits);
   return shaped;
 }
 
@@ -94,8 +110,8 @@ function logGeminiUsage({ source, model, latencyMs, payload, status }) {
 }
 
 module.exports = {
-  GEMINI_4_MAX_OUTPUT_TOKENS,
-  GEMINI_4_THINKING_LEVELS,
+  GEMINI_4_DEFAULT_THINKING_LEVEL,
+  gemini4Limits,
   shapeGenerationConfig,
   summarizeUsage,
   logGeminiUsage,

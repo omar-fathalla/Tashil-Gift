@@ -4,7 +4,8 @@ const { defineSecret } = require("firebase-functions/params");
 const { createGeminiGenerate } = require("../gemini_generate");
 const { MODELS, ALLOWED_MODEL_IDS, isGemini4 } = require("../ai_models");
 const {
-  GEMINI_4_MAX_OUTPUT_TOKENS,
+  GEMINI_4_DEFAULT_THINKING_LEVEL,
+  gemini4Limits,
   shapeGenerationConfig,
   summarizeUsage,
   logGeminiUsage,
@@ -46,8 +47,7 @@ test("Gemini 4: sampling params are removed and the token cap is raised", () => 
   for (const key of ["temperature", "topP", "topK", "top_p", "top_k"]) {
     assert.equal(key in out, false, key);
   }
-  assert.equal(out.maxOutputTokens, GEMINI_4_MAX_OUTPUT_TOKENS);
-  assert.equal(GEMINI_4_MAX_OUTPUT_TOKENS, 65536);
+  assert.equal(out.maxOutputTokens, 65536);
   assert.equal(out.responseMimeType, "application/json");
   assert.deepEqual(out.responseSchema, { type: "OBJECT" });
   assert.deepEqual(input, snapshot, "input must not be mutated");
@@ -57,6 +57,53 @@ test("Gemini 4: an absent maxOutputTokens stays absent and an over-cap value is 
   assert.equal("maxOutputTokens" in shapeGenerationConfig(HYDROGEN, { temperature: 0 }), false);
   assert.equal(shapeGenerationConfig(HYDROGEN, { maxOutputTokens: 100000 }).maxOutputTokens, 65536);
   assert.equal(shapeGenerationConfig("gemini-4-neon", { maxOutputTokens: 1024 }).maxOutputTokens, 65536);
+});
+
+test("Gemini 4 per-model limits: Hydrogen and Neon 65536 + xhigh, Carbon and Argon 32768 + max high", () => {
+  for (const model of ["gemini-4-hydrogen", "gemini-4-neon"]) {
+    assert.equal(gemini4Limits(model).maxOutputTokens, 65536, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 8192 }).maxOutputTokens, 65536, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 100000 }).maxOutputTokens, 65536, model);
+    const level = (l) => shapeGenerationConfig(model, { thinkingConfig: { thinkingLevel: l } }).thinkingConfig.thinkingLevel;
+    assert.equal(level("xhigh"), "xhigh", model);
+    assert.equal(level("high"), "high", model);
+    assert.equal(level("minimal"), "low", model);
+  }
+  for (const model of ["gemini-4-carbon", "gemini-4-argon"]) {
+    assert.equal(gemini4Limits(model).maxOutputTokens, 32768, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 8192 }).maxOutputTokens, 32768, model);
+    assert.equal(shapeGenerationConfig(model, { maxOutputTokens: 65536 }).maxOutputTokens, 32768, model);
+    const level = (l) => shapeGenerationConfig(model, { thinkingConfig: { thinkingLevel: l } }).thinkingConfig.thinkingLevel;
+    assert.equal(level("xhigh"), "high", model);
+    assert.equal(level("high"), "high", model);
+    assert.equal(level("medium"), "medium", model);
+    assert.equal(level("minimal"), "low", model);
+    assert.equal(
+      shapeGenerationConfig(model, { thinkingConfig: { thinkingBudget: 100000 } }).thinkingConfig.thinkingLevel,
+      "high",
+      model,
+    );
+  }
+  assert.equal(gemini4Limits("gemini-4-future").maxOutputTokens, 32768);
+});
+
+test("Gemini 4 without thinkingConfig or generationConfig defaults to thinkingLevel low", () => {
+  assert.equal(GEMINI_4_DEFAULT_THINKING_LEVEL, "low");
+  for (const model of ["gemini-4-hydrogen", "gemini-4-neon", "gemini-4-carbon", "gemini-4-argon"]) {
+    assert.deepEqual(shapeGenerationConfig(model, undefined), { thinkingConfig: { thinkingLevel: "low" } }, model);
+    assert.deepEqual(shapeGenerationConfig(model, null), { thinkingConfig: { thinkingLevel: "low" } }, model);
+    assert.deepEqual(
+      shapeGenerationConfig(model, { responseMimeType: "application/json" }),
+      { responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "low" } },
+      model,
+    );
+    assert.deepEqual(
+      shapeGenerationConfig(model, { thinkingConfig: { includeThoughts: true } }).thinkingConfig,
+      { includeThoughts: true, thinkingLevel: "low" },
+      model,
+    );
+  }
+  assert.equal(shapeGenerationConfig("gemini-3.8-flash", undefined), undefined);
 });
 
 test("Gemini 4: thinkingLevel minimal becomes low and thinkingBudget maps to a level", () => {
@@ -70,7 +117,7 @@ test("Gemini 4: thinkingLevel minimal becomes low and thinkingBudget maps to a l
   assert.deepEqual(shape({ thinkingBudget: 1024 }), { thinkingLevel: "low" });
   assert.deepEqual(shape({ thinkingBudget: 4096 }), { thinkingLevel: "medium" });
   assert.deepEqual(shape({ thinkingBudget: 24576 }), { thinkingLevel: "high" });
-  assert.deepEqual(shape({ thinkingLevel: "bogus" }), {});
+  assert.deepEqual(shape({ thinkingLevel: "bogus" }), { thinkingLevel: "low" });
   assert.deepEqual(shape({ thinkingLevel: "medium", thinkingBudget: 1024 }), { thinkingLevel: "medium" });
   assert.deepEqual(shape({ includeThoughts: true, thinkingBudget: 1024 }), { includeThoughts: true, thinkingLevel: "low" });
 });
@@ -195,6 +242,13 @@ test("geminiGenerate forwards 3.x generationConfig byte-identical", async () => 
   assert.deepEqual(Object.keys(seen.body).sort(), ["contents", "generationConfig"]);
 });
 
+test("geminiGenerate sends thinkingLevel low for a Gemini 4 request with no generationConfig", async () => {
+  const seen = await callProxy(HYDROGEN, undefined);
+  assert.deepEqual(seen.body.generationConfig, { thinkingConfig: { thinkingLevel: "low" } });
+  const seen3 = await callProxy("gemini-3.8-flash", undefined);
+  assert.equal("generationConfig" in seen3.body, false);
+});
+
 test("geminiGenerate returns prior model turns and thought signatures to Gemini unchanged", async () => {
   const history = [
     { role: "user", parts: [{ text: "first question" }] },
@@ -234,4 +288,25 @@ test("geminiGenerate returns prior model turns and thought signatures to Gemini 
     else process.env.GEMINI_API_KEY = previousKey;
   }
   assert.equal(JSON.stringify(sent.contents), snapshot);
+});
+
+test("functions/ declares no non-secret define* params (a prod deploy runs --non-interactive)", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "..");
+  const skip = new Set(["node_modules", "test", "scripts"]);
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!skip.has(entry.name)) walk(path.join(dir, entry.name));
+      } else if (entry.name.endsWith(".js")) {
+        const source = fs.readFileSync(path.join(dir, entry.name), "utf8");
+        const matches = source.match(/\bdefine(?:String|Int|Float|Boolean|List)\s*\(/g);
+        if (matches) offenders.push(`${path.relative(root, path.join(dir, entry.name))}: ${matches.join(", ")}`);
+      }
+    }
+  };
+  walk(root);
+  assert.deepEqual(offenders, []);
 });

@@ -30,7 +30,7 @@ void main() {
     expect(AiReceiptService.deepAuditThinkingConfig('gemini-3.8-flash'), isNull);
     expect(AiReceiptService.deepAuditThinkingConfig('gemini-3.8-flash', level: 'medium'),
         {'thinkingLevel': 'medium'});
-    expect(AiReceiptService.deepAuditThinkingConfig('gemini-4-hydrogen'), {'thinkingLevel': 'high'});
+    expect(AiReceiptService.deepAuditThinkingConfig('gemini-4-hydrogen'), {'thinkingLevel': 'medium'});
     expect(AiReceiptService.deepAuditThinkingConfig('gemini-4-hydrogen', level: 'low'),
         {'thinkingLevel': 'low'});
     expect(AiReceiptService.deepAuditThinkingConfig('gemini-2.5-flash', level: 'low'), isNull);

@@ -134,8 +134,9 @@ function createGeminiGenerate({ geminiApiKey, callableOptions, getDb }) {
       if (data.systemInstruction) {
         body.systemInstruction = data.systemInstruction;
       }
-      if (data.generationConfig) {
-        body.generationConfig = shapeGenerationConfig(model, data.generationConfig);
+      const generationConfig = shapeGenerationConfig(model, data.generationConfig);
+      if (generationConfig) {
+        body.generationConfig = generationConfig;
       }
       if (Array.isArray(data.safetySettings) && data.safetySettings.length > 0) {
         body.safetySettings = data.safetySettings;
