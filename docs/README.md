@@ -18,10 +18,11 @@
 
 ## مصادر تانية في الريبو
 
+* `CLAUDE.md` (في جذر الريبو): الخريطة الكاملة للمنظومة ومراجعة كل صفحة. أول ملف يتقري في أي session.
 * `AGENTS.md` (ونسخته `GEMINI.md`): القواعد الإلزامية الكاملة للـ agents.
 * `.agents/skills/*/SKILL.md`: تفاصيل كل معيار (فروع الحملات، قواعد العروض، الأداء، M3...).
 * `tool/ci/README.md`: ملخص الـ CI.
-* `docs/DEV_ENVIRONMENT.md`: بيئة `tashil-gift-dev` (موجود على فرع `feat/dev-environment`، لسه ما اتدمجش).
+* `docs/DEV_ENVIRONMENT.md`: بيئة `tashil-gift-dev` (اتدمجت وشغالة).
 * Linear: فريق **Tashil Gift** (مفتاح `TAG`)، ومشروع **Tashil Gift — Dev Environment** (`P-TAG-16`).
 
 ## إزاي تحدّث التوثيق
