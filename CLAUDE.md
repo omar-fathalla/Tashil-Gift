@@ -85,7 +85,7 @@ lib/
     ├── client_portal/                                شاشة المندوب ودايالوجاتها
     ├── company_portal/ (domain/ presentation/)       بوابة البراند/العمليات + WhatsApp + التسويق
     ├── games/                                        الألعاب وصرف الهدايا
-    └── validation/                                   سجل الفواتير (+ ValidationScreen اليتيمة)
+    └── validation/                                   سجل الفواتير
 functions/            # Cloud Functions (CommonJS). index.js + security_functions.js
 rules-tests/          # اختبارات firestore.rules و storage.rules (Jest على الـ emulator)
 test/                 # ~199 ملف اختبار Flutter
@@ -293,9 +293,9 @@ Hosting rewrites (`firebase.json`): `/waha/**` ← `wahaProxy`، روابط ال
 
 لوحة M3 مقفولة على شركة واحدة (و`lockedEventId` لو `/ep/`). التبويبات بتتبني lazy (`_loadedTabs` + `Offstage` + `TickerMode`) عشان ما تفتحش كل الـ streams مرة واحدة (AGENTS.md #9). فيها إعدادات (اللغة، العملة، الثيم، روابط المشاركة) وتسجيل خروج من جلسة البوابة. لو كل حملات الشركة موقوفة للبوابة دي (`isManagerActive` للبراند، `isActive && isAgencyActive` للعمليات) بتظهر `CampaignSuspendedScreen`.
 
-**وضع البراند (`/portal/`)**: 0 التحليلات (`CampaignReportsScreen`) · 1 مقارنة الحملات (`CampaignsComparisonAnalyticsScreen`) · 2 الفواتير (`InvoicesLogScreen`) · 3 المبيعات اليومية (`DailyBranchSalesScreen`) · 4 أرصدة الفروع (`BranchStockBalancesScreen`، read-only) · 5 الفواتشر (`CompanyVouchersReportScreen`) · 6 محاكاة المندوب (نسخة حية من شاشة الرفع).
+**وضع البراند (`/portal/`)**: 0 التحليلات (`CampaignReportsScreen`) · 1 مقارنة الحملات (`CampaignsComparisonAnalyticsScreen`) · 2 الفواتير (`InvoicesLogScreen`) · 3 المبيعات اليومية (`DailyBranchSalesScreen`) · 4 أرصدة الفروع (`BranchStockBalancesScreen`، read-only) · 5 الفواتشر (`CompanyVouchersReportScreen`) · 6 محاكاة المندوب (نسخة حية من شاشة الرفع) · 7 مخزون الهدايا (`CompanyPrizesStockReportScreen`، read-only، TAG-79).
 
-**وضع العمليات (`/ops/`, `/ep/`)**: 0 الفواتير · 1 أرصدة الفروع (قابلة للتعديل) · 2 الفواتشر · 3 المبيعات اليومية.
+**وضع العمليات (`/ops/`, `/ep/`)**: 0 الفواتير · 1 أرصدة الفروع (قابلة للتعديل) · 2 الفواتشر · 3 المبيعات اليومية · 4 مخزون الهدايا (read-only، TAG-79؛ في `/ep/` مقفول على الحملة ومن غير سجل الحركات).
 
 * **`BranchStockBalancesScreen`** — مصفوفة فرع × هدية بالمتبقي (`remainingQuantity`، ده اللي الصرف بيتحقق منه). العمليات تقدر تزوّد/تقلّل وتوزّع بالجملة وتحفظ (`updateBranchAllocations` على السيرفر)، و«تسوية نهاية الأسبوع» (تأرشف الموجة، المتبقي يتحسب مرتجع، ورصيد جديد) في `campaign_stock_settlements`. تصدير Excel. read-only للبراند.
 * **`CampaignsComparisonAnalyticsScreen`** — مقارنة حملتين وجهًا لوجه (A ضد B بشارة القائد) وترتيب كل حملات الشركة، واكتشاف «موجات» نهاية الأسبوع جوه الحملة، وفترات مخصصة، وتصدير CSV. بيطابق الفواتير بالـ ID وبالاسم العربي المطبّع (أ/إ/آ، ة/ه، ى/ي).
@@ -304,8 +304,8 @@ Hosting rewrites (`firebase.json`): `/waha/**` ← `wahaProxy`، روابط ال
 
 ### 7.6 شاشات موجودة ومش متوصلة بالواجهة
 
-* **`ValidationScreen`** (`validation/presentation/validation_screen.dart`) — نسخة قديمة من مسار «تحليل فاتورة يدوي». **مفيش أي مكان بيفتحها** (اتأكدنا بـ grep). أي إصلاح في مسار الفاتورة اعمله في `ClientReceiptUploadScreen`، مش هنا. دايالوج `ReceiptValidationReportDialog` بيستخدمه هي بس.
-* **`CompanyPrizesStockReportScreen`** (~5.8k سطر) — تقرير مخزون الهدايا (تعديل توزيع فرع، دفعات التوريد وسجل الحركات). **مش متوصل بأي تبويب**؛ بيستخدمه بس اختبارات في `test/` (منها `findMatchingMasterGift`). البديل الفعلي هو `BranchStockBalancesScreen` و`CompanyVouchersReportScreen`.
+`ValidationScreen` القديمة اتشالت (TAG-80)، و`CompanyPrizesStockReportScreen` بقت تبويب «مخزون الهدايا» في بوابة الشركة (TAG-79، شوف 7.5).
+
 * **`MysteryBoxScreen`** — ديمو بس (شوف 7.3).
 
 قبل ما تعدّل في أي واحدة من دول، اسأل الأول هل المطلوب نوصّلها ولا نشيلها.
@@ -428,8 +428,8 @@ feature branch ──PR──► dev ──(version PR)──► release PR ─�
 
 الحاجات دي اتلاحظت أثناء المراجعة؛ اللي ليه تيكت مذكور رقمه. القائمة الكاملة في `docs/10-tech-debt-and-gaps.md`.
 
-* **شاشات يتيمة:** `ValidationScreen` و`CompanyPrizesStockReportScreen` مش متوصلين بالواجهة، و`MysteryBoxScreen` ديمو بس (7.6). محتاجين قرار: نوصّل ولا نشيل.
-* **رسالة «الحملة موقوفة» مضللة:** أي خطأ في تحميل الحملة على شاشة المندوب بيظهرها، حتى لو السبب Anonymous auth مقفول أو خطأ صلاحيات.
+* **شاشات يتيمة:** `MysteryBoxScreen` ديمو بس (7.6). محتاج قرار: نوصّل ولا نشيل. (`ValidationScreen` اتشالت في TAG-80، و`CompanyPrizesStockReportScreen` اتوصلت في TAG-79.)
+* ~~**رسالة «الحملة موقوفة» مضللة**~~: اتصلحت في TAG-81 (`CampaignLoadState`)؛ شاشة الإيقاف بتظهر بس للحملة الموقوفة فعلًا.
 * **منطق الأهلية متكرر** في Dart وNode (TAG-72).
 * **باسوردات البوابات نص صريح** في `companies` و`events` (TAG-70).
 * **قراية anonymous واسعة** لـ `company_products` و`branches` و`retail_chains` (TAG-71).
