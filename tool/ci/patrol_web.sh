@@ -5,7 +5,10 @@
 #   bash tool/ci/patrol_web.sh patrol_test/admin_login_test.dart
 #   HEADED=1 bash tool/ci/patrol_web.sh ...           # show the browser
 #   PATROL_MODE=debug ...                          # default release (dart2js)
-#   PATROL_VERBOSE=1 ...                              # Playwright stderr and Flutter logs
+#   PATROL_VERBOSE=1 ...
+#   PATROL_WEB_LOCALE=ar-EG ...                    # browser locale (default en-US;
+#                                                  # the app still opens in Arabic). CI's
+#                                                  # LANG=C.UTF-8 is not a valid Intl locale.                              # Playwright stderr and Flutter logs
 #   PATROL_BROWSER_ARGS='["--no-sandbox",...]'       # override the Chromium flags
 #
 # Safety: the app is built with FIREBASE_EMULATOR=true (project
@@ -51,6 +54,7 @@ if [[ ! -d functions/node_modules ]]; then (cd functions && npm ci --no-audit --
 
 # Runs inside emulators:exec so the emulators stop with the tests.
 cmd=$(printf '%q ' patrol test "${verbose[@]}" "--$MODE" --device chrome "$headless" --web-port "$WEB_PORT" \
+  --web-locale "${PATROL_WEB_LOCALE:-en-US}" \
   --web-results-dir "$OUT/results" --web-report-dir "$OUT/report" \
   --web-browser-args "${PATROL_BROWSER_ARGS:-[\"--no-sandbox\",\"--disable-dev-shm-usage\",\"--host-resolver-rules=$BLOCK_HOSTS\"]}" \
   --dart-define=FIREBASE_EMULATOR=true \
