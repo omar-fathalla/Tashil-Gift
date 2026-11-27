@@ -31,7 +31,6 @@ jobs:
     env:
       FIREBASE_TOOLS_VERSION: 15.37.0
       GOOGLE_APPLICATION_CREDENTIALS: ""
-      GATE_OUT: ${{ runner.temp }}/gate
     steps:
       - name: Checkout (full history, for the diff against the base)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +69,8 @@ jobs:
       - name: Run the gate (tools for this change)
         env:
           BASE: ${{ steps.base.outputs.base }}
-        run: bash tool/ci/run_gate.sh --ci --base "$BASE" --skip patrol
+        # runner.temp is not available in job-level env, so set it here.
+        run: GATE_OUT="$RUNNER_TEMP/gate" bash tool/ci/run_gate.sh --ci --base "$BASE" --skip patrol
 
   patrol:
     runs-on: ubuntu-24.04
@@ -79,7 +79,6 @@ jobs:
       FIREBASE_TOOLS_VERSION: 15.37.0
       PATROL_CLI_VERSION: 4.10.0
       GOOGLE_APPLICATION_CREDENTIALS: ""
-      GATE_OUT: ${{ runner.temp }}/gate
     steps:
       - name: Checkout (full history, for the diff against the base)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,7 +138,7 @@ jobs:
 
       - name: Patrol web on the emulators (headless Chrome)
         if: steps.plan.outputs.run == 'true'
-        run: bash tool/ci/run_gate.sh --ci --only patrol
+        run: GATE_OUT="$RUNNER_TEMP/gate" bash tool/ci/run_gate.sh --ci --only patrol
 
       - name: Patrol report
         if: always() && steps.plan.outputs.run == 'true'
