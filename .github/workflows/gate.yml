@@ -78,6 +78,7 @@ jobs:
     env:
       FIREBASE_TOOLS_VERSION: 15.37.0
       PATROL_CLI_VERSION: 4.10.0
+      PATROL_VERBOSE: "1"   # Playwright stderr and app logs in the job log
       GOOGLE_APPLICATION_CREDENTIALS: ""
     steps:
       - name: Checkout (full history, for the diff against the base)
