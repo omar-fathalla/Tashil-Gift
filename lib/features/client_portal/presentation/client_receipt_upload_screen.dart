@@ -1725,6 +1725,7 @@ class _ClientReceiptUploadScreenState
                     branch: result.branchDetected,
                     receiptNumber: receiptNumber,
                     extractedProducts: result.extractedProducts,
+                    receiptAccepted: false,
                   ),
             );
           }
@@ -4253,6 +4254,7 @@ class _ClientReceiptUploadScreenState
                 branch: result.branchDetected,
                 receiptNumber: receiptNumber,
                 extractedProducts: result.extractedProducts,
+                receiptAccepted: false,
               ),
         );
       }
