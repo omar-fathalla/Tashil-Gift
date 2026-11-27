@@ -7,6 +7,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 
 import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
+import '../utils/barcode_prefix_profile.dart';
 import 'ai_receipt_service.dart';
 import 'company_products_service.dart';
 import 'firebase_scope.dart';
@@ -337,6 +338,9 @@ class AiProductDiscoveryService {
     required String branch,
     required String receiptNumber,
     required List<ExtractedProductItem> extractedProducts,
+    // TAG-84: false when the receipt was rejected. Its lines still go to the
+    // review inbox, but are never auto-added to the company catalog.
+    bool receiptAccepted = true,
   }) async {
     final slug = companySlug.trim().toLowerCase();
     if (slug.isEmpty || extractedProducts.isEmpty) return;
@@ -348,6 +352,7 @@ class AiProductDiscoveryService {
           .map((p) => p.barcode.trim().toEnglishDigits())
           .where((b) => b.isNotEmpty)
           .toSet();
+      final prefixProfile = BarcodePrefixProfile.fromBarcodes(registeredBarcodes);
       final registeredNames = catalog
           .map((p) => _normalizeForComparison(p.productName))
           .where((n) => n.isNotEmpty)
@@ -398,11 +403,19 @@ class AiProductDiscoveryService {
         final inferredCategory = _inferCategory(rawName);
         final canonicalName = _cleanCanonicalName(rawName);
 
-        final bool isHighConfidence = rawBarcode.isNotEmpty &&
-            rawBarcode.length >= 8 &&
-            DiscoveryCriteriaEvaluator.isProbableCompanyProduct(rawName, slug) &&
-            p.price > 0 &&
-            p.price < 5000;
+        final bool barcodePrefixConflict = prefixProfile.conflicts(rawBarcode);
+        final bool isHighConfidence = DiscoveryCriteriaEvaluator.canAutoInjectToCatalog(
+          barcode: rawBarcode,
+          isProbableCompanyProduct:
+              DiscoveryCriteriaEvaluator.isProbableCompanyProduct(rawName, slug),
+          price: p.price,
+          receiptAccepted: receiptAccepted,
+          barcodePrefixConflict: barcodePrefixConflict,
+        );
+        if (barcodePrefixConflict) {
+          debugPrint('TAG-84: "$rawName" read with barcode $rawBarcode, a prefix '
+              'the $slug catalog does not use; kept for review, not auto-added.');
+        }
 
         // If high confidence, auto-inject directly into company_products catalog (AIR-28)
         if (isHighConfidence) {
@@ -459,6 +472,7 @@ class AiProductDiscoveryService {
               'barcode': rawBarcode,
               'status': isHighConfidence ? 'auto_approved' : updatedStatus,
               'isCriteriaCompliant': true,
+              if (barcodePrefixConflict) 'barcodePrefixConflict': true,
               'lastReceiptNumber': receiptNumber,
               'updatedAt': FieldValue.serverTimestamp(),
             });
@@ -480,6 +494,7 @@ class AiProductDiscoveryService {
               // First observation marked as unverified until second observation confirms it (Criteria 2)
               'status': isHighConfidence ? 'auto_approved' : 'unverified_first_hit',
               'isCriteriaCompliant': true,
+              if (barcodePrefixConflict) 'barcodePrefixConflict': true,
               'confidenceScore': isHighConfidence ? 0.99 : 0.96,
               'relevanceReason': isHighConfidence
                   ? 'تم اعتماده وحقنه تلقائياً في كتالوج الشركة (AIR-28)'
@@ -1075,6 +1090,27 @@ $encodedCandidates
 
 /// Evaluator enforcing the 5 strict criteria for new product discovery & catalog enrichment (AIR-72)
 class DiscoveryCriteriaEvaluator {
+  /// AIR-28 auto-add to `company_products`. TAG-84: only from an accepted
+  /// receipt, and never when the barcode prefix is foreign to the company
+  /// catalog (likely a name paired with the wrong receipt line). Such lines
+  /// still reach the review inbox.
+  static bool canAutoInjectToCatalog({
+    required String barcode,
+    required bool isProbableCompanyProduct,
+    required double price,
+    required bool receiptAccepted,
+    required bool barcodePrefixConflict,
+  }) {
+    final b = barcode.trim();
+    return receiptAccepted &&
+        !barcodePrefixConflict &&
+        b.isNotEmpty &&
+        b.length >= 8 &&
+        isProbableCompanyProduct &&
+        price > 0 &&
+        price < 5000;
+  }
+
   /// Criterion 1: Barcode must be 8 to 14 English digits only
   static bool isValidRetailBarcode(String barcode) {
     final clean = barcode.trim().toEnglishDigits();
