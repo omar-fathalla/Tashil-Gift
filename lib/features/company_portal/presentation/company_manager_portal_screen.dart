@@ -16,6 +16,7 @@ import '../../admin/domain/event_model.dart';
 import '../../admin/presentation/campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
 import 'company_vouchers_report_screen.dart';
+import 'company_prizes_stock_report_screen.dart';
 import 'branch_stock_balances_screen.dart';
 import 'daily_branch_sales_screen.dart';
 import 'campaigns_comparison_analytics_screen.dart';
@@ -297,6 +298,16 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           tooltip: strings.dailyBranchSalesNavTooltip,
           accentColor: colorScheme.onPrimaryFixedVariant,
         ),
+        // Appended last so existing tab indexes (cache keys) stay stable.
+        _PortalNavItem(
+          index: 4,
+          icon: Icons.inventory_2_outlined,
+          selectedIcon: Icons.inventory_2_rounded,
+          title: strings.partnerNavGiftStock,
+          subtitle: strings.giftStockNavSubtitle,
+          tooltip: strings.giftStockNavTooltip,
+          accentColor: colorScheme.primary,
+        ),
       ];
     }
 
@@ -363,6 +374,16 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
         subtitle: strings.livePromoterSimulationNavSubtitle,
         tooltip: strings.livePromoterSimulationNavTooltip,
         accentColor: colorScheme.tertiary,
+      ),
+      // Appended last so existing tab indexes (cache keys, comparison idx 1) stay stable.
+      _PortalNavItem(
+        index: 7,
+        icon: Icons.inventory_2_outlined,
+        selectedIcon: Icons.inventory_2_rounded,
+        title: strings.partnerNavGiftStock,
+        subtitle: strings.giftStockNavSubtitle,
+        tooltip: strings.giftStockNavTooltip,
+        accentColor: colorScheme.secondary,
       ),
     ];
   }
@@ -751,6 +772,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
             lockedEventId: lockedEventId,
             lockedCompanySlug: effectiveSlug,
           );
+        case 4:
+          // Read-only report: quota edits live in the Balances tab (callable).
+          return CompanyPrizesStockReportScreen(
+            key: ValueKey('agency_gift_stock_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
+            initialEventId: activeEventId,
+            lockedEventId: lockedEventId,
+            lockedCompanySlug: effectiveSlug,
+            lockedCompanyName: companyDisplayName,
+            isEmbedded: true,
+            isReadOnly: true,
+          );
         default:
           return const SizedBox.shrink();
       }
@@ -819,6 +851,17 @@ class _CompanyManagerPortalScreenState extends ConsumerState<CompanyManagerPorta
           activeEventId: activeEventId,
           initialEvent: initialEvent,
           isAr: AppStrings.of(ref).isAr,
+        );
+      case 7:
+        // Read-only report: quota edits live in the Balances tab (callable).
+        return CompanyPrizesStockReportScreen(
+          key: ValueKey('gift_stock_${effectiveSlug}_${activeEventId ?? 'all'}_${lockedEventId ?? 'unlocked'}'),
+          initialEventId: activeEventId,
+          lockedEventId: lockedEventId,
+          lockedCompanySlug: effectiveSlug,
+          lockedCompanyName: companyDisplayName,
+          isEmbedded: true,
+          isReadOnly: true,
         );
       default:
         return const SizedBox.shrink();
