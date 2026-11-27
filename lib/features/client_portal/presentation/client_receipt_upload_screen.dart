@@ -28,7 +28,6 @@ import '../../../core/services/ai_product_discovery_service.dart';
 import '../../../core/services/chain_products_intelligence_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/retail_chains_service.dart';
-import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/web_image_resizer.dart';
 import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/utils/slug_utils.dart';
@@ -53,6 +52,8 @@ import 'widgets/unified_multi_campaign_claim_screen.dart';
 import '../../../core/services/multi_campaign_receipt_evaluator.dart';
 import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
+import '../../../core/widgets/portal_data_error_view.dart';
+import '../domain/campaign_load_state.dart';
 import '../../../core/utils/receipt_image_calibrator.dart';
 import '../../../core/widgets/optimistic_receipt_scanner_card.dart';
 
@@ -88,7 +89,9 @@ class _ClientReceiptUploadScreenState
   Map<String, dynamic> _lastPriceCheck = const {};
   Map<String, dynamic> _lastNearMiss = const {};
   bool _isLoadingEvent = true;
-  String? _errorMessage;
+  // TAG-81: replaces the free-text _errorMessage (see campaign_load_state.dart).
+  CampaignLoadState _loadState = CampaignLoadState.ok;
+  Object? _loadError;
   StreamSubscription? _eventSubscription;
 
   final List<XFile> _receiptImages = [];
@@ -215,8 +218,72 @@ class _ClientReceiptUploadScreenState
     }
   }
 
-  void _subscribeToLiveEvent() {
+  void _setLoadFailure(CampaignLoadState state, [Object? error]) {
+    if (!mounted) return;
+    setState(() {
+      _loadState = state;
+      _loadError = error;
+      _isLoadingEvent = false;
+      _activeEvent = null;
+      _availableCompanyEvents = [];
+    });
+  }
+
+  /// TAG-81: every onError / catch goes through here.
+  void _handleLoadError(Object error, {required bool singleDoc}) {
+    if (!mounted) return;
+    bool hasSession;
+    try {
+      hasSession = ref.read(firebaseAuthProvider).currentUser != null;
+    } catch (_) {
+      hasSession = false;
+    }
+    final state = classifyCampaignLoadError(
+      error,
+      hasSession: hasSession,
+      singleDoc: singleDoc,
+    );
+    debugPrint(
+      '[RepCampaignLoad] $state (${campaignLoadErrorCode(error)}): $error',
+    );
+    _setLoadFailure(state, error);
+  }
+
+  /// TAG-81: with no Firebase user (e.g. anonymous sign-in failed in main),
+  /// try once to start an anonymous session. Returns the failure, or null.
+  Future<Object?> _ensureSessionForLoad() async {
+    try {
+      final auth = ref.read(firebaseAuthProvider);
+      if (auth.currentUser != null) return null;
+      // Keep the auth watcher from starting a second sign-in meanwhile.
+      _restoringSession = true;
+      try {
+        await ensureRepAnonymousSession(auth);
+      } finally {
+        _restoringSession = false;
+      }
+      if (auth.currentUser == null) {
+        return StateError('no-session');
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[RepCampaignLoad] anonymous session failed: $e');
+      return e;
+    }
+  }
+
+  void _retryLoad() {
+    setState(() {
+      _isLoadingEvent = true;
+      _loadState = CampaignLoadState.ok;
+      _loadError = null;
+    });
+    _subscribeToLiveEvent();
+  }
+
+  Future<void> _subscribeToLiveEvent() async {
     _eventSubscription?.cancel();
+    _eventSubscription = null;
     final targetEventId = widget.initialEventId;
     final slug = (widget.companySlug ?? '').trim().toLowerCase();
 
@@ -226,16 +293,22 @@ class _ClientReceiptUploadScreenState
           _activeEvent = widget.event;
           _availableCompanyEvents = [widget.event!];
           _isLoadingEvent = false;
-          _errorMessage = null;
+          _loadState = CampaignLoadState.ok;
+          _loadError = null;
         });
         return;
       }
-      setState(() {
-        _activeEvent = null;
-        _availableCompanyEvents = [];
-        _errorMessage = 'رابط الحملة غير متوفر أو غير مكتمل.';
-        _isLoadingEvent = false;
-      });
+      _setLoadFailure(CampaignLoadState.noLink);
+      return;
+    }
+
+    final sessionFailure = await _ensureSessionForLoad();
+    if (!mounted) return;
+    if (sessionFailure != null) {
+      _setLoadFailure(
+        CampaignLoadState.sessionError,
+        sessionFailure is StateError ? null : sessionFailure,
+      );
       return;
     }
 
@@ -253,13 +326,7 @@ class _ClientReceiptUploadScreenState
               (snap) {
                 if (!mounted) return;
                 if (!snap.exists) {
-                  setState(() {
-                    _activeEvent = null;
-                    _availableCompanyEvents = [];
-                    _errorMessage =
-                        'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
-                    _isLoadingEvent = false;
-                  });
+                  _setLoadFailure(CampaignLoadState.noCampaign);
                   return;
                 }
                 _applyLiveEventDocs(
@@ -268,17 +335,7 @@ class _ClientReceiptUploadScreenState
                   slug: slug,
                 );
               },
-              onError: (e) {
-                if (!mounted) return;
-                setState(() {
-                  _errorMessage = AppErrorHandler.getFriendlyMessage(
-                    e,
-                    defaultMessage:
-                        'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-                  );
-                  _isLoadingEvent = false;
-                });
-              },
+              onError: (Object e) => _handleLoadError(e, singleDoc: true),
             );
         return;
       }
@@ -299,24 +356,10 @@ class _ClientReceiptUploadScreenState
             slug: slug,
           );
         },
-        onError: (e) {
-          if (!mounted) return;
-          setState(() {
-            _errorMessage = AppErrorHandler.getFriendlyMessage(
-              e,
-              defaultMessage: 'حدث خطأ أثناء تحميل بيانات الحملة من الخادم.',
-            );
-            _isLoadingEvent = false;
-          });
-        },
+        onError: (Object e) => _handleLoadError(e, singleDoc: false),
       );
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'حدث خطأ أثناء الاتصال بالخادم.';
-          _isLoadingEvent = false;
-        });
-      }
+      _handleLoadError(e, singleDoc: false);
     }
   }
 
@@ -326,33 +369,38 @@ class _ClientReceiptUploadScreenState
     required String slug,
   }) async {
     if (!mounted) return;
-    final firestore = ref.read(firestoreProvider);
-    {
-      // Fallback if scoped query returned empty but targetEventId is provided
+    try {
+      final firestore = ref.read(firestoreProvider);
+      // Fallback if scoped query returned empty but targetEventId is provided.
+      // TAG-81: a denied get (paused campaign) used to throw outside any
+      // try/catch and leave the spinner running forever.
       if (docs.isEmpty && targetEventId != null && targetEventId.isNotEmpty) {
-        final singleDoc = await firestore
-            .collection('events')
-            .doc(targetEventId)
-            .get();
-        if (singleDoc.exists && mounted) {
+        final DocumentSnapshot<Map<String, dynamic>> singleDoc;
+        try {
+          singleDoc = await firestore
+              .collection('events')
+              .doc(targetEventId)
+              .get();
+        } catch (e) {
+          _handleLoadError(e, singleDoc: true);
+          return;
+        }
+        if (!mounted) return;
+        if (singleDoc.exists) {
           final singleEvent = EventModel.fromFirestore(singleDoc);
           setState(() {
             _availableCompanyEvents = [singleEvent];
             _activeEvent = singleEvent;
             _isLoadingEvent = false;
-            _errorMessage = null;
+            _loadState = CampaignLoadState.ok;
+            _loadError = null;
           });
           return;
         }
       }
 
       if (docs.isEmpty) {
-        setState(() {
-          _activeEvent = null;
-          _availableCompanyEvents = [];
-          _errorMessage = 'لا يوجد أي فعاليات مسجلة لهذه الشركة حالياً.';
-          _isLoadingEvent = false;
-        });
+        _setLoadFailure(CampaignLoadState.noCampaign);
         return;
       }
 
@@ -385,21 +433,23 @@ class _ClientReceiptUploadScreenState
                 ? slug
                 : (initialMatched?.targetCompany.toLowerCase().trim() ?? ''));
 
-      // 3. Find all campaigns for this company (active and promoter active)
-      List<EventModel> companyEvents = events.where((e) {
+      // 3. Find all campaigns for this company
+      final matchingCompany = events.where((e) {
         final eSlug = e.companySlug.trim().toLowerCase();
         final eTargetSlug = SlugUtils.toSlug(e.targetCompany).toLowerCase();
         final eTargetName = e.targetCompany.trim().toLowerCase();
-        final matchesCompany =
-            eSlug == effectiveSlug ||
+        return eSlug == effectiveSlug ||
             eTargetSlug == effectiveSlug ||
             eTargetName == effectiveSlug ||
             e.id == effectiveSlug ||
             (effectiveSlug.isNotEmpty &&
                 (eTargetName.contains(effectiveSlug) ||
                     effectiveSlug.contains(eTargetName)));
-        return matchesCompany && e.isActive && e.isPromoterActive;
       }).toList();
+      // ...that are active and open to reps.
+      List<EventModel> companyEvents = matchingCompany
+          .where((e) => e.isActive && e.isPromoterActive)
+          .toList();
 
       // Sort by creation date descending
       companyEvents.sort((a, b) {
@@ -441,16 +491,31 @@ class _ClientReceiptUploadScreenState
             _isAutoMultiCampaignMode = true;
           }
           _isLoadingEvent = false;
-          _errorMessage = null;
+          _loadState = CampaignLoadState.ok;
+          _loadError = null;
         });
-      } else {
+        return;
+      }
+
+      // TAG-81: the company has active campaigns, but all are paused for
+      // reps -> show the paused screen, not "no campaign".
+      final pausedForReps = matchingCompany
+          .where((e) => e.isActive && !e.isPromoterActive)
+          .toList();
+      if (pausedForReps.isNotEmpty) {
         setState(() {
           _availableCompanyEvents = [];
-          _activeEvent = null;
-          _errorMessage = 'لا توجد حملة مفعالة لهذه الشركة حالياً.';
+          _activeEvent = pausedForReps.first;
+          _loadState = CampaignLoadState.promoterPaused;
+          _loadError = null;
           _isLoadingEvent = false;
         });
+        return;
       }
+
+      _setLoadFailure(CampaignLoadState.noCampaign);
+    } catch (e) {
+      _handleLoadError(e, singleDoc: false);
     }
   }
 
@@ -2816,7 +2881,8 @@ class _ClientReceiptUploadScreenState
       );
     }
 
-    if (_errorMessage != null ||
+    // TAG-81: only a really paused campaign shows "الحملة موقوفة".
+    if (showsSuspendedScreen(_loadState) ||
         (_activeEvent != null &&
             (!_activeEvent!.isActive || !_activeEvent!.isPromoterActive))) {
       return CampaignSuspendedScreen(
@@ -2824,13 +2890,25 @@ class _ClientReceiptUploadScreenState
         event: _activeEvent,
         companySlug: widget.companySlug,
         companyName: _activeEvent?.targetCompany,
-        onRefresh: () {
-          setState(() {
-            _isLoadingEvent = true;
-            _errorMessage = null;
-          });
-          _subscribeToLiveEvent();
-        },
+        onRefresh: _retryLoad,
+      );
+    }
+
+    if (showsLoadErrorView(_loadState) || _activeEvent == null) {
+      final state = _activeEvent == null && _loadState == CampaignLoadState.ok
+          ? CampaignLoadState.noCampaign
+          : _loadState;
+      return Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: PortalDataErrorView(
+          key: const ValueKey('rep-campaign-load-error'),
+          error: _loadError,
+          message: campaignLoadMessage(state),
+          detail: showsErrorCode(state)
+              ? campaignLoadErrorCode(_loadError)
+              : null,
+          onRetry: state == CampaignLoadState.noLink ? null : _retryLoad,
+        ),
       );
     }
 
