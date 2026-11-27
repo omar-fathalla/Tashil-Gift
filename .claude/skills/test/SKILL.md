@@ -57,9 +57,10 @@ bash tool/ci/run_gate.sh --dry-run       # الخطة من غير تشغيل
 - **3 static guards**: `tool/ci/static_guards.py` + الـ self-tests. قراية بس. لو لقى حاجة مقصودة، اسأل محمد قبل ما تضيفها للـ allowlist.
 - **4 rules / functions**: `rules-tests` و `functions` (`npm test` و `npm run test:emulator`) على `demo-*` من غير credentials. محتاج Java 21. إصدار firebase-tools من `FIREBASE_TOOLS_VERSION` (الافتراضي 15.37.0).
   - لو الـ rules اتغيرت: شغّل نفس الاختبار على `git show origin/dev:firestore.rules` وعلى الجديد، وقارن. اللي التطبيق بيعمله لازم يفضل مسموح، والثغرة لازم تتقفل.
-- **6 Patrol web** و **5 Maestro**: لسه متجهزوش (TAG-82 PR 2 و PR 3). البوابة بتقول «not set up yet». قول ده في التقرير وماتعتبروش نجاح.
+- **6 Patrol web**: `tool/ci/patrol_web.sh` بيشغّل `patrol_test/` في Chrome headless جوه `emulators:exec` على `demo-tashil-branch`، بـ `FIREBASE_EMULATOR=true` و `SYNTHETIC_RECEIPT_FIXTURE=true` (مفيش Gemini ولا WhatsApp). محتاج `dart pub global activate patrol_cli 4.10.0` و Java 21. لو patrol_cli مش متركّب البوابة بتقول «not set up here»، قول ده في التقرير وماتعتبروش نجاح. التفاصيل في `patrol_test/README.md`.
+- **5 Maestro**: لسه متجهزش (TAG-82 PR 3، على الماك بس). البوابة بتقول «not set up here». قول ده في التقرير وماتعتبروش نجاح.
 
-في الـ CI: `.github/workflows/gate.yml` بيشغّل نفس السكربت بـ `--ci` على كل PR وكل push لـ `dev`. analyze و flutter test و functions unit بيشتغلوا في `checks.yml` أصلًا، فالـ gate بيعدّيهم.
+في الـ CI: `.github/workflows/gate.yml` بيشغّل نفس السكربت بـ `--ci` على كل PR وكل push لـ `dev`. analyze و flutter test و functions unit بيشتغلوا في `checks.yml` أصلًا، فالـ gate بيعدّيهم. Patrol ليه job لوحده (`patrol`) بيشتغل بس لو التعديل محتاجه.
 
 ## 2. التقرير (بالعربي)
 
