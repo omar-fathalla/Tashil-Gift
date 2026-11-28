@@ -24,14 +24,25 @@ function netLine(product) {
   return line;
 }
 
+// TAG-86: a prefix match is only the 12/13-digit POS variation: both codes
+// have at least 12 digits and differ by one. A truncated catalog code such as
+// 622115510 must not swallow every barcode that starts with it.
+const BARCODE_PREFIX_MIN_LENGTH = 12;
+function barcodePrefixVariant(receipt, catalog) {
+  const a = String(receipt || "").trim();
+  const b = String(catalog || "").trim();
+  if (!a || !b || a === b) return false;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  if (shorter.length < BARCODE_PREFIX_MIN_LENGTH) return false;
+  if (longer.length - shorter.length !== 1) return false;
+  return longer.startsWith(shorter);
+}
+
 function explicitMember(product, rule) {
   const barcode = String(product.barcode || "").trim();
   const barcodes = Array.isArray(rule.selectedBarcodes) ? rule.selectedBarcodes : [];
   if (barcode && barcodes.some((b) => String(b).trim() === barcode)) return true;
-  if (barcode.length >= 10 && barcodes.some((b) => {
-    const code = String(b).trim();
-    return code.startsWith(barcode) || barcode.startsWith(code);
-  })) return true;
+  if (barcodes.some((b) => barcodePrefixVariant(barcode, b))) return true;
   const name = norm(product.name);
   if (!name) return false;
   const names = Array.isArray(rule.selectedProductNames) ? rule.selectedProductNames : [];
@@ -327,6 +338,7 @@ module.exports = {
   norm,
   netLine,
   explicitMember,
+  barcodePrefixVariant,
   roundsFromRules,
   applyCap,
   verifyConsumingDecrements,
