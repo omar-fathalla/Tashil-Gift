@@ -45,6 +45,7 @@
 * `migrate_campaign_content.js`: نقل المنتجات/البرومبت لـ `content/` (dry-run افتراضي؛ TAG-63).
 * `audit_claim_eligibility.js`: تقارير.
 * `bootstrap-super-admin.js` و `shared_pool_report.js` اتشالوا في TAG-83 لأنهم كانوا بيكلموا `tashil-gift` (الإنتاج) افتراضيًا. إزاي تدي super admin من غيرهم: الجزء اللي جاي.
+* `check_hosting_cache_emulator.js`, `run_hosting_cache_emulator.sh`: اختبار headers الـ cache.
 
 ## إزاي تدي super admin
 
@@ -54,10 +55,9 @@
 
 **(ب) break-glass (مشروع جديد، أو مفيش ولا super_admin):** مرة واحدة بـ Admin SDK من جهاز موثوق، على مشروع مكتوب صريح في الكود (`initializeApp({ projectId: "<المشروع>" })`)، من غير default ومن غير الاعتماد على `GCLOUD_PROJECT`. بنفس الخطوتين:
 1. `getUserByEmail(email)`، وبعدين `setCustomUserClaims(uid, claims)`، والـ `claims` هي الـ claims الحالية + `role: "super_admin"`، ومن غير `companySlug` و `partnerAccess`.
-2. `admins/{email}` بـ `set({ uid, email, role: "super_admin", ... }, { merge: true })`.
+2. `admins/{email}` بـ `set({ uid, email, role: "super_admin", ... }, { merge: true })`. الـ doc id هو الإيميل بعد `trim().toLowerCase()` (lowercase ومن غير مسافات)، زي `setUserRole` بالظبط، وإلا المستند هيتكتب باسم غير اللي الكود بيدوّر عليه.
 
 بعدها المستخدم يعمل sign out و sign in عشان الـ ID token يجيب الـ claim الجديد. أي super admin تاني بعد كده يتدي من (أ).
-* `check_hosting_cache_emulator.js`, `run_hosting_cache_emulator.sh`: اختبار headers الـ cache.
 
 ## الاختبارات
 
