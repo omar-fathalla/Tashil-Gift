@@ -186,8 +186,11 @@ void main() {
       expect(matches.single.qualifyingSpend, closeTo(210, 0.01));
     });
 
-    test('207/9 on Unilever: same award as before the fix', () {
-      // Pinned to the pre-fix result on dev (same rule, multiplier and spend).
+    test('207/9 on Unilever: the 400 tier (TAG-85 moved it from the narrow rule_1)', () {
+      // TAG-67 pinned rule_1 x1 on 297 EGP: the narrow «300 -> 50, items listed
+      // only» rule counted the Knorr / Dove lines by name. TAG-85: lines whose
+      // barcode is on the company-wide ladder's list go to the ladder, so the
+      // whole 433 EGP pays the 400 tier (100 EGP) instead of rule_1's 50.
       final matches = PromotionalRuleMatcher.matchAllWithMultipliers(
         result: receipt('207/9/413/251126', productsOf('207/9/413/251126')),
         promotionalRules: rulesOf('unilever'),
@@ -196,9 +199,10 @@ void main() {
         spendLadderMode: 'exclusive',
       );
       expect(matches, hasLength(1));
-      expect(matches.single.rule.id, 'rule_1');
+      expect(matches.single.rule.id, 'rule_3');
       expect(matches.single.multiplier, 1);
-      expect(matches.single.qualifyingSpend, closeTo(297, 0.01));
+      expect(matches.single.qualifyingSpend, closeTo(433, 0.01));
+      expect(voucherTotal(matches), 100);
     });
 
     test('113/6 on Unilever: same award as before the fix', () {
