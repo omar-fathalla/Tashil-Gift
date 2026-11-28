@@ -98,7 +98,7 @@ void main() {
       expect(r.warnings.first.message, contains('آخر يوم في الحملة'));
     });
 
-    test('no conditions, no stock, ended campaign are all flagged', () {
+    test('no conditions and ended campaign are flagged; no stock is not (TAG-45)', () {
       final r = CampaignActivationReview.of(
         _campaign(minimumSpend: 0, products: const [], prizes: [], end: DateTime(2026, 11, 22)),
         isNew: true,
@@ -106,12 +106,12 @@ void main() {
       );
       final text = r.warnings.map((w) => w.message).join('\n');
       expect(text, contains('مفيش أي شرط'));
-      expect(text, contains('مفيش رصيد هدايا'));
+      expect(text, isNot(contains('مفيش رصيد هدايا')));
       expect(text, contains('فات'));
       expect(r.warnings.first.level, ReviewLevel.danger);
     });
 
-    test('a selected branch without stock and a sold-out row are warnings', () {
+    test('a selected branch without stock and a sold-out row are not flagged (TAG-45)', () {
       final r = CampaignActivationReview.of(
         _campaign(
           isAllBranches: false,
@@ -125,8 +125,8 @@ void main() {
         now: _now,
       );
       final text = r.warnings.map((w) => w.message).join('\n');
-      expect(text, contains('فرع الدقي'));
-      expect(text, contains('خلص'));
+      expect(text, isNot(contains('فرع الدقي')));
+      expect(text, isNot(contains('خلص')));
     });
 
     test('a spend rule with zero minimum and no product scope is flagged; WhatsApp is info', () {

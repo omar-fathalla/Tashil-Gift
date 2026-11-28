@@ -214,4 +214,4 @@ PR على `dev` ← معاينة على dev ← دمج في `dev` ← تجربة
 ## 6. ملحوظات
 * `deploy-production.yml` بيبني prod بس، وبيرفض build الـ `env` بتاعه مش `prod`، وبيرفض لو الـ secret بتاع الإنتاج فيه مفتاح `tashil-gift-dev`. وما يعرفش أي secret بتاع dev.
 * النسخة dev على الويب بس حاليًا. Android و iOS بيفضلوا على الإنتاج.
-* `functions/scripts/bootstrap-super-admin.js` و `shared_pool_report.js` سكربتات محلية قديمة بتشاور على الإنتاج افتراضيًا. ما تشغلهمش إلا بـ `GCLOUD_PROJECT=tashil-gift-dev`.
+* السكربتات المحلية القديمة اللي كانت بتكلم الإنتاج (`bootstrap-super-admin.js` و `shared_pool_report.js` وغيرهم) اتشالت في TAG-83. إزاي تدي super admin من غيرهم: شوف `docs/05-cloud-functions.md`.

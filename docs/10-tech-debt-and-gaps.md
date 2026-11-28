@@ -8,8 +8,9 @@
 |---|---|---|
 | بيئة التطوير لسه مش شغالة كاملة | المشروع `tashil-gift-dev` موجود، لكن الـ rules والـ functions ما اتنشروش عليه، والمعاينات على `dev` لسه على backend الإنتاج لحد ما PR #44 يتدمج (التفاصيل في 11-roadmap.md) | مشروع `P-TAG-16` |
 | النشر على الإنتاج من غير موافقة إجبارية | أي push على `main` بينشر | TAG-20، TAG-21 |
-| روابط فواتير مكشوفة في سكربت benchmark | `tool/run_12_receipts_benchmark.py` | TAG-33 (Urgent) |
+| روابط فواتير مكشوفة في سكربت benchmark | السكربت اتشال في TAG-83، لكن الروابط ومفاتيحها لسه في تاريخ git ([النسخة القديمة](https://github.com/omar-fathalla/Tashil-Gift/blob/2a018e3f191b30e2297198f4ed3ca1d282e923b9/tool/run_12_receipts_benchmark.py)) ولازم الـ tokens تتلغي في Storage | TAG-33 (Urgent) |
 | مفاتيح مكتوبة في كود خدمات الـ AI | — | TAG-10 |
+| بيانات مشرفين حقيقية في الريبو | `tool/seeds/company-supervisors.xlsx` و `test/company_supervisor_import_test.dart` فيهم أسماء وأرقام موبايل شكلها حقيقية، والريبو public. المطلوب: التست يبني workbook وهمي في الذاكرة، والملف يتشال، ومحمد يقرر هنعمل إيه في تاريخ git | follow-up (Security) |
 | باسوردات البوابات نص صريح | `companies/*` و `events/*` (`customAgencyPassword`) فيها باسوردات البوابات من غير hash. الـ rules بتقصرها على الأدمن والـ callable ما بيرجّعهاش، لكن أي تسريب لصلاحية أدمن أو backup بيكشفها | TAG-70 |
 | قراية anonymous واسعة | أي جلسة anonymous (أي حد فتح رابط حملة) تقدر تقرا `company_products` لكل الشركات، و`branches` و`retail_chains` كلها | TAG-71 |
 | CSP فيها `unsafe-eval` و `unsafe-inline` | غالبًا لازمين لـ Flutter web، محتاج تأكيد | — |

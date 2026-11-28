@@ -1,4 +1,3 @@
-import 'campaign_wording.dart';
 import 'event_model.dart';
 
 /// C-05: what the admin sees before a campaign is published, and the risky
@@ -12,10 +11,6 @@ class ReviewWarning {
 }
 
 class CampaignActivationReview {
-  /// TAG-43: appended to each tier-gift stock warning.
-  static const String tierStockHint =
-      'الصرف للشريحة دي ممكن يترفض أو يتخصم من رصيد هدية تانية. اختار الهدية الصحيحة في الشريحة أو ضيف لها رصيد في الفروع.';
-
   /// Label used for stock rows that are not tied to one branch.
   static const String generalPool = 'كل الفروع (رصيد عام)';
 
@@ -48,7 +43,6 @@ class CampaignActivationReview {
     required bool isNew,
     bool? willBeActive,
     DateTime? now,
-    List<String> tierStockIssues = const [],
   }) {
     final today = now ?? DateTime.now();
     final active = willBeActive ?? (isNew ? true : e.isActive);
@@ -118,28 +112,10 @@ class CampaignActivationReview {
           'تعدد الفرص مفعّل من غير حد أقصى للفرص في الفاتورة الواحدة.'));
     }
 
-    // Stock.
-    if (e.allocatedPrizes.isEmpty || e.allocatedPrizes.every((p) => p.allocatedQuantity <= 0)) {
-      w.add(const ReviewWarning(ReviewLevel.danger,
-          'مفيش رصيد هدايا متوزّع؛ أي فاتورة مؤهلة هتقف عند "نفاد الرصيد".'));
-    } else {
-      for (final p in e.allocatedPrizes) {
-        if (p.allocatedQuantity > 0 && p.remainingQuantity <= 0) {
-          w.add(ReviewWarning(ReviewLevel.warning, 'رصيد "${CampaignWording.giftLabel(p.name)}" في ${_branchOf(p)} خلص (المتبقي صفر).'));
-        }
-      }
-      if (!e.isAllBranches) {
-        final hasGeneral = e.allocatedPrizes.any((p) => p.branchId.trim().isEmpty && p.branchName.trim().isEmpty && p.allocatedQuantity > 0);
-        for (var i = 0; i < e.branchIds.length; i++) {
-          final id = e.branchIds[i];
-          final name = i < e.branchNames.length ? e.branchNames[i] : id;
-          final has = e.allocatedPrizes.any((p) => (p.branchId == id || p.branchName == name) && p.allocatedQuantity > 0);
-          if (!has && !hasGeneral) {
-            w.add(ReviewWarning(ReviewLevel.warning, 'فرع "$name" مختار في الحملة ومالوش أي رصيد هدايا.'));
-          }
-        }
-      }
-    }
+    // TAG-45 (Mohamed, 25 Nov): no stock warnings when creating or editing a
+    // campaign (no stock distributed, sold-out rows, branches without stock,
+    // tier gifts without a matching stock row). Stock is managed on its own
+    // screens and the server still decides every claim.
 
     // Behaviour worth knowing about.
     if (e.customPrompt.trim().isEmpty) {
@@ -157,11 +133,6 @@ class CampaignActivationReview {
     }
 
     w.sort((a, b) => a.level.index.compareTo(b.level.index));
-    // TAG-43: tier gifts with no stock row of the same gift. A warning only:
-    // the save goes on, and the server decides each claim.
-    for (final issue in tierStockIssues) {
-      w.add(ReviewWarning(ReviewLevel.warning, '$issue $tierStockHint'));
-    }
     return CampaignActivationReview._(e, isNew, byBranch, w);
   }
 

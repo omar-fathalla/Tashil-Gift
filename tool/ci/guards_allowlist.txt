@@ -27,13 +27,6 @@ prod-project | tool/dev/render_firebase_dev_json.py | "https://us-central1-tashi
 prod-project | functions/scripts/run_hosting_cache_emulator.sh | *tashil-gift*) | emulator script refuses prod
 prod-project | functions/scripts/check_hosting_cache_emulator.js | if (PROJECT === "tashil-gift" | emulator check refuses prod
 
-# --- Old ops scripts that read or write production on purpose. Run only with Mohamed's go. ---
-prod-project | functions/scripts/bootstrap-super-admin.js | || "tashil-gift", | one-time super admin bootstrap; defaults to prod
-prod-project | functions/scripts/shared_pool_report.js | initializeApp({ projectId: "tashil-gift" }); | read-only prod report
-prod-project | tool/import_company_supervisors.dart | const _projectId = 'tashil-gift'; | supervisor import into prod
-prod-project | tool/seed_fathalla.py | /projects/tashil-gift/ | writes the fathalla chain branches to prod Firestore
-prod-project | tool/run_12_receipts_benchmark.py | * | benchmark against prod receipts and Vertex AI on tashil-gift
-
 # --- The guard and its self-tests describe and plant the cases they catch. ---
 prod-project     | tool/ci/static_guards.py | * | docstring describes the check
 prod-project     | tool/ci/test_gate_tools.py | * | planted test cases
