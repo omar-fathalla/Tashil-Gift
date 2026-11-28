@@ -68,7 +68,7 @@ set -e
 # could not be set (firebase-tools then exits 1 and suggests --force, which we
 # never use). That one case is a warning, not a failed deploy.
 if [ "$status" -ne 0 ] && grep -q "Functions successfully deployed but could not set up cleanup policy" "$log"; then
-  echo "::warning::Functions deployed to $PROJECT; the artifact cleanup policy is not set (one-time: firebase functions:artifacts:setpolicy --project tashil-gift-dev)."
+  echo "::warning::Functions deployed to $PROJECT; the artifact cleanup policy is not set ; set it once with: firebase functions:artifacts:setpolicy --project tashil-gift-dev"
   status=0
 fi
 rm -f "$log"
