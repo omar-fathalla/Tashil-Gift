@@ -56,6 +56,10 @@ fvm flutter run -d chrome --web-port 8080
 
 ## الاختبارات
 
+### البوابة (TAG-82)
+
+`bash tool/ci/run_gate.sh` بيشوف الملفات اللي اتغيرت عن `origin/dev` ويشغّل الأدوات اللي ليها علاقة بيها بس (الجدول في `tool/ci/gate_buckets.py` و `.claude/skills/test/SKILL.md`). `--all` للفول تيست، `--only <tool>` لأداة واحدة، `--dry-run` للخطة. النتيجة في `build/gate/SUMMARY.md`. أداة 4 محتاجة Java 21، وكل الـ emulators على `demo-*` من غير credentials.
+
 | الأمر | بيختبر إيه | الحالة المعروفة |
 |---|---|---|
 | `fvm flutter analyze` | الـ lints | baseline: 14 info، 1 warning، 0 error (`tool/ci/analyze_baseline.txt`) |
@@ -66,6 +70,8 @@ fvm flutter run -d chrome --web-port 8080
 | `(cd functions && npm run test:emulator)` | functions على الـ emulators | — |
 | `(cd rules-tests && npm test)` | firestore.rules و storage.rules | — |
 | `python3 tool/ci/check_version.py` | تطابق الإصدار في الـ 3 ملفات | — |
+| `python3 tool/ci/static_guards.py` | `--project` في أوامر firebase، اسم prod في السكربتات، الأسرار | 0 finding (الاستثناءات في `tool/ci/guards_allowlist.txt`) |
+| `python3 -m unittest discover -s tool/ci -p 'test_*.py'` | اختبارات البوابة نفسها | 21 نجح |
 
 القاعدة: لو اختبار فشل، أعِد تشغيل الملف ده بس لحد ما يتصلّح، مش الـ suite كلها.
 
