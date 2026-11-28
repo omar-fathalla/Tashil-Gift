@@ -59,6 +59,26 @@ void main() {
     expect(after['isActive'], isFalse, reason: 'auto-closed campaign is not re-activated');
   });
 
+  test('TAG-43: the save token is written only when given', () {
+    final withToken = CampaignEditSave.buildEditPatch(
+      draft: _campaign(name: 'x'),
+      opened: opened,
+      currentData: _stored(),
+      updatedBy: 'admin1',
+      saveToken: 'tok-1',
+    );
+    expect(withToken['lastSaveToken'], 'tok-1');
+    final without = CampaignEditSave.buildEditPatch(
+      draft: _campaign(name: 'x'),
+      opened: opened,
+      currentData: _stored(),
+      updatedBy: 'admin1',
+    );
+    expect(without.containsKey('lastSaveToken'), isFalse);
+    final attempt = CampaignEditAttempt(draft: _campaign(name: 'x'), opened: opened, updatedBy: 'admin1', saveToken: 'tok-2');
+    expect(attempt.plan(_stored())?['lastSaveToken'], 'tok-2');
+  });
+
   test('100 -> 120 uses fresh remaining: 40 + 20 = 60', () {
     final patch = CampaignEditSave.buildEditPatch(
       draft: _campaign(prizes: [_row(120, 70)]),

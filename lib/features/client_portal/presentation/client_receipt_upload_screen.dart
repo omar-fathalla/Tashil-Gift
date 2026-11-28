@@ -54,6 +54,7 @@ import '../../../core/services/receipt_deduplication_helper.dart';
 import '../../../core/widgets/campaign_suspended_screen.dart';
 import '../../../core/widgets/portal_data_error_view.dart';
 import '../domain/campaign_load_state.dart';
+import '../domain/campaign_min_spend.dart';
 import '../../../core/utils/receipt_image_calibrator.dart';
 import '../../../core/widgets/optimistic_receipt_scanner_card.dart';
 
@@ -1668,12 +1669,16 @@ class _ClientReceiptUploadScreenState
       }
 
       final double totalValue = result.targetCompanyTotal;
-      if (_activeEvent!.minimumSpend > 0 &&
-          totalValue < _activeEvent!.minimumSpend) {
+      // TAG-88: the gate honours the rules' discount tolerance (200 - 5 = 195).
+      final double minSpendGate = campaignMinSpendGate(
+        _activeEvent!.minimumSpend,
+        _activeEvent!.promotionalRules,
+      );
+      if (minSpendGate > 0 && totalValue < minSpendGate) {
         if (!mounted) return;
         final activeCountry = ref.read(activeCountryProvider);
         final unfulfilledList = [
-          'إجمالي مشتريات منتجات ${_activeEvent!.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب (${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}).',
+          'إجمالي مشتريات منتجات ${_activeEvent!.targetCompany} في الفاتورة ($totalValue ${activeCountry.currencySymbol}) أقل من الحد الأدنى المطلوب لدخول السحب ($minSpendGate ${activeCountry.currencySymbol}).',
         ];
         final conditions = [
           ValidationConditionItem(
@@ -1682,7 +1687,7 @@ class _ClientReceiptUploadScreenState
             icon: Icons.price_check_rounded,
             isMet: false,
             value:
-                '$totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol}',
+                '$totalValue / $minSpendGate ${activeCountry.currencySymbol}',
           ),
         ];
 
@@ -1704,7 +1709,7 @@ class _ClientReceiptUploadScreenState
           allImagesList: allImagesList,
           activeEvent: _activeEvent!,
           rejectionReason:
-              'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / ${_activeEvent!.minimumSpend} ${activeCountry.currencySymbol})',
+              'الحد الأدنى لقيمة المشتريات غير مستوفى ($totalValue / $minSpendGate ${activeCountry.currencySymbol})',
           unfulfilledConditions: unfulfilledList,
           totalValue: totalValue,
         );
@@ -1713,7 +1718,7 @@ class _ClientReceiptUploadScreenState
           ReceiptIssueKind.belowMinimum,
           chips: _receiptChips(
             result,
-            minimumSpend: _activeEvent!.minimumSpend,
+            minimumSpend: minSpendGate,
             currency: activeCountry.currencySymbol,
           ),
           extraReasons: conditions.map((c) => c.description).toList(),
@@ -1800,7 +1805,7 @@ class _ClientReceiptUploadScreenState
           ReceiptIssueKind.promoNotMet,
           chips: _receiptChips(
             result,
-            minimumSpend: _activeEvent!.minimumSpend,
+            minimumSpend: minSpendGate,
             currency: activeCountry.currencySymbol,
           ),
           extraReasons: <String>{

@@ -333,6 +333,29 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // TAG-43: why a campaign save did not land (written by the admin's
+    // browser, best effort). Create-only, small fixed fields; never edited.
+    match /save_failures/{failureId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'kind', 'op', 'code', 'message', 'eventId', 'companySlug', 'payloadBytes',
+          'elapsedMs', 'appVersion', 'userAgent', 'uid', 'createdAt'])
+        && request.resource.data.kind in ['timeout', 'late_success', 'late_error', 'error']
+        && request.resource.data.op in ['create', 'edit']
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.code is string && request.resource.data.code.size() <= 100
+        && request.resource.data.message is string && request.resource.data.message.size() <= 500
+        && request.resource.data.eventId is string && request.resource.data.eventId.size() <= 100
+        && request.resource.data.companySlug is string && request.resource.data.companySlug.size() <= 100
+        && request.resource.data.appVersion is string && request.resource.data.appVersion.size() <= 40
+        && request.resource.data.userAgent is string && request.resource.data.userAgent.size() <= 300
+        && request.resource.data.payloadBytes is int
+        && request.resource.data.elapsedMs is int;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
