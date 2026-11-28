@@ -3,7 +3,7 @@
 
 The Patrol tests must never reach Gemini or WhatsApp (WAHA). The app calls
 them only through Cloud Functions, so the lock is on the server side: this
-script reads the output of `firebase emulators:exec` and fails when
+script reads the emulators:exec output and fails when
 
   - a function that talks to Gemini or WAHA started executing, or
   - a Gemini / Vertex AI / WAHA host appears anywhere in the log.

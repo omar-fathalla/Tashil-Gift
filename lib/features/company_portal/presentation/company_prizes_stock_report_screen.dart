@@ -78,6 +78,17 @@ class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
   final String lockedCompanySlug;
   final String lockedCompanyName;
   final String? initialEventId;
+
+  /// Single-campaign session (`/ep/` links). When set, the screen shows only
+  /// this campaign, cannot switch to another one or to "all campaigns", reads
+  /// receipts by `campaignId`, and hides the stock movements ledger
+  /// (`gift_stock_movements` has no `eventId`, so it cannot be scoped).
+  final String? lockedEventId;
+
+  /// Hides every quota-editing action. Defaults to true: the direct client
+  /// write (`updateBranchPrizeAllocation`) is admin-only in the rules and is
+  /// not transactional; quota edits belong to the Balances tab (callable).
+  final bool isReadOnly;
   final bool isEmbedded;
   final VoidCallback? onBack;
 
@@ -86,9 +97,19 @@ class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
     required this.lockedCompanySlug,
     required this.lockedCompanyName,
     this.initialEventId,
+    this.lockedEventId,
+    this.isReadOnly = true,
     this.isEmbedded = false,
     this.onBack,
   });
+
+  /// Keeps only the locked campaign when [lockedEventId] is set.
+  @visibleForTesting
+  static List<EventModel> scopeEventsToLock(List<EventModel> events, String? lockedEventId) {
+    final locked = lockedEventId?.trim() ?? '';
+    if (locked.isEmpty) return events;
+    return events.where((e) => e.id == locked).toList();
+  }
 
   static CompanyGiftModel? findMatchingMasterGift(
     AllocatedPrize prize,
@@ -104,6 +125,14 @@ class CompanyPrizesStockReportScreen extends ConsumerStatefulWidget {
 class _CompanyPrizesStockReportScreenState
     extends ConsumerState<CompanyPrizesStockReportScreen> {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
+  bool get _isEventLocked => (widget.lockedEventId?.trim() ?? '').isNotEmpty;
+
+  /// Campaign selection entry point; ignored in a locked single-campaign session.
+  void _selectEvent(String? eventId) {
+    if (_isEventLocked) return;
+    setState(() => _selectedEventId = eventId);
+  }
 
   // Search & Filter State
   final TextEditingController _searchController = TextEditingController();
@@ -141,6 +170,9 @@ class _CompanyPrizesStockReportScreenState
         Query eventsQuery = firestore.collection('events');
         if (slug.isNotEmpty) {
           eventsQuery = eventsQuery.where('companySlug', isEqualTo: widget.lockedCompanySlug.trim());
+        }
+        if (_isEventLocked) {
+          eventsQuery = eventsQuery.where(FieldPath.documentId, isEqualTo: widget.lockedEventId!.trim());
         }
         _eventsStream = eventsQuery.snapshots();
       }
@@ -191,7 +223,10 @@ class _CompanyPrizesStockReportScreenState
   @override
   void initState() {
     super.initState();
-    if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
+    if (_isEventLocked) {
+      // Locked before the first build so _ensureStreams never opens a company-wide query.
+      _selectedEventId = widget.lockedEventId!.trim();
+    } else if (widget.initialEventId != null && widget.initialEventId!.isNotEmpty) {
       _selectedEventId = widget.initialEventId;
     }
     _searchController.addListener(() {
@@ -204,6 +239,13 @@ class _CompanyPrizesStockReportScreenState
   @override
   void didUpdateWidget(covariant CompanyPrizesStockReportScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_isEventLocked) {
+      final locked = widget.lockedEventId!.trim();
+      if (_selectedEventId != locked) {
+        setState(() => _selectedEventId = locked);
+      }
+      return;
+    }
     if (widget.initialEventId != oldWidget.initialEventId &&
         widget.initialEventId != null &&
         widget.initialEventId!.isNotEmpty) {
@@ -342,6 +384,7 @@ class _CompanyPrizesStockReportScreenState
     required List<CompanyGiftModel> masterGifts,
     bool initialDirectMode = false,
   }) {
+    if (widget.isReadOnly) return; // TAG-79: report is read-only from the portal
     // Find master gift if available to show warehouse inventory
     final normGiftKey = giftId.trim().toLowerCase();
     final normGiftName = giftName.trim().toLowerCase();
@@ -907,6 +950,7 @@ class _CompanyPrizesStockReportScreenState
     required AppStrings strings,
     required bool isAr,
   }) {
+    if (widget.isReadOnly) return; // TAG-79: report is read-only from the portal
     final colorScheme = Theme.of(context).colorScheme;
     final unitLabel = (masterGift?.isVoucher ?? false) ? (isAr ? 'كارت' : 'cards') : (isAr ? 'قطعة' : 'pcs');
 
@@ -1734,6 +1778,7 @@ class _CompanyPrizesStockReportScreenState
                 e.targetCompany.toLowerCase().contains(slug) ||
                 slug.isEmpty)
             .toList();
+        final scopedEvents = CompanyPrizesStockReportScreen.scopeEventsToLock(companyEvents, widget.lockedEventId);
 
         // 2. Stream company_gifts master catalog
         return StreamBuilder<QuerySnapshot>(
@@ -1755,8 +1800,8 @@ class _CompanyPrizesStockReportScreenState
               stream: _transactionsStream,
               builder: (context, receiptsSnapshot) {
                 final allDocs = receiptsSnapshot.data?.docs ?? [];
-                final companyEventIds = companyEvents.map((e) => e.id).toSet();
-                final targetCompAr = companyEvents.isNotEmpty ? companyEvents.first.targetCompany.trim() : '';
+                final companyEventIds = scopedEvents.map((e) => e.id).toSet();
+                final targetCompAr = scopedEvents.isNotEmpty ? scopedEvents.first.targetCompany.trim() : '';
                 final transactionDocs = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>? ?? {};
                   final tSlug = (data['companySlug'] ?? data['company_slug'] ?? '').toString().trim();
@@ -1781,7 +1826,7 @@ class _CompanyPrizesStockReportScreenState
                   isAr: isAr,
                   isHi: isHi,
                   isMobile: isMobile,
-                  companyEvents: companyEvents,
+                  companyEvents: scopedEvents,
                   masterGifts: masterGifts,
                   transactionDocs: transactionDocs,
                 );
@@ -2248,11 +2293,8 @@ class _CompanyPrizesStockReportScreenState
                       : (isHi ? 'वास्तविक समय पुरस्कार और स्टॉक प्रबंधन' : 'Real-time physical prize inventory, balances, and branch stock movement ledger'),
                   events: companyEvents,
                   selectedEventId: _selectedEventId,
-                  onEventChanged: (eventId) {
-                    setState(() {
-                      _selectedEventId = eventId;
-                    });
-                  },
+                  onEventChanged: _selectEvent,
+                  showEventSelector: !_isEventLocked,
                   lockedCompanySlug: widget.lockedCompanySlug,
                   isMobile: isMobile,
                   actions: [
@@ -2334,7 +2376,7 @@ class _CompanyPrizesStockReportScreenState
                 const SizedBox(height: 20),
 
                 // 4. Main Dynamic View Content
-                if (_viewMode == 3)
+                if (_viewMode == 3 && !_isEventLocked)
                   _buildStockMovementsLedgerView(
                     context: context,
                     colorScheme: colorScheme,
@@ -2748,7 +2790,8 @@ class _CompanyPrizesStockReportScreenState
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Campaign Selector Dropdown
+              // Campaign Selector Dropdown (hidden in a locked single-campaign session)
+              if (!_isEventLocked)
               Builder(
                 builder: (context) {
                   final uniqueEvents = <String, EventModel>{};
@@ -2803,7 +2846,7 @@ class _CompanyPrizesStockReportScreenState
                               ),
                             ),
                         ],
-                        onChanged: (val) => setState(() => _selectedEventId = val),
+                        onChanged: _selectEvent,
                       ),
                     ),
                   );
@@ -2981,6 +3024,7 @@ class _CompanyPrizesStockReportScreenState
               ? 'أرصدة الجوائز واستهلاكها حسب كل فعالية وحملة ترويجية'
               : 'Prize consumption per promotional campaign',
         ),
+        if (!_isEventLocked)
         M3ButtonSegment<int>(
           value: 3,
           icon: Icons.history_edu_rounded,
@@ -2991,7 +3035,7 @@ class _CompanyPrizesStockReportScreenState
               : 'Audit ledger of all supply batches, adjustments, claims and returns',
         ),
       ],
-      selectedValue: _viewMode,
+      selectedValue: (_isEventLocked && _viewMode == 3) ? 0 : _viewMode,
       onSelected: (newVal) => setState(() => _viewMode = newVal),
     );
   }
@@ -3848,7 +3892,8 @@ class _CompanyPrizesStockReportScreenState
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // 1. Edit & Distribute Branch Quotas
+              // 1. Edit & Distribute Branch Quotas (hidden when read-only)
+              if (!widget.isReadOnly)
               FilledButton.tonalIcon(
                 onPressed: () => _showEditGiftAllocationsDialog(
                   gift: gift,
@@ -3870,8 +3915,8 @@ class _CompanyPrizesStockReportScreenState
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-              // 2. Movement Ledger Timeline Modal
-              if (masterGift != null)
+              // 2. Movement Ledger Timeline Modal (company-wide data: hidden when campaign-locked)
+              if (masterGift != null && !_isEventLocked)
                 FilledButton.tonalIcon(
                   onPressed: () => _showBatchesAndMovementLedgerDialog(masterGift),
                   icon: const Icon(Icons.history_edu_rounded, size: 16),
@@ -4412,6 +4457,7 @@ class _CompanyPrizesStockReportScreenState
                             isHighlight: true,
                             colorScheme: colorScheme,
                           ),
+                        if (!widget.isReadOnly) ...[
                         const SizedBox(width: 8),
                         // Quick Supply / Adjust Action Button
                         isMobile
@@ -4515,6 +4561,7 @@ class _CompanyPrizesStockReportScreenState
                                   ),
                                 ],
                               ),
+                        ],
                       ],
                     ),
                   );

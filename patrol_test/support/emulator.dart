@@ -172,7 +172,7 @@ Future<int> receiptClaimedUnits() async {
 }
 
 /// Receipt images the upload stored in the Storage emulator for the test
-/// fixture company (receipts/fixture-co/..., either <eventId>/ or multi_bundles/). The upload falls back to
+/// fixture company (`receipts/fixture-co/...`, under the event id or `multi_bundles/`). The upload falls back to
 /// an inline data: URL when Storage fails, so this is the only proof that the
 /// image really went through storage.rules.
 Future<List<String>> receiptImagePaths() async {

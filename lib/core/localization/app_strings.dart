@@ -376,6 +376,18 @@ class AppStrings {
     en: 'Branch Balances',
     hi: 'शाखा शेष',
   );
+  // Gift stock report tab (TAG-79). Arabic & English only: `hi` falls back to English.
+  String get partnerNavGiftStock => _t(ar: 'مخزون الهدايا', en: 'Gift Stock', hi: 'Gift Stock');
+  String get giftStockNavSubtitle => _t(
+    ar: 'رصيد الهدايا لكل فرع ودفعات التوريد وسجل الحركات',
+    en: 'Gift balances per branch, supply batches & movements',
+    hi: 'Gift balances per branch, supply batches & movements',
+  );
+  String get giftStockNavTooltip => _t(
+    ar: 'تقرير للعرض فقط لمخزون الهدايا وحركاته',
+    en: 'Read-only report of gift stock and its movements',
+    hi: 'Read-only report of gift stock and its movements',
+  );
   String get branchBalancesNavSubtitle => _t(
     ar: 'تغذية وتوزيع أرصدة الهدايا والقسائم على الفروع',
     en: 'Direct gift & voucher quota allocation across branches',

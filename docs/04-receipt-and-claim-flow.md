@@ -48,6 +48,6 @@
 ## مسارات تانية لنفس الفكرة
 
 * **تعدد الحملات**: لو الرابط بتاع شركة وفيها أكتر من حملة، `MultiCampaignReceiptEvaluator.evaluateAll` بيقيّم الفاتورة على كل الحملات و`UnifiedMultiCampaignClaimScreen` بيصرف.
-* **التحقق اليدوي**: `ValidationScreen` و `InvoicesLogScreen` (الأدمن والشريك ops) بيعيدوا التحليل ويعدّلوا.
+* **التحقق اليدوي**: `InvoicesLogScreen` (الأدمن والشريك ops) بيعيد التحليل ويعدّل.
 * **WhatsApp**: `wahaWebhook` بيستقبل صورة فاتورة ويستخدم نفس `verifyReceiptImage`.
 * **جرّب على فاتورة** (C-05): `dryRunCampaignEligibility` بيشغّل الأهلية على حملة لسه ما اتحفظتش.

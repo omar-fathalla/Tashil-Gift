@@ -12,13 +12,13 @@ class AppVersionConfig {
   static const int minor = 0;
 
   /// Patch / Iteration version (Feature additions, enhancements, bugfixes)
-  static const int patch = 192;
+  static const int patch = 193;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 252;
+  static const int buildNumber = 253;
 
   /// Release date of the current build
-  static const String releaseDate = '2026-11-26';
+  static const String releaseDate = '2026-11-27';
 
   /// Environment tag: 'Production (Firebase)' for prod (the default build),
   /// 'Development (tashil-gift-dev)' for --dart-define=APP_ENV=dev.
