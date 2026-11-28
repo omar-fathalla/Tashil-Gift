@@ -89,6 +89,9 @@ class _CampaignTryReceiptDialogState extends State<CampaignTryReceiptDialog> {
       final data = res.data;
       if (!mounted) return;
       setState(() => _result = data is Map ? DryRunResult.fromMap(data) : null);
+    } on DryRunTooLarge catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.code == 'not-found' && (e.message ?? '').isEmpty

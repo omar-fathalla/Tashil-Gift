@@ -11,7 +11,10 @@ const { withCampaignContent, CampaignContentUnavailable } = require("./campaign_
 
 const STAFF_ROLES = new Set(["super_admin", "admin"]);
 const MAX_LINES = 200;
-const MAX_PAYLOAD_CHARS = 300000;
+// TAG-66: an unsaved campaign sends its whole product list (it has no stored
+// one). Staff only and well under the 10 MB callable limit; same cap as
+// CampaignDryRun.maxRequestChars in the app.
+const MAX_PAYLOAD_CHARS = 4000000;
 const LINE_KEYS = ["name", "barcode", "price", "quantity", "isTargetCompany", "discountAmount", "originalPrice"];
 
 function assertStaff(auth) {
@@ -123,4 +126,4 @@ async function dryRunCampaignEligibilityHandler(db, request, nowMs = Date.now())
   };
 }
 
-module.exports = { dryRunCampaignEligibilityHandler, _testing: { receiptFromInput, cleanLine, assertStaff } };
+module.exports = { dryRunCampaignEligibilityHandler, _testing: { receiptFromInput, cleanLine, assertStaff, MAX_PAYLOAD_CHARS } };
