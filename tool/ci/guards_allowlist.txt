@@ -21,7 +21,9 @@ prod-project | tool/seed_dev_lib.js | const PROD_PROJECT_ID = "tashil-gift"; | s
 prod-project | tool/seed_dev_lib.js | REFUSED: tashil-gift is PRODUCTION | seed refusal message
 prod-project | tool/seed_dev_lib.js | /tashil-gift\.(web\.app|firebasestorage\.app)|\/projects\/tashil-gift\// | seed refuses data that points at prod
 prod-project | tool/dev/deploy_dev.sh | grep -q '"tashil-gift.firebasestorage.app"' firebase.dev.json | dev deploy refuses the prod bucket
-prod-project | tool/dev/render_firebase_dev_json.py | * | renders firebase.dev.json by replacing the prod bucket and functions host
+prod-project | tool/dev/render_firebase_dev_json.py | PROD_BUCKET = "tashil-gift.firebasestorage.app" | the prod bucket it swaps for dev
+prod-project | tool/dev/render_firebase_dev_json.py | (tashil-gift.firebasestorage.app). Deploying `storage` with it | docstring explaining why it swaps the bucket
+prod-project | tool/dev/render_firebase_dev_json.py | "https://us-central1-tashil-gift.cloudfunctions.net | the prod functions host it swaps in the CSP
 prod-project | functions/scripts/run_hosting_cache_emulator.sh | *tashil-gift*) | emulator script refuses prod
 prod-project | functions/scripts/check_hosting_cache_emulator.js | if (PROJECT === "tashil-gift" | emulator check refuses prod
 
