@@ -64,6 +64,9 @@ test("closes only campaigns past their end date and records who and when", async
   assert.strictEqual(knorr.updatedBy, AUTO_CLOSE_ACTOR);
   assert.strictEqual(knorr.updatedBy, "system:auto-close");
   assert.deepStrictEqual(knorr.updatedAt, STAMP);
+  assert.strictEqual(knorr.statusUpdatedBy, "system:auto-close");
+  assert.deepStrictEqual(knorr.statusUpdatedAt, STAMP);
+  assert.ok(!("pausedManually" in knorr), "auto-close never marks a campaign as paused by an admin");
   assert.strictEqual(db.store.get("events/future").isActive, true);
   assert.strictEqual(db.store.get("events/openEnded").isActive, true);
   assert.strictEqual(db.store.get("events/alreadyClosed").updatedBy, "admin@x");

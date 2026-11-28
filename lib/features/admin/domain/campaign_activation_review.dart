@@ -38,10 +38,13 @@ class CampaignActivationReview {
 
   /// [willBeActive]: the campaign is live right after saving (a new campaign
   /// is created active; an edit keeps its current state).
+  /// [pausedManually]: TAG-18, an admin turned it off from the dashboard switch,
+  /// so the daily auto-activate will not turn it on.
   factory CampaignActivationReview.of(
     EventModel e, {
     required bool isNew,
     bool? willBeActive,
+    bool? pausedManually,
     DateTime? now,
   }) {
     final today = now ?? DateTime.now();
@@ -126,6 +129,22 @@ class CampaignActivationReview {
     }
     if (e.allowComplementaryReceipts) {
       w.add(const ReviewWarning(ReviewLevel.info, 'الفواتير التكميلية مسموحة (أكتر من فاتورة لنفس العميل).'));
+    }
+    // TAG-18: an off campaign whose dates cover today or later.
+    if (!active && e.endDate != null) {
+      final end = DateTime(e.endDate!.year, e.endDate!.month, e.endDate!.day);
+      if (!end.isBefore(todayDay)) {
+        if (pausedManually ?? e.pausedManually) {
+          w.add(const ReviewWarning(ReviewLevel.warning,
+              'الحملة متوقفة يدويًا، فمش هتتفعّل تلقائيًا في مواعيدها. لو عايزها تشتغل، فعّلها من مفتاح الحالة في لوحة التحكم.'));
+        } else if (e.startDate != null) {
+          final start = DateTime(e.startDate!.year, e.startDate!.month, e.startDate!.day);
+          final tomorrow = todayDay.add(const Duration(days: 1));
+          final on = start.isAfter(todayDay) ? start : tomorrow;
+          w.add(ReviewWarning(ReviewLevel.info,
+              'الحملة متوقفة دلوقتي، وهتتفعّل تلقائيًا يوم ${_day(on)} الساعة 12:10 بعد نص الليل. لو عايزها تشتغل قبل كده، فعّلها من مفتاح الحالة في لوحة التحكم.'));
+        }
+      }
     }
     if (active) {
       w.add(ReviewWarning(ReviewLevel.info,
