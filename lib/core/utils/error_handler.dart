@@ -26,9 +26,25 @@ class AppErrorHandler {
           return 'تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت (النظام يعمل أونلاين فقط).';
         case 'too-many-requests':
           return 'تم حظر المحاولات مؤقتاً لكثرة الطلبات. يرجى الانتظار قليلاً والمحاولة مجدداً.';
+        case 'unauthorized-domain':
+          return 'الدومين ده مش مسموح له يسجّل دخول (Authorized domains في إعدادات Firebase Auth). (${error.code})';
         default:
-          return error.message ?? 'فشل تسجيل الدخول (${error.code}).';
+          break;
       }
+      // TAG-68: a referer/app-check block (or any unknown code) used to show
+      // only «Error», because firebase_auth_web strips the prefix and code.
+      final code = error.code;
+      if (code.startsWith('requests-from-referer-') || code.contains('referer')) {
+        return 'الدومين ده مش مسموح له يسجّل دخول (إعدادات مفتاح الـ API). ($code)';
+      }
+      if (code.startsWith('app-check')) {
+        return 'فحص الأمان (App Check) رفض الطلب. حدّث الصفحة وحاول تاني. ($code)';
+      }
+      final msg = (error.message ?? '').trim();
+      if (msg.isEmpty || msg.toLowerCase() == 'error') {
+        return 'فشل تسجيل الدخول ($code).';
+      }
+      return msg;
     }
 
     // Cloud Functions: the server already sends a specific Arabic message.
