@@ -50,6 +50,20 @@ GitHub → Actions → `deploy-production` → Run workflow → `ref` = SHA أو
 * Firebase console: https://console.firebase.google.com/project/tashil-gift/overview
 * التطبيق: https://tashil-gift.web.app
 
+## Monitoring (TAG-74)
+
+`tool/monitoring/setup_alerts.sh <project> <email>` sets up three log-based metrics and sends an e-mail alert when one goes over its hourly threshold:
+
+| Metric | What it counts | Alert |
+|---|---|---|
+| `tashil_claim_failures` | Claims `decrementCampaignPrize` refused or failed (`recordClaimFailure`) | > 20 in an hour |
+| `tashil_receipt_save_failures` | Failed receipt saves reported by the rep app (`logReceiptSaveFailure`) | > 10 in an hour |
+| `tashil_gemini_errors` | `geminiGenerate` network or upstream errors | > 30 in an hour |
+
+- Run it on dev first. Add `--dry-run` to print the commands without running them.
+- Running it on production needs Mohamed's approval. It only adds metrics and alerts, and changes no data.
+- `functions/test/tag74_monitoring_filters.test.js` fails when a log line changes shape without the script being updated.
+
 ## Linear
 
 * الحالات المستخدمة: Backlog → Todo → In Progress → In Review (PR) → Done (on prod) / Canceled.
