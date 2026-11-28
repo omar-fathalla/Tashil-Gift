@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../../core/services/e2e_semantics.dart';
 import '../../../core/widgets/switch_point_branding.dart';
 import '../../../core/widgets/tashil_gift_logo.dart';
 import '../../admin/presentation/admin_dashboard_screen.dart';
@@ -792,55 +793,61 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                       const SizedBox(height: 22),
                       // Email Field
-                      TextFormField(
-                        controller: _emailController,
-                        style: GoogleFonts.cairo(fontSize: 14),
-                        decoration: InputDecoration(
-                          labelText: strings.authEmailLabel,
-                          labelStyle: GoogleFonts.cairo(fontSize: 13),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          prefixIcon: Icon(Icons.email_outlined, color: colorScheme.primary, size: 20),
-                          filled: true,
-                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                      Semantics(
+                        identifier: E2eIds.loginEmail,
+                        child: TextFormField(
+                          controller: _emailController,
+                          style: GoogleFonts.cairo(fontSize: 14),
+                          decoration: InputDecoration(
+                            labelText: strings.authEmailLabel,
+                            labelStyle: GoogleFonts.cairo(fontSize: 13),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            prefixIcon: Icon(Icons.email_outlined, color: colorScheme.primary, size: 20),
+                            filled: true,
+                            fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return strings.authEmailValidation;
+                            }
+                            return null;
+                          },
                         ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return strings.authEmailValidation;
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 15),
                       // Password Field
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        style: GoogleFonts.cairo(fontSize: 14),
-                        decoration: InputDecoration(
-                          labelText: strings.authPasswordLabel,
-                          labelStyle: GoogleFonts.cairo(fontSize: 13),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          prefixIcon: Icon(Icons.lock_outline_rounded, color: colorScheme.primary, size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 20,
+                      Semantics(
+                        identifier: E2eIds.loginPassword,
+                        child: TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          style: GoogleFonts.cairo(fontSize: 14),
+                          decoration: InputDecoration(
+                            labelText: strings.authPasswordLabel,
+                            labelStyle: GoogleFonts.cairo(fontSize: 13),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            prefixIcon: Icon(Icons.lock_outline_rounded, color: colorScheme.primary, size: 20),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                color: colorScheme.onSurfaceVariant,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             ),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            filled: true,
+                            fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
                           ),
-                          filled: true,
-                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return strings.authPasswordValidation;
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return strings.authPasswordValidation;
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 10),
                       // Remember Me Checkbox
@@ -877,22 +884,25 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                       const SizedBox(height: 20),
                       // Submit Button
-                      FilledButton(
-                        onPressed: _isLoading ? null : () => _login(strings),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      Semantics(
+                        identifier: E2eIds.loginSubmit,
+                        child: FilledButton(
+                          onPressed: _isLoading ? null : () => _login(strings),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                )
+                              : Text(
+                                  strings.authSignInBtn,
+                                  style: GoogleFonts.cairo(fontSize: 15.5, fontWeight: FontWeight.bold),
+                                ),
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                              )
-                            : Text(
-                                strings.authSignInBtn,
-                                style: GoogleFonts.cairo(fontSize: 15.5, fontWeight: FontWeight.bold),
-                              ),
                       ),
                       const SizedBox(height: 16),
                       // Security / Encryption Note

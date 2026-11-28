@@ -10,7 +10,7 @@ Tools:
   rules        4  firestore/storage rules on the emulator (rules-tests)
   functions    4  functions unit tests + functions on the emulator
   patrol       6  Patrol web on the emulators (TAG-82 PR 2)
-  maestro      5  Maestro web, on the Mac only (TAG-82 PR 3)
+  maestro      5  Maestro web on the emulators, on the Mac only (TAG-82 PR 3)
 
 A docs-only change needs nothing. A file that matches no bucket needs
 tools 1 to 4, so nothing slips through unclassified.
@@ -57,7 +57,8 @@ BUCKETS: list[tuple[str, list[str], list[str]]] = [
         "tool/ci/known_failing_tests.txt", "tool/ci/analyze_baseline.txt",
     ], ["analyze", "flutter_test"]),
     ("e2e", ["maestro/**", "patrol_test/**", "integration_test/**", "firebase.patrol.json",
-             "functions/.env.demo-tashil-branch", "tool/ci/patrol_web.sh", "tool/ci/emulator_log_check.py"], ["analyze", "patrol", "maestro"]),
+             "functions/.env.demo-tashil-branch", "tool/ci/patrol_web.sh", "tool/ci/emulator_log_check.py",
+             "tool/ci/maestro_web.sh", "tool/ci/e2e_safety.sh"], ["analyze", "patrol", "maestro"]),
     ("scripts", [
         "tool/**", ".github/**", "firebase*.json", ".firebaserc", "*.sh", "functions/scripts/**",
         ".claude/**", "skills-lock.json",

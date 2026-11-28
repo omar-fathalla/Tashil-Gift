@@ -33,8 +33,9 @@ when the change touches the UI, the rules or these tests.
   the server side:
   - `functions/.env.demo-tashil-branch` points `WAHA_BACKEND_URL` at
     `127.0.0.1:9`.
-  - `patrol_web.sh` refuses to run while `functions/.secret.local` exists
-    (the functions emulator would load real keys from it).
+  - `patrol_web.sh` refuses to run while `functions/.secret.local` or
+    `functions/.env.local` exists (the functions emulator would load real
+    keys or a real `WAHA_BACKEND_URL` from them; `tool/ci/e2e_safety.sh`).
   - After the run, `tool/ci/emulator_log_check.py` fails the job if the
     emulator log shows `geminiGenerate`, `analyzeReceipt`,
     `sendWinnerWhatsApp`, `wahaProxy` (or the other WAHA functions) running,

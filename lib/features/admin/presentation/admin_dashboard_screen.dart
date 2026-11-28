@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/e2e_semantics.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
@@ -1498,7 +1499,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         : amountFmt.format(event.minimumSpend);
 
     // M3 outlined card (level 0, medium shape, outlineVariant 1dp, surfaceContainerLowest)
-    return Card.outlined(
+    final card = Card.outlined(
       margin: const EdgeInsets.only(bottom: M3Spacing.sm),
       elevation: M3Elevation.level0,
       color: colorScheme.surfaceContainerLowest,
@@ -1821,7 +1822,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 M3ActionMenu(
                   tooltip: isAr ? 'خيارات ومعاينات الحملة' : 'Campaign Options & Previews',
                   anchorBuilder: (context, controller, child) {
-                    return OutlinedButton.icon(
+                    final anchor = OutlinedButton.icon(
                       onPressed: () {
                         if (controller.isOpen) {
                           controller.close();
@@ -1840,6 +1841,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                         side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.8)),
                       ),
                     );
+                    return Semantics(identifier: E2eIds.campaignActions, child: anchor);
                   },
                   children: [
                     M3ActionMenu.header(
@@ -1923,6 +1925,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       context: context,
                       label: isAr ? 'تعديل بيانات وشروط وبرومبت الحملة' : 'Edit Campaign Rules & Prompt',
                       icon: Icons.edit_note_rounded,
+                      semanticsIdentifier: E2eIds.campaignEdit,
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -1953,6 +1956,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
       ),
     );
+    // Every card shares one id; the e2e flow opens the first (E2eIds).
+    return Semantics(identifier: E2eIds.campaignCard, container: true, child: card);
   }
 
   static final WidgetStateProperty<Icon?> _m3SwitchThumbIcon =

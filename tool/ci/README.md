@@ -39,3 +39,5 @@ Test gate (TAG-82): `run_gate.sh` runs only the tools a change needs
 intended findings live in `guards_allowlist.txt` with a reason. `gate.yml` is
 separate from `checks.yml` on purpose: `checks.yml` also gates production
 deploys and rollbacks.
+Maestro web (tool 5, `maestro_web.sh`, flows in `maestro/`) runs on the Mac
+only and never in CI; see `maestro/README.md`.

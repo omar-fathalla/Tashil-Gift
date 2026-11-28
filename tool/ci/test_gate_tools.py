@@ -1,6 +1,9 @@
 """Self-tests for the TAG-82 gate tools. Run: python3 -m unittest discover -s tool/ci -p 'test_*.py'"""
 import contextlib
 import io
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -143,10 +146,6 @@ class BucketsTest(unittest.TestCase):
         self.assertEqual(self.tools("android/app/build.gradle"), gate_buckets.ALL_FAST)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class EmulatorLogCheckTest(unittest.TestCase):
     def test_clean_log_passes(self):
         log = 'i  functions: Beginning execution of "us-central1-checkReceiptDuplicate"\n'
@@ -168,3 +167,85 @@ class EmulatorLogCheckTest(unittest.TestCase):
     def test_patrol_files_run_patrol(self):
         for f in ("firebase.patrol.json", "functions/.env.demo-tashil-branch", "tool/ci/patrol_web.sh"):
             self.assertIn("patrol", gate_buckets.classify([f])[1], f)
+
+
+class MaestroBucketsTest(unittest.TestCase):
+    def test_maestro_files_run_maestro(self):
+        for f in ("maestro/emulator/admin_open_campaign.yaml", "maestro/dev/admin_open_campaign.yaml",
+                  "maestro/support/seed_emulator.mjs", "tool/ci/maestro_web.sh", "tool/ci/e2e_safety.sh"):
+            self.assertIn("maestro", gate_buckets.classify([f])[1], f)
+
+    def test_e2e_safety_runs_patrol_too(self):
+        self.assertIn("patrol", gate_buckets.classify(["tool/ci/e2e_safety.sh"])[1])
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+class E2eRefusalTest(unittest.TestCase):
+    """patrol_web.sh and maestro_web.sh stop before any build or emulator when
+    the functions emulator could load real Gemini/WAHA settings."""
+
+    def run_script(self, script: str, planted: str | None, waha: str = "http://127.0.0.1:9", args=()):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "tool/ci").mkdir(parents=True)
+            for f in ("e2e_safety.sh", script):
+                shutil.copy(REPO / "tool/ci" / f, root / "tool/ci" / f)
+            (root / "functions").mkdir()
+            (root / "functions/.env.demo-tashil-branch").write_text(f"WAHA_BACKEND_URL={waha}\n")
+            if planted:
+                (root / "functions" / planted).write_text("X=1\n")
+            env = {k: v for k, v in os.environ.items() if k != "CI"}
+            env["PATH"] = "/usr/bin:/bin"  # no flutter, patrol, maestro or npx
+            p = subprocess.run(["bash", f"tool/ci/{script}", *args], cwd=root, env=env,
+                               capture_output=True, text=True, timeout=60)
+            return p.returncode, p.stdout + p.stderr
+
+    def test_secret_local_is_refused(self):
+        for script in ("patrol_web.sh", "maestro_web.sh"):
+            rc, out = self.run_script(script, ".secret.local")
+            self.assertEqual(rc, 1, out)
+            self.assertIn(".secret.local exists", out)
+
+    def test_env_local_is_refused(self):
+        for script in ("patrol_web.sh", "maestro_web.sh"):
+            rc, out = self.run_script(script, ".env.local")
+            self.assertEqual(rc, 1, out)
+            self.assertIn(".env.local exists", out)
+
+    def test_real_waha_url_is_refused(self):
+        rc, out = self.run_script("maestro_web.sh", None, waha="https://waha.example")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("WAHA_BACKEND_URL", out)
+
+    def test_maestro_off_the_mac_is_not_set_up(self):
+        # Clean tree: the safety checks pass, then Maestro reports "not set up"
+        # (exit 3) on Linux or when it is not installed. It never installs it.
+        rc, out = self.run_script("maestro_web.sh", None)
+        self.assertEqual(rc, 3, out)
+
+    def test_maestro_dev_needs_local_account(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "tool/ci").mkdir(parents=True)
+            shutil.copy(REPO / "tool/ci/maestro_web.sh", root / "tool/ci/maestro_web.sh")
+            shutil.copytree(REPO / "maestro/dev", root / "maestro/dev")
+            env = {k: v for k, v in os.environ.items() if not k.startswith("MAESTRO_DEV_") and k != "CI"}
+            p = subprocess.run(["bash", "tool/ci/maestro_web.sh", "dev"], cwd=root, env=env,
+                               capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 1, p.stderr)
+            self.assertIn("MAESTRO_DEV_ADMIN_EMAIL", p.stderr)
+            # A dev flow that opens another site, or takes a screenshot, is refused.
+            flow = root / "maestro/dev/admin_open_campaign.yaml"
+            flow.write_text(flow.read_text().replace("tashil-gift-dev.web.app", "example.com"))
+            p = subprocess.run(["bash", "tool/ci/maestro_web.sh", "dev"], cwd=root, env=env,
+                               capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 1, p.stderr)
+            self.assertIn("must open", p.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

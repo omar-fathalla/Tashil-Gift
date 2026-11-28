@@ -11,7 +11,8 @@
 #   bash tool/ci/run_gate.sh --ci --skip patrol   # a tool another CI job runs
 #
 # Tools 1-4 and 6 (Patrol web, needs patrol_cli 4.10.0 and Chrome) run here.
-# Tool 5 (Maestro, Mac only) is listed when needed and arrives with TAG-82 PR 3.
+# Tool 5 (Maestro web, tool/ci/maestro_web.sh) runs on the Mac only, once
+# Maestro is installed there; anywhere else it reports "not set up here".
 #
 # Safety: emulator tools only ever use demo-* projects and run with no
 # Google credentials. Nothing here deploys or writes to tashil-gift-dev or
@@ -31,7 +32,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) dry=1; shift ;;
     --ci) ci=1; shift ;;
     --skip) skip=" ${2//,/ } "; shift 2 ;;
-    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,20p "$0"; exit 0 ;;
     *) echo "run_gate: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -108,7 +109,13 @@ t_patrol() {
   flutter pub get >/dev/null || return 1
   bash tool/ci/patrol_web.sh
 }
-t_maestro() { echo "Maestro runs on the Mac only and is not set up yet (TAG-82 PR 3)."; return 3; }
+t_maestro() {
+  # Mac only, on the emulators (maestro/emulator/). Exits 3 ("not set up
+  # here") off the Mac, in CI, or while Maestro is not installed. The hosted
+  # dev smoke (maestro_web.sh dev) is never part of the gate.
+  emulator_safety || return 1
+  bash tool/ci/maestro_web.sh emulator
+}
 
 failed=0
 for t in $TOOLS; do

@@ -69,3 +69,4 @@ ui-debug.log
 **/test_bundle.dart
 .patrol.env
 functions/.secret.local
+functions/.env.local

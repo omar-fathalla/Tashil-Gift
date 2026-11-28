@@ -1,0 +1,47 @@
+# Maestro web smoke on the local emulators (TAG-82 PR 3, gate tool 5).
+# Run it through tool/ci/maestro_web.sh emulator, never by hand against a
+# hosted site: the script builds the app with FIREBASE_EMULATOR=true,
+# SYNTHETIC_RECEIPT_FIXTURE=true and E2E_SEMANTICS=true, starts the
+# emulators (demo-tashil-branch) and seeds the fixture admin below.
+# The account exists only inside the Auth emulator; it is not a secret.
+url: http://127.0.0.1:7360/
+name: "emulator: admin signs in and opens a campaign"
+tags:
+  - emulator
+env:
+  ADMIN_EMAIL: maestro-admin@demo.local
+  ADMIN_PASSWORD: fixture-pass-maestro
+  CAMPAIGN_NAME: حملة Maestro التجريبية
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: e2e-login-email
+    timeout: 60000
+# Maestro web runs Chromium in en-US; the UI must still open in Arabic.
+- assertVisible: "دخول الحساب"
+- tapOn:
+    id: e2e-login-email
+- inputText: ${ADMIN_EMAIL}
+- tapOn:
+    id: e2e-login-password
+- inputText:
+    text: ${ADMIN_PASSWORD}
+    label: Type the fixture password
+- tapOn:
+    id: e2e-login-submit
+- extendedWaitUntil:
+    visible:
+      id: e2e-campaign-card
+    timeout: 60000
+- assertVisible: ${CAMPAIGN_NAME}
+- tapOn:
+    id: e2e-campaign-actions
+    index: 0
+- tapOn:
+    id: e2e-campaign-edit
+- extendedWaitUntil:
+    visible:
+      id: e2e-campaign-editor-title
+    timeout: 30000

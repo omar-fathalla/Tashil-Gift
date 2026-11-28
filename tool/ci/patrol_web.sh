@@ -21,8 +21,9 @@
 # Gemini and WhatsApp are called only from Cloud Functions, so they are locked
 # on the server side, not in the browser:
 #   - functions/.env.demo-tashil-branch points WAHA_BACKEND_URL at 127.0.0.1:9.
-#   - The script refuses to run if functions/.secret.local exists, because the
-#     functions emulator would load real keys from it.
+#   - The script refuses to run if functions/.secret.local or
+#     functions/.env.local exists, because the functions emulator would load
+#     real keys or a real WAHA_BACKEND_URL from them.
 #   - After the run, tool/ci/emulator_log_check.py fails the job if the
 #     emulator log shows geminiGenerate, analyzeReceipt, sendWinnerWhatsApp,
 #     wahaProxy (or the other WAHA functions) running, or a Gemini/WAHA host.
@@ -41,15 +42,10 @@ MODE="${PATROL_MODE:-release}"
 mkdir -p "$OUT"
 LOG="$OUT/emulators.log"
 
-unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT GCLOUD_PROJECT FIREBASE_TOKEN
-[[ "$PROJECT" == demo-* ]] || { echo "patrol_web: project must be demo-*" >&2; exit 1; }
-if [[ -e functions/.secret.local ]]; then
-  echo "patrol_web: functions/.secret.local exists; the functions emulator would load real Gemini/WAHA keys from it." >&2
-  echo "patrol_web: move it away for the run (it is never needed for Patrol)." >&2
-  exit 1
-fi
-grep -q '^WAHA_BACKEND_URL=http://127.0.0.1:' "functions/.env.$PROJECT" 2>/dev/null \
-  || { echo "patrol_web: functions/.env.$PROJECT must point WAHA_BACKEND_URL at 127.0.0.1" >&2; exit 1; }
+# demo-* only, no credentials, no functions/.secret.local or .env.local,
+# WAHA_BACKEND_URL on 127.0.0.1 (tool/ci/e2e_safety.sh).
+source tool/ci/e2e_safety.sh
+e2e_safety_check "$PROJECT" patrol_web || exit 1
 
 targets=()
 if [[ $# -gt 0 ]]; then
