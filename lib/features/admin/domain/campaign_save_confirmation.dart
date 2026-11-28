@@ -41,6 +41,9 @@ class CampaignSaveTexts {
   static const notYet = 'الحملة لسه مش موجودة على السيرفر. اتأكد من النت ودوس «تحقق» تاني، أو دوس الحفظ تاني (مش هيعمل حملة مكررة).';
   static const verifyFailed = 'ماقدرناش نوصل للسيرفر عشان نتأكد. اتأكد من النت وجرّب «تحقق» تاني.';
   static const chainBranchUnconfirmed = 'الحفظ لسه ما اتأكدش. دوس «تحقق» بعد ما النت يرجع.';
+  // TAG-39
+  static const giftsSyncFailed =
+      'الحملة اتحفظت، بس تحديث أرصدة هدايا الشركة ما اكتملش. افتح صفحة هدايا الشركة واتأكد من الأرقام.';
 
   // TAG-43
   static const failedTitle = 'الحفظ فشل والحملة ما اتحفظتش';

@@ -105,9 +105,10 @@ class CompanyGiftsService {
 
   /// Synchronizes `availableQuantity` field in Firestore for all `company_gifts` docs
   /// based on total allocations in active campaigns.
-  Future<void> syncCompanyGiftsAvailableQuantities(String companySlug) async {
+  /// Returns false when the sync failed (TAG-39: callers can tell the admin).
+  Future<bool> syncCompanyGiftsAvailableQuantities(String companySlug) async {
     final slug = companySlug.toLowerCase().trim();
-    if (slug.isEmpty) return;
+    if (slug.isEmpty) return true;
 
     try {
       final gifts = await getGiftsForCompany(slug);
@@ -119,8 +120,11 @@ class CompanyGiftsService {
         });
       }
       await batch.commit();
-    } catch (_) {
-      // Best-effort sync to keep Firestore persistent fields aligned
+      return true;
+    } catch (e) {
+      // Best-effort sync to keep Firestore persistent fields aligned.
+      debugPrint('TAG-39: company gifts sync failed for $slug: $e');
+      return false;
     }
   }
 
