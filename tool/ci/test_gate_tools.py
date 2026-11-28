@@ -73,6 +73,21 @@ class StaticGuardsTest(unittest.TestCase):
         other = 'prod-project | tool/other.js | * | wrong file\n'
         self.assertEqual(guard(files, other), 1)
 
+    def test_e2e_flow_on_prod_url_fails(self):
+        # PR 3 (Maestro) and Patrol flows are scanned too.
+        flow = "appId: web\nurl: https://tashil-gift.web.app\n---\n- launchApp\n"
+        self.assertEqual(guard({"maestro/login.yaml": flow}), 1)
+        self.assertEqual(guard({"patrol_test/x_test.dart": "const u = 'https://tashil-gift.web.app';\n"}), 1)
+
+    def test_new_prod_line_in_render_script_fails(self):
+        # The allowlist names the exact lines, so a new prod line is caught.
+        root = Path(__file__).resolve().parents[2]
+        rel = "tool/dev/render_firebase_dev_json.py"
+        text = (root / rel).read_text(encoding="utf-8") + 'EXTRA = "https://tashil-gift.web.app"\n'
+        allow = (root / "tool/ci/guards_allowlist.txt").read_text(encoding="utf-8")
+        self.assertEqual(guard({rel: text}, allow), 1)
+        self.assertEqual(guard({rel: (root / rel).read_text(encoding="utf-8")}, allow), 0)
+
     def test_app_code_may_name_prod(self):
         # lib/ and test/ hold the real prod Firebase options and URLs.
         self.assertEqual(guard({"lib/app_env.dart": "const id = 'tashil-gift';\n"}), 0)

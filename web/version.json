@@ -1,7 +1,7 @@
 {
-  "version": "2.0.192",
-  "build_number": "252",
-  "build_date": "2026-11-26",
+  "version": "2.0.195",
+  "build_number": "255",
+  "build_date": "2026-11-28",
   "environment": "Production (Firebase)",
   "env": "prod"
 }

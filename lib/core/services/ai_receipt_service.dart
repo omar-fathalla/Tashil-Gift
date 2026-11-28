@@ -741,6 +741,55 @@ class AiReceiptService {
   static const String branchSourceRule =
       '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
 
+  /// TAG-84: receipt line pairing. Some POS receipts (e.g. Gomla Market,
+  /// store 418) print each product name on its own line ABOVE its numbers
+  /// line (value, price, qty, barcode). Pairing the name with the numbers line
+  /// above it shifts every item by one line (36/13/418/271126: Knorr 130 EGP
+  /// read as 18 EGP). Appended to every receipt prompt.
+  static const String posLinePairingRule = '''
+
+🛑 قاعدة ربط اسم الصنف بسطر أرقامه (POS Name/Numbers Line Pairing - TAG-84):
+- بعض البونات (مثل جملة ماركت، ومنها فرع 418) بتطبع كل صنف في سطرين: سطر الأرقام [القيمة] [السعر] [الكمية] [الباركود]، واسم الصنف مطبوع في سطر لوحده.
+- حدد أولاً اتجاه الربط في البون نفسه قبل استخراج أي صنف:
+  * لو أول سطر أرقام في قائمة الأصناف مسبوق باسم صنف فوقه، أو آخر سطر أرقام قبل الإجمالي ("عدد القطع" / "الإجمالي") مش متبوع باسم تحته، يبقى الاسم مطبوع **فوق** سطر أرقامه: اربط كل اسم بسطر الأرقام اللي **تحته مباشرة**، وإياك تربطه بسطر الأرقام اللي فوقه.
+  * لو الاسم والأرقام على نفس السطر الأفقي، خد الاسم والأرقام من نفس السطر.
+- اختبار التطابق الإلزامي بالأصناف الموزونة: سطر كميته كسر عشري (مثل 0.250 أو 0.492) لازم يتحقق فيه السعر × الكمية = القيمة (مثلاً 390.00 × 0.250 = 97.50)، ولازم اسمه يكون صنف بيتباع بالوزن (جبن، مخلل، لحوم، فاكهة...). لو الاسم اللي ربطته بالسطر الموزون صنف معبأ بالقطعة، يبقى الربط مزاح بسطر: صحح الاتجاه لكل الأصناف.
+- الباركود والسعر والكمية للصنف هما اللي في سطر الأرقام المرتبط بيه بالظبط. لا تاخد باركود أو سعر من سطر صنف مجاور.
+- مثال (بون جملة ماركت 36/13/418/271126، الاسم فوق الأرقام):
+  "ايزيس ليمون 12 فتلة" ← 18.00 / 18.00 / 1 / 6223000470015
+  "كنور تتبيلة البطاطس 6 جم علبه × 40 قطعه" ← 130.00 / 130.00 / 1 / 6221155141507
+  "روز جاردن زيت ذرة 1.5 لتر" ← 195.00 / 195.00 / 1 / 6223006115798
+  "شيدر طبيعي اصفر ايرلاندي" ← 97.50 / 390.00 / 0.250 / 2303005000005 (موزون: 390 × 0.250 = 97.50 ✔)
+  يعني صنف كنور هنا سعره 130 وباركوده 6221155141507، مش 18.
+''';
+
+  /// Adds [posLinePairingRule] once to a receipt prompt.
+  static String withPosLinePairingRule(String prompt) =>
+      prompt.contains('TAG-84') ? prompt : '$prompt$posLinePairingRule';
+
+  /// TAG-87: printed discounts only. On receipt 62/12/224/27112026 the model
+  /// invented a discount under two lines that have none (Dove soap 45 read as
+  /// 38, Dove roll-on 77 read as 43), which cut 41 EGP from the Unilever spend
+  /// and pushed the receipt under the 200 tier. This is a prompt rule only:
+  /// the app has no raw receipt text to check a discount against. Appended to
+  /// every receipt prompt.
+  static const String posPrintedDiscountRule = '''
+
+🛑 قاعدة الخصم المطبوع فقط (Printed Discount Only - TAG-87):
+- الخصم بيتحسب بس لو في سطر "خصم" مطبوع **تحت سطر الصنف مباشرة** (مبلغ بعلامة ناقص زي 12.00-)، وقبل سطر الصنف اللي بعده.
+- لو مفيش سطر خصم مطبوع تحت الصنف: discountAmount = 0 و discountPercent = 0 و originalPrice = price = السعر المطبوع للقطعة (القيمة ÷ الكمية). ممنوع تخترع خصم.
+- ممنوع تاخد خصم مطبوع تحت صنف تاني، وممنوع تحسب خصم من كلمة العرض أو النسبة المكتوبة في اسم الصنف (زي "خصم 20%") لو مفيش سطر خصم تحته.
+- لو الخصم مطبوع، اكتب القيمة المطبوعة بالظبط: price = السعر - الخصم، originalPrice = السعر المطبوع.
+- مثال (بون فتح الله 62/12/224/27112026):
+  "دوف روول اون براي" 77.00 وتحتها "12.00-" خصم ← price 65 و originalPrice 77 و discountAmount 12.
+  "دوف صابون 90جم رو" 45.00 والسطر اللي بعده صنف تاني من غير سطر خصم ← price 45 و originalPrice 45 و discountAmount 0 (مش 38).
+  "دوف روول اون 50 م" 77.00 من غير سطر خصم تحتها ← price 77 و discountAmount 0 (مش 43).
+''';
+
+  /// Adds [posPrintedDiscountRule] once to a receipt prompt.
+  static String withPosPrintedDiscountRule(String prompt) =>
+      prompt.contains('TAG-87') ? prompt : '$prompt$posPrintedDiscountRule';
+
   CloudGenerativeModel? _modelCache;
   CloudGenerativeModel? _fastModelCache;
   CloudGenerativeModel? _deepAuditModelCache;
@@ -1865,7 +1914,7 @@ $antiFraudMultiReceiptRule
 ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
 - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
 - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود في سطر أرقام الصنف: [القيمة] [السعر] [الكمية] [الباركود]، إما على نفس سطر الاسم أو في السطر اللي تحت الاسم مباشرة لو الاسم مطبوع في سطر لوحده (راجع قاعدة ربط اسم الصنف بسطر أرقامه - TAG-84).
   * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
   * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
 - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب وضع سعر القطعة الصافي في (price) = 99.0 ج.م، وسعر القطعة الأصلي في (originalPrice) = 115.0 ج.م، وقيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م، وإجمالي السطر في (totalLinePrice) = 198.0 ج.م.
@@ -1914,7 +1963,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
         - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
         - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود في سطر أرقام الصنف: [القيمة] [السعر] [الكمية] [الباركود]، إما على نفس سطر الاسم أو في السطر اللي تحت الاسم مباشرة لو الاسم مطبوع في سطر لوحده (راجع قاعدة ربط اسم الصنف بسطر أرقامه - TAG-84).
           * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
           * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
         - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب:
@@ -1935,6 +1984,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       ''';
       }
 
+      finalPromptText = AiReceiptService.withPosLinePairingRule(finalPromptText);
+      finalPromptText = AiReceiptService.withPosPrintedDiscountRule(finalPromptText);
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
@@ -4812,6 +4863,29 @@ class PromotionalRuleMatcher {
     return _umbrellaCompanyNames.any((n) => text.contains(_normalize(n)));
   }
 
+  /// TAG-87: a company-wide spend rule (see [isCompanyWideSpendRule]) that lists
+  /// many products (20 or more barcodes or catalog names), so one deodorant form
+  /// named in its text is a sample of the catalog, not a restriction.
+  static bool isBroadCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    final listed = math.max(
+      rule.selectedBarcodes.where((b) => b.trim().isNotEmpty).length,
+      rule.selectedProductNames.where((n) => n.trim().isNotEmpty).length,
+    );
+    return listed >= 20;
+  }
+
+  /// TAG-85: a spend rule with its own barcode list that does not cover the
+  /// whole company (see [isCompanyWideSpendRule]). It does not take lines that
+  /// a company-wide rule of the campaign lists by barcode. Combo rules keep
+  /// their own logic.
+  static bool isBarcodeScopedSpendRule(PromotionalRuleItem rule) {
+    if (rule.isCombo) return false;
+    if (!(rule.isSpendBased || rule.conditionType == 'by_spend')) return false;
+    if (!rule.selectedBarcodes.any((b) => b.trim().isNotEmpty)) return false;
+    return !isCompanyWideSpendRule(rule);
+  }
+
   static bool _barcodeOutsideRuleCatalog(
     ExtractedProductItem product,
     PromotionalRuleItem rule,
@@ -4926,9 +5000,34 @@ class PromotionalRuleMatcher {
       if (rule != null) ...rule.requiredBrands,
     };
 
+    // TAG-85: a spend rule scoped to its own barcode list (it does not cover the
+    // whole company, e.g. «from the following items only») must not count a
+    // line whose barcode is outside that list but inside the barcode list of a
+    // company-wide spend rule of the same campaign. That line belongs to the
+    // company-wide rule / ladder; the name / brand match would otherwise let
+    // the narrow rule swallow it (Unilever «300 -> 50» on its own 250 items took
+    // a whole receipt that the 200 / 400 / 700 ladder pays). A line with no
+    // barcode, or with a barcode no rule lists, still uses the name / brand
+    // match, so an incomplete catalog never loses a legit line. Rules of equal
+    // scope (a Knorr ladder whose tiers list slightly different barcodes) are
+    // not affected, which keeps TAG-67 / TAG-78 behaviour.
+    final bool barcodeScopedOut = rule != null &&
+        siblingRules != null &&
+        isBarcodeScopedSpendRule(rule) &&
+        _barcodeOutsideRuleCatalog(product, rule) &&
+        siblingRules.any((other) =>
+            other.id != rule.id &&
+            !other.isCombo &&
+            (other.isSpendBased || other.conditionType == 'by_spend') &&
+            other.selectedBarcodes.any((b) => b.trim().isNotEmpty) &&
+            isCompanyWideSpendRule(other) &&
+            !_barcodeOutsideRuleCatalog(product, other));
+
     // 0. Exact catalog-name match: a product whose name equals one of the
     // rule's selected product names belongs to the rule's item scope.
-    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+    if (!barcodeScopedOut &&
+        rule != null &&
+        rule.selectedProductNames.isNotEmpty) {
       final nameNorm = _normalize(product.name);
       if (nameNorm.isNotEmpty &&
           rule.selectedProductNames.any((sel) => _normalize(sel) == nameNorm)) {
@@ -4968,6 +5067,10 @@ class PromotionalRuleMatcher {
         return true;
       }
     }
+
+    // TAG-85: the line belongs to a company-wide rule's list (no twin-bundle /
+    // trigger-barcode exception above): not a member of this narrow rule.
+    if (barcodeScopedOut) return false;
 
     final pNorm = _normalize(product.name);
     final triggerNorm = _normalize(triggerProduct);
@@ -5028,7 +5131,8 @@ class PromotionalRuleMatcher {
     // Disallows matching spray rules against roll-on products, coffee against confectionery, etc.
     final bool isProductRollOn =
         pNorm.contains('رول اون') ||
-        pNorm.contains('رول') ||
+        // TAG-87: «البتروليم» (Vaseline petroleum jelly) contains «رول».
+        (pNorm.contains('رول') && !pNorm.contains('بترول')) ||
         pNorm.contains('روول') ||
         pNorm.contains('ستيك') ||
         pNorm.contains('roll on') ||
@@ -5087,15 +5191,29 @@ class PromotionalRuleMatcher {
         pNorm.contains('بروميل') ||
         pNorm.contains('حليب اطفال');
 
-    final bool isTriggerRollOn =
+    final bool triggerNamesRollOn =
         fullRuleContext.contains('رول') ||
         fullRuleContext.contains('roll') ||
         fullRuleContext.contains('ستيك');
-    final bool isTriggerSpray =
+    final bool triggerNamesSpray =
         fullRuleContext.contains('اسبراي') ||
         fullRuleContext.contains('بخاخ') ||
         fullRuleContext.contains('spray') ||
-        (fullRuleContext.contains('150 مل') && !isTriggerRollOn);
+        (fullRuleContext.contains('150 مل') && !triggerNamesRollOn);
+    // TAG-87: a company-wide spend rule that lists many products covers both
+    // deodorant forms. Naming one of them in the rule text («اسبراي» among the
+    // brands) describes the catalog, it does not exclude the other form, so a
+    // roll-on line (e.g. a Dove roll-on with no readable barcode) must not be
+    // rejected by the spray / roll-on guards. A narrow rule that names one
+    // form keeps both guards.
+    final bool formWordsAreDescriptive = rule != null &&
+        (rule.isSpendBased || rule.conditionType == 'by_spend') &&
+        !rule.isCombo &&
+        isBroadCompanyWideSpendRule(rule);
+    final bool isTriggerRollOn =
+        triggerNamesRollOn || (formWordsAreDescriptive && triggerNamesSpray);
+    final bool isTriggerSpray =
+        triggerNamesSpray || (formWordsAreDescriptive && triggerNamesRollOn);
     final bool isTriggerShampoo =
         fullRuleContext.contains('شامبو') ||
         fullRuleContext.contains('shampoo') ||

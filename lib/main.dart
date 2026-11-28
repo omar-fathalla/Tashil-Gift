@@ -120,7 +120,11 @@ void main() async {
           .signInAnonymously()
           .timeout(const Duration(seconds: 8));
     }
-  } catch (_) {}
+  } catch (e) {
+    // TAG-81: was swallowed silently (e.g. anonymous auth disabled), which
+    // later surfaced only as a generic permission-denied on the rep link.
+    debugPrint('[Main] anonymous sign-in failed: $e');
+  }
 
   try {
     await RepDeviceId.init().timeout(const Duration(seconds: 4));
