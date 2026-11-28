@@ -1,0 +1,115 @@
+# TAG-76: Firestore composite indexes for PRODUCTION (tashil-gift), manual only.
+# deploy-production.yml never deploys indexes on purpose. Run this by hand:
+#   Actions -> deploy-prod-indexes -> Run workflow
+#   mode = diff   : read-only, prints the live indexes vs firestore.indexes.json
+#   mode = deploy : the same diff, then (after the "production" environment
+#                   approval) firebase deploy --only firestore:indexes.
+# No --force: with --non-interactive, firebase-tools never deletes an index
+# that is live but missing from the file; it only adds / updates.
+name: deploy-prod-indexes
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA, tag or branch whose firestore.indexes.json to use (normally main)
+        type: string
+        default: main
+      mode:
+        description: diff (read only) or deploy
+        type: choice
+        options: [diff, deploy]
+        default: diff
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-indexes
+  cancel-in-progress: false
+
+env:
+  FIREBASE_TOOLS_VERSION: 15.37.0
+
+jobs:
+  diff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Guard - only omar-fathalla/Tashil-Gift
+        run: |
+          [ "${{ github.repository }}" = "omar-fathalla/Tashil-Gift" ] || { echo "::error::wrong repository"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Write read credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT }}
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+          sa_project=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('project_id',''))" "$RUNNER_TEMP/gcp-sa.json")
+          [ "$sa_project" != "tashil-gift-dev" ] || { echo "::error::production secret holds a dev key"; exit 1; }
+
+      - name: Live indexes vs firestore.indexes.json (read only)
+        run: |
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" firestore:indexes --project tashil-gift > "$RUNNER_TEMP/live.json"
+          python3 tool/ci/indexes_diff.py "$RUNNER_TEMP/live.json" firestore.indexes.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json"
+
+  deploy:
+    needs: diff
+    if: inputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://console.firebase.google.com/project/tashil-gift/firestore/indexes
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Write deploy credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT }}
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+          sa_project=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('project_id',''))" "$RUNNER_TEMP/gcp-sa.json")
+          [ "$sa_project" != "tashil-gift-dev" ] || { echo "::error::production secret holds a dev key"; exit 1; }
+
+      # Indexes only, non-interactive, no --force (never deletes live indexes).
+      - name: firebase deploy --only firestore:indexes (tashil-gift)
+        run: |
+          npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
+            --project tashil-gift \
+            --only firestore:indexes \
+            --non-interactive \
+            --message "GitHub Actions indexes ${{ inputs.ref }} run ${{ github.run_id }}"
+          {
+            echo "### Firestore indexes deployed to tashil-gift"
+            echo "- Ref: \`${{ inputs.ref }}\`"
+            echo "- Build state: https://console.firebase.google.com/project/tashil-gift/firestore/indexes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json"
