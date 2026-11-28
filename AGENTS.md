@@ -103,3 +103,11 @@
 - **Semantic Hierarchy & Destructive Isolation**: Functional groups MUST be separated with headers (`M3ActionMenu.header`) and 1dp dividers (`M3ActionMenu.divider`). Irreversible or dangerous operations (Delete, Cancel, Reject) MUST set `isDestructive: true`, visually highlighting the action in **`colorScheme.error`**.
 - **Full Keyboard Accessibility (a11y)**: All menus MUST support `ArrowUp`/`ArrowDown` navigation with wrap-around looping, instant activation via `Enter`/`Space`, clean dismissal via `Escape`, and fast character typeahead.
 - Full details documented in [.agents/skills/material-design-3-action-menus-standard/SKILL.md](file:///Users/fathalla/Development/Tashil%20Gift/.agents/skills/material-design-3-action-menus-standard/SKILL.md).
+
+## Cursor Cloud specific instructions
+
+- Flutter SDK is **3.41.2** (Dart 3.11.0), the revision recorded in `.metadata` (`90673a4eef`). `flutter` and `dart` are on `/usr/local/bin`; the SDK lives at `/opt/flutter`.
+- The product surface in this environment is **Flutter web**. There is no `linux/` desktop runner. Canonical checks are `flutter analyze` and `flutter test`.
+- The dev server is `flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080 --no-pub`. Open `http://127.0.0.1:8080/` with a GET. The shelf server answers `HEAD /` with 404 even while the app is up. The first compile finishes before HTML is served.
+- `functions/` declares Node 20. Node 22 is what the image provides; `npm ci --prefix functions` and `node --check functions/index.js` succeed and print an `EBADENGINE` warning. Do not run `firebase deploy`.
+- `AiConfig.geminiApiKey` falls back to base64 parts that are placeholders in this checkout. Tests that construct AI services throw `FormatException: Invalid UTF-8 byte`. The admin login screen still boots. Live Gemini calls need `--dart-define=GEMINI_API_KEY=...`.
