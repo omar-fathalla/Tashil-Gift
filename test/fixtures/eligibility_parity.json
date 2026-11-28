@@ -1,0 +1,595 @@
+{
+ "_doc": "TAG-72: shared client/server eligibility fixtures. test/tag72_eligibility_parity_test.dart runs PromotionalRuleMatcher, functions/test/tag72_eligibility_parity.test.js runs evaluateClaimEligibility, on the same cases.",
+ "cases": [
+  {
+   "name": "knorr ladder: 390 on one list -> top tier 250 + remainder 60 (2 units)",
+   "event": {
+    "minimumSpend": 60,
+    "promotionalRules": [
+     {
+      "id": "rule_1",
+      "ruleTitle": "rule_1",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 60,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_2",
+      "ruleTitle": "rule_2",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 170,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_3",
+      "ruleTitle": "rule_3",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 250,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "كنور مرقة 24 مكعب",
+     "price": 26,
+     "quantity": 15,
+     "barcode": "6221155000000",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": true,
+    "units": 2
+   }
+  },
+  {
+   "name": "knorr ladder: 52 below every tier -> not eligible",
+   "event": {
+    "minimumSpend": 60,
+    "promotionalRules": [
+     {
+      "id": "rule_1",
+      "ruleTitle": "rule_1",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 60,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_2",
+      "ruleTitle": "rule_2",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 170,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_3",
+      "ruleTitle": "rule_3",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 250,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "كنور مرقة 24 مكعب",
+     "price": 52,
+     "quantity": 1,
+     "barcode": "6221155000000",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": false
+   }
+  },
+  {
+   "name": "TAG-88: 199 with 5 tolerance on a 200 rule -> eligible",
+   "event": {
+    "minimumSpend": 200,
+    "promotionalRules": [
+     {
+      "id": "rule_2",
+      "ruleTitle": "rule_2",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 200,
+      "minQuantity": 1,
+      "discountTolerance": 5,
+      "selectedBarcodes": [
+       "6281006411111"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "فازلين كريم",
+     "price": 199,
+     "quantity": 1,
+     "barcode": "6281006411111",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": true,
+    "units": 1
+   }
+  },
+  {
+   "name": "TAG-67: another Unilever brand flagged as company does not count for Knorr",
+   "event": {
+    "minimumSpend": 60,
+    "promotionalRules": [
+     {
+      "id": "rule_1",
+      "ruleTitle": "rule_1",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 60,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_2",
+      "ruleTitle": "rule_2",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 170,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     },
+     {
+      "id": "rule_3",
+      "ruleTitle": "rule_3",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 250,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6221155000000",
+       "6221155000001",
+       "6221155000002",
+       "6221155000003",
+       "6221155000004",
+       "6221155000005",
+       "6221155000006",
+       "6221155000007",
+       "6221155000008",
+       "6221155000009",
+       "6221155000010",
+       "6221155000011",
+       "6221155000012",
+       "6221155000013",
+       "6221155000014",
+       "6221155000015",
+       "6221155000016",
+       "6221155000017",
+       "6221155000018",
+       "6221155000019",
+       "6221155000020",
+       "6221155000021",
+       "6221155000022",
+       "6221155000023",
+       "6221155000024",
+       "6221155000025",
+       "6221155000026",
+       "6221155000027"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "دوف شامبو",
+     "price": 120,
+     "quantity": 1,
+     "barcode": "6221155999990",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": false
+   }
+  },
+  {
+   "name": "TAG-86: 9-digit catalog code does not prefix-match a 13-digit Dove barcode",
+   "event": {
+    "minimumSpend": 60,
+    "promotionalRules": [
+     {
+      "id": "rule_1",
+      "ruleTitle": "rule_1",
+      "triggerProduct": "كنور",
+      "conditionType": "by_spend",
+      "minSpend": 60,
+      "minQuantity": 1,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "622115510",
+       "6221155000000",
+       "6221155000001",
+       "6221155000002"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "كنور مرقة",
+     "price": 52,
+     "quantity": 1,
+     "barcode": "6221155000000",
+     "isTargetCompany": true
+    },
+    {
+     "name": "دوف كريم بيوتي",
+     "price": 100,
+     "quantity": 1,
+     "barcode": "6221155101204",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": false
+   }
+  },
+  {
+   "name": "quantity rule: 2 pieces of the product -> eligible",
+   "event": {
+    "minimumSpend": 0,
+    "promotionalRules": [
+     {
+      "id": "q",
+      "ruleTitle": "q",
+      "triggerProduct": "كنور",
+      "conditionType": "by_quantity",
+      "minSpend": 0,
+      "minQuantity": 2,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6223000000017"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "كادبري ديري ميلك",
+     "price": 20,
+     "quantity": 2,
+     "barcode": "6223000000017",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": true
+   }
+  },
+  {
+   "name": "quantity rule: 1 piece is not enough",
+   "event": {
+    "minimumSpend": 0,
+    "promotionalRules": [
+     {
+      "id": "q",
+      "ruleTitle": "q",
+      "triggerProduct": "كنور",
+      "conditionType": "by_quantity",
+      "minSpend": 0,
+      "minQuantity": 3,
+      "discountTolerance": 0,
+      "selectedBarcodes": [
+       "6223000000017"
+      ],
+      "rewardType": "voucher",
+      "rewardValue": "25",
+      "allowMultipliers": true
+     }
+    ]
+   },
+   "receipt": [
+    {
+     "name": "كادبري ديري ميلك",
+     "price": 20,
+     "quantity": 1,
+     "barcode": "6223000000017",
+     "isTargetCompany": true
+    }
+   ],
+   "expected": {
+    "eligible": false
+   }
+  }
+ ]
+}

@@ -343,7 +343,7 @@ Hosting rewrites (`firebase.json`): `/waha/**` ← `wahaProxy`، روابط ال
 
 ## 9. قواعد الأعمال اللي لازم تفضل صح (invariants)
 
-1. **السيرفر هو المرجع** في الأهلية والمخزون. حسابات العميل للعرض بس. منطق الأهلية متكرر في `PromotionalRuleMatcher` (Dart) و`campaign_eligibility.js` (Node)؛ أي تغيير لازم يتعمل في الاتنين، وإلا العميل يشوف «كسبت» والسيرفر يرفض (TAG-67، TAG-69، TAG-72).
+1. **السيرفر هو المرجع** في الأهلية والمخزون. حسابات العميل للعرض بس. منطق الأهلية متكرر في `PromotionalRuleMatcher` (Dart) و`campaign_eligibility.js` (Node)؛ أي تغيير لازم يتعمل في الاتنين، وإلا العميل يشوف «كسبت» والسيرفر يرفض (TAG-67، TAG-69). الاتنين بيتختبروا على نفس الحالات في `test/fixtures/eligibility_parity.json` (TAG-72)؛ أي حالة جديدة تتضاف هناك.
 2. **لا هدية بديلة:** لو الحملة ليها قواعد ومفيش قاعدة اتحققت، الفاتورة بتترفض بسبب واضح (AGENTS.md #10).
 3. **`linkedGifts` نهائية:** ممنوع تتضرب تاني في عدد الفرص (AGENTS.md #6).
 4. **سعر الوحدة** = صافي السطر ÷ الكمية، و`originalPrice` = الإجمالي ÷ الكمية (AGENTS.md #4).
@@ -430,7 +430,7 @@ feature branch ──PR──► dev ──(version PR)──► release PR ─�
 
 * **شاشات يتيمة:** `MysteryBoxScreen` ديمو بس (7.6). محتاج قرار: نوصّل ولا نشيل. (`ValidationScreen` اتشالت في TAG-80، و`CompanyPrizesStockReportScreen` اتوصلت في TAG-79.)
 * ~~**رسالة «الحملة موقوفة» مضللة**~~: اتصلحت في TAG-81 (`CampaignLoadState`)؛ شاشة الإيقاف بتظهر بس للحملة الموقوفة فعلًا.
-* **منطق الأهلية متكرر** في Dart وNode (TAG-72).
+* **منطق الأهلية متكرر** في Dart وNode؛ عليه اختبار تطابق مشترك (TAG-72).
 * **باسوردات البوابات نص صريح** في `companies` و`events` (TAG-70).
 * **قراية anonymous واسعة** لـ `company_products` و`branches` و`retail_chains` (TAG-71).
 * **ملفات ضخمة** صعب تتراجع (TAG-36 لصفحة الحملة).

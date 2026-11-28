@@ -24,10 +24,23 @@ class CampaignDraftsSheet extends ConsumerWidget {
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
 
-  Future<void> _open(BuildContext context, CampaignDraft draft) async {
+  Future<void> _open(BuildContext context, WidgetRef ref, CampaignDraft stored) async {
     final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    // TAG-65: a large draft keeps its products / prompt in content docs.
+    final CampaignDraft draft;
+    try {
+      draft = await CampaignDraftStore(ref.read(firestoreProvider)).hydrate(stored);
+    } catch (e) {
+      debugPrint('TAG-65 draft content load failed: $e');
+      messenger.showSnackBar(
+        SnackBar(content: Text('تعذر تحميل منتجات المسودة. تأكد من النت وجرّب تاني.', style: GoogleFonts.cairo())),
+      );
+      return;
+    }
+    if (!context.mounted) return;
     if (draft.isEditDraft && draft.baseEvent == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('المسودة ناقصة بيانات الحملة الأصلية؛ احذفها وابدأ التعديل من الحملة.', style: GoogleFonts.cairo())),
       );
       return;
@@ -96,7 +109,7 @@ class CampaignDraftsSheet extends ConsumerWidget {
                         ].join(' · '),
                         style: GoogleFonts.cairo(fontSize: 12),
                       ),
-                      onTap: () => _open(context, d),
+                      onTap: () => _open(context, ref, d),
                       trailing: IconButton(
                         tooltip: 'حذف المسودة',
                         icon: const Icon(Icons.delete_outline_rounded),

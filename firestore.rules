@@ -331,6 +331,11 @@ service cloud.firestore {
     // claim, receipt check, stat and the auto-close job until it is published.
     match /event_drafts/{draftId} {
       allow read, write: if isAdmin();
+
+      // TAG-65: product lists / prompts of a large draft.
+      match /content/{docId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     // TAG-43: why a campaign save did not land (written by the admin's

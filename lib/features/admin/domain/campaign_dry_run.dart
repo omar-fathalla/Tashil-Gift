@@ -61,6 +61,14 @@ class DryRunResult {
       );
 }
 
+/// TAG-66: the campaign is too large to test before it is saved.
+class DryRunTooLarge implements Exception {
+  const DryRunTooLarge();
+  String get message => 'قائمة منتجات الحملة كبيرة جدًا للتجربة قبل الحفظ. احفظ الحملة الأول وجرّب تاني.';
+  @override
+  String toString() => message;
+}
+
 class CampaignDryRun {
   CampaignDryRun._();
 
@@ -127,10 +135,17 @@ class CampaignDryRun {
       payload.remove('requiredProducts');
       contentEventId = campaign.id;
     }
-    return {
+    final out = {
       'campaign': payload,
       if (contentEventId != null) 'contentEventId': contentEventId,
       if (receiptId != null && receiptId.trim().isNotEmpty) 'receiptId': receiptId.trim() else 'receipt': receipt ?? const {},
     };
+    // TAG-66: an unsaved campaign has no stored list to fall back on, so its
+    // whole list is sent; only a list past the server cap is refused here.
+    if (jsonEncode(out).length > maxRequestChars) throw const DryRunTooLarge();
+    return out;
   }
+
+  /// Same cap as MAX_PAYLOAD_CHARS in functions/campaign_dry_run.js.
+  static const int maxRequestChars = 4000000;
 }
