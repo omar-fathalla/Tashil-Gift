@@ -148,7 +148,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     if (_companiesStream == null) {
       try {
         _companiesStream = ref.read(firestoreProvider).collection('companies').snapshots();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('TAG-39: companies stream not available: $e');
+      }
     }
     return _companiesStream;
   }
@@ -157,7 +159,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     if (_chainsStream == null) {
       try {
         _chainsStream = ref.read(retailChainsServiceProvider).getRetailChainsStream();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('TAG-39: chains stream not available: $e');
+      }
     }
     return _chainsStream;
   }
@@ -443,7 +447,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           }
         });
       }
-    } catch (_) {
+    } catch (e) {
+      // TAG-39: an empty branch list must not look like a chain with no branches.
+      debugPrint('TAG-39: branches of chain $chainId not loaded: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تحميل فروع السلسلة. اتأكد من النت وافتح السلسلة تاني.', style: GoogleFonts.cairo())),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoadingBranches = false);
@@ -779,7 +790,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           });
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      // The logo is only a preview; the admin can still pick one.
+      debugPrint('TAG-39: company logo lookup failed for $cleanSlug: $e');
+    }
   }
 
   Future<void> _pickCompanyLogo() async {
@@ -4189,26 +4203,18 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             required String branchId,
             required String branchName,
           }) {
-            CompanyGiftModel? matchedGift;
-            try {
-              matchedGift = _companyGifts.firstWhere((g) => g.id == giftKey || g.giftName == giftKey);
-            } catch (_) {}
+            final CompanyGiftModel? matchedGift =
+                _companyGifts.where((g) => g.id == giftKey || g.giftName == giftKey).firstOrNull;
 
             AllocatedPrize? originalPrize;
             if (widget.eventToEdit != null) {
-              try {
-                originalPrize = widget.eventToEdit!.allocatedPrizes.firstWhere(
-                  (p) =>
-                      (p.giftId == giftKey || p.name == giftKey) &&
-                      (branchId.isEmpty || p.branchId == branchId || p.branchName == branchName),
-                );
-              } catch (_) {
-                try {
-                  originalPrize = widget.eventToEdit!.allocatedPrizes.firstWhere(
-                    (p) => p.giftId == giftKey || p.name == giftKey,
-                  );
-                } catch (_) {}
-              }
+              final opened = widget.eventToEdit!.allocatedPrizes;
+              originalPrize = opened
+                      .where((p) =>
+                          (p.giftId == giftKey || p.name == giftKey) &&
+                          (branchId.isEmpty || p.branchId == branchId || p.branchName == branchName))
+                      .firstOrNull ??
+                  opened.where((p) => p.giftId == giftKey || p.name == giftKey).firstOrNull;
             }
 
             String finalName = matchedGift?.giftName ?? originalPrize?.name ?? giftKey;
@@ -4619,8 +4625,17 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       }
     }
 
-    // Synchronize company master inventory in Firestore
-    await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
+    // Synchronize company master inventory in Firestore. TAG-39: the campaign
+    // is saved either way, but a failed sync is said, not swallowed.
+    final synced = await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
+    if (!synced && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(CampaignSaveTexts.giftsSyncFailed, style: GoogleFonts.cairo()),
+          backgroundColor: Theme.of(context).colorScheme.tertiary,
+        ),
+      );
+    }
 
     if (mounted) {
       await _showCampaignSuccessLinksDialog(context, event, eventId);
