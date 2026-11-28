@@ -4839,6 +4839,17 @@ class PromotionalRuleMatcher {
     return _umbrellaCompanyNames.any((n) => text.contains(_normalize(n)));
   }
 
+  /// TAG-85: a spend rule with its own barcode list that does not cover the
+  /// whole company (see [isCompanyWideSpendRule]). It does not take lines that
+  /// a company-wide rule of the campaign lists by barcode. Combo rules keep
+  /// their own logic.
+  static bool isBarcodeScopedSpendRule(PromotionalRuleItem rule) {
+    if (rule.isCombo) return false;
+    if (!(rule.isSpendBased || rule.conditionType == 'by_spend')) return false;
+    if (!rule.selectedBarcodes.any((b) => b.trim().isNotEmpty)) return false;
+    return !isCompanyWideSpendRule(rule);
+  }
+
   static bool _barcodeOutsideRuleCatalog(
     ExtractedProductItem product,
     PromotionalRuleItem rule,
@@ -4953,9 +4964,34 @@ class PromotionalRuleMatcher {
       if (rule != null) ...rule.requiredBrands,
     };
 
+    // TAG-85: a spend rule scoped to its own barcode list (it does not cover the
+    // whole company, e.g. «from the following items only») must not count a
+    // line whose barcode is outside that list but inside the barcode list of a
+    // company-wide spend rule of the same campaign. That line belongs to the
+    // company-wide rule / ladder; the name / brand match would otherwise let
+    // the narrow rule swallow it (Unilever «300 -> 50» on its own 250 items took
+    // a whole receipt that the 200 / 400 / 700 ladder pays). A line with no
+    // barcode, or with a barcode no rule lists, still uses the name / brand
+    // match, so an incomplete catalog never loses a legit line. Rules of equal
+    // scope (a Knorr ladder whose tiers list slightly different barcodes) are
+    // not affected, which keeps TAG-67 / TAG-78 behaviour.
+    final bool barcodeScopedOut = rule != null &&
+        siblingRules != null &&
+        isBarcodeScopedSpendRule(rule) &&
+        _barcodeOutsideRuleCatalog(product, rule) &&
+        siblingRules.any((other) =>
+            other.id != rule.id &&
+            !other.isCombo &&
+            (other.isSpendBased || other.conditionType == 'by_spend') &&
+            other.selectedBarcodes.any((b) => b.trim().isNotEmpty) &&
+            isCompanyWideSpendRule(other) &&
+            !_barcodeOutsideRuleCatalog(product, other));
+
     // 0. Exact catalog-name match: a product whose name equals one of the
     // rule's selected product names belongs to the rule's item scope.
-    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+    if (!barcodeScopedOut &&
+        rule != null &&
+        rule.selectedProductNames.isNotEmpty) {
       final nameNorm = _normalize(product.name);
       if (nameNorm.isNotEmpty &&
           rule.selectedProductNames.any((sel) => _normalize(sel) == nameNorm)) {
@@ -4995,6 +5031,10 @@ class PromotionalRuleMatcher {
         return true;
       }
     }
+
+    // TAG-85: the line belongs to a company-wide rule's list (no twin-bundle /
+    // trigger-barcode exception above): not a member of this narrow rule.
+    if (barcodeScopedOut) return false;
 
     final pNorm = _normalize(product.name);
     final triggerNorm = _normalize(triggerProduct);
