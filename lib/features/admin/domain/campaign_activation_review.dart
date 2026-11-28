@@ -110,6 +110,32 @@ class CampaignActivationReview {
         w.add(ReviewWarning(ReviewLevel.warning, 'القاعدة "$title" مش مربوطة بأي منتج؛ أي صنف في الفاتورة بيتحسب.'));
       }
     }
+    // TAG-78: spend rules form one ladder (top tier + one remainder tier) only
+    // when their product lists are identical. Overlapping but different lists
+    // are separate offers, and the low one can repeat on the whole receipt.
+    if (e.spendLadderMode != 'consuming') {
+      final spend = e.promotionalRules.where((r) =>
+          r.conditionType != 'by_quantity' && r.conditionType != 'combo_spend' && r.minSpend > 0 &&
+          r.selectedBarcodes.any((b) => b.trim().isNotEmpty)).toList();
+      Set<String> codes(PromotionalRuleItem r) =>
+          r.selectedBarcodes.map((b) => b.trim()).where((b) => b.isNotEmpty).toSet();
+      String label(PromotionalRuleItem r) => r.ruleTitle.trim().isNotEmpty ? r.ruleTitle.trim() : r.id;
+      final reported = <String>{};
+      for (var i = 0; i < spend.length; i++) {
+        for (var j = i + 1; j < spend.length; j++) {
+          final a = codes(spend[i]), b = codes(spend[j]);
+          if (a.length == b.length && a.containsAll(b)) continue;
+          if (a.intersection(b).isEmpty) continue;
+          final key = '${spend[i].id}|${spend[j].id}';
+          if (!reported.add(key)) continue;
+          final onlyA = a.difference(b).length, onlyB = b.difference(a).length;
+          w.add(ReviewWarning(ReviewLevel.warning,
+              'القاعدتين "${label(spend[i])}" و"${label(spend[j])}" بيشتركوا في منتجات بس لستة المنتجات مش متطابقة '
+              '($onlyA صنف في الأولى بس، و$onlyB في التانية بس). كده مش هيتحسبوا سلم شرائح واحد، وكل قاعدة '
+              'هتتحسب لوحدها وممكن تتكرر على الفاتورة. خلّي قواعد الإنفاق بنفس المنتجات.'));
+        }
+      }
+    }
     if (e.allowMultipleChances && e.maxChancesPerReceipt <= 0) {
       w.add(const ReviewWarning(ReviewLevel.warning,
           'تعدد الفرص مفعّل من غير حد أقصى للفرص في الفاتورة الواحدة.'));
