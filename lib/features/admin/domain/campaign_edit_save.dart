@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../data/campaign_content_repository.dart';
 import 'event_model.dart';
+import 'campaign_save_confirmation.dart' show kCampaignSaveTokenField;
 
 /// Campaign edit refused before any write (Arabic message for the admin).
 class CampaignEditRejected implements Exception {
@@ -204,6 +205,7 @@ class CampaignEditSave {
     required EventModel opened,
     required Map<String, dynamic> currentData,
     required String updatedBy,
+    String? saveToken,
   }) {
     final draftMap = draft.toFirestore();
     final openedMap = opened.toFirestore();
@@ -227,6 +229,8 @@ class CampaignEditSave {
     if (prizes != null) patch['allocatedPrizes'] = prizes;
     patch['updatedAt'] = FieldValue.serverTimestamp();
     patch['updatedBy'] = updatedBy;
+    // TAG-43: «تحقق» confirms this exact save by its token (no clock).
+    if (saveToken != null && saveToken.isNotEmpty) patch[kCampaignSaveTokenField] = saveToken;
     return patch;
   }
 
@@ -245,9 +249,10 @@ class CampaignEditSave {
     required EventModel draft,
     required EventModel opened,
     required String updatedBy,
+    String? saveToken,
   }) async {
     final ref = firestore.collection('events').doc(opened.id);
-    final attempt = CampaignEditAttempt(draft: draft, opened: opened, updatedBy: updatedBy);
+    final attempt = CampaignEditAttempt(draft: draft, opened: opened, updatedBy: updatedBy, saveToken: saveToken);
     await firestore.runTransaction<void>((tx) async {
       final snap = await tx.get(ref);
       final patch = attempt.plan(snap.exists ? snap.data() : null);
@@ -269,13 +274,14 @@ class CampaignEditAttempt {
   final EventModel draft;
   final EventModel opened;
   final String updatedBy;
+  final String? saveToken;
   String? _rejection;
   CampaignContentWrite? _contentWrite;
 
   /// TAG-62: content docs the latest planned patch goes with (null = none).
   CampaignContentWrite? get contentWrite => _contentWrite;
 
-  CampaignEditAttempt({required this.draft, required this.opened, required this.updatedBy});
+  CampaignEditAttempt({required this.draft, required this.opened, required this.updatedBy, this.saveToken});
 
   /// Rejection message of the latest attempt, or null if it can be written.
   String? get rejection => _rejection;
@@ -297,6 +303,7 @@ class CampaignEditAttempt {
         opened: opened,
         currentData: currentData,
         updatedBy: updatedBy,
+        saveToken: saveToken,
       );
       // TAG-62: changed products/prompt (or a stored copy too large to keep
       // inline) go to events/{id}/content; the patch gets the content fields.

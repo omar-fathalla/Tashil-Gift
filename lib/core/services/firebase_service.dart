@@ -103,6 +103,9 @@ final firestoreProvider = Provider<FirebaseFirestore>((ref) {
     instance.settings = const Settings(
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      // TAG-43: fall back to long polling when a proxy, antivirus or
+      // extension blocks or buffers the streaming connection (web only).
+      webExperimentalAutoDetectLongPolling: true,
     );
   } catch (_) {}
   return instance;
