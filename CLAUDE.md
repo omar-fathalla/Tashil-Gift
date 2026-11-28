@@ -398,8 +398,9 @@ feature branch ──PR──► dev ──(version PR)──► release PR ─�
 | `dev-deploy.yml` | يدوي | نشر ref معيّن على `tashil-gift-dev` |
 | `deploy-dev-backend.yml` | يدوي | functions وrules وindexes على dev |
 | `deploy-production.yml` | push على `main` أو يدوي (rollback بـ `ref` و`allow_older_version`) | hosting + functions + firestore:rules على `tashil-gift` |
+| `deploy-prod-indexes.yml` | يدوي بس | مقارنة indexes الإنتاج بالملف، ونشرها بعد موافقة `production` (TAG-76) |
 
-* الـ indexes ما بتتنشرش أوتوماتيك على الإنتاج (TAG-76).
+* الـ indexes ما بتتنشرش أوتوماتيك على الإنتاج. بتتنشر يدوي بـ `deploy-prod-indexes.yml` (TAG-76): `mode=diff` بيقارن بس، و`mode=deploy` بعد موافقة environment `production`، ومن غير `--force` (عمره ما بيمسح index).
 * بيانات dev الوهمية: `tool/seed_dev.js` (أو push على `dev` فيه `[seed]` في رسالة الـ commit). التفاصيل في `docs/DEV_ENVIRONMENT.md`.
 * بعد أي نشر مصرّح بيه اذكر: الإصدار (`v2.0.X (Build #N)`)، و https://console.firebase.google.com/project/tashil-gift/overview ، و https://tashil-gift.web.app (AGENTS.md #3).
 
