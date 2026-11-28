@@ -3,7 +3,8 @@
 /**
  * Daily end-date auto-close.
  *
- * Sets isActive=false (plus updatedAt and updatedBy='system:auto-close') on
+ * Sets isActive=false (plus updatedAt/updatedBy and statusUpdatedAt/
+ * statusUpdatedBy = 'system:auto-close') on
  * campaigns whose end date has passed, using the same cutoff as the client:
  * Cairo 00:00 of the day after the end day. It never looks at gift or stock
  * levels: a campaign that is out of stock but still in date stays active.
@@ -11,6 +12,10 @@
  * Idempotent: closed campaigns are not selected again, and every candidate is
  * re-read inside a transaction, so a campaign an admin has just re-opened or
  * extended is left alone.
+ *
+ * It never sets pausedManually: an ended campaign is not "paused by an admin",
+ * so if an admin later extends its dates, the daily auto-activate (TAG-18)
+ * turns it back on.
  */
 const admin = require("./admin_sdk");
 const { isCampaignEnded, toMillis } = require("./campaign_eligibility");
@@ -46,7 +51,13 @@ async function autoCloseExpiredCampaigns(db, options) {
       const fresh = await tx.get(doc.ref);
       const data = fresh.exists ? (fresh.data() || {}) : null;
       if (!data || data.isActive !== true || !isCampaignEnded(data, nowMs)) return null;
-      tx.update(doc.ref, { isActive: false, updatedAt: stamp(), updatedBy: AUTO_CLOSE_ACTOR });
+      tx.update(doc.ref, {
+        isActive: false,
+        updatedAt: stamp(),
+        updatedBy: AUTO_CLOSE_ACTOR,
+        statusUpdatedAt: stamp(),
+        statusUpdatedBy: AUTO_CLOSE_ACTOR,
+      });
       return describe(doc.id, data);
     });
     if (outcome) {

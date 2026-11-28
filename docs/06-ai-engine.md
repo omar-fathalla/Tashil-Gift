@@ -58,4 +58,4 @@ Gemini API  (GEMINI_API_KEY في Secret Manager، مش في العميل)
 
 * `AiSpeedBenchmarkScreen` في لوحة الأدمن.
 * `tool/run_12_receipts_benchmark.py` اتشال في TAG-83. الروابط ومفاتيح الدخول اللي كانت فيه لسه في تاريخ git ([النسخة القديمة](https://github.com/omar-fathalla/Tashil-Gift/blob/2a018e3f191b30e2297198f4ed3ca1d282e923b9/tool/run_12_receipts_benchmark.py))، ومسح الملف مابيلغيهاش؛ إلغاؤها في Storage شغل TAG-33.
-* `backups/ai_engine_backup_*.json`: نسخة من إعدادات المحرك.
+* `docs/backups/ai_engine_backup_*.json`: نسخة من إعدادات المحرك.

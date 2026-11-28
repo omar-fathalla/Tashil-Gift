@@ -84,6 +84,16 @@ service cloud.firestore {
         && (!(('extracted_products') in data) || (data.extracted_products is list && data.extracted_products.size() <= 80));
     }
 
+    // TAG-18: campaign status fields. Only admins write events at all; this
+    // keeps the values honest: pausedManually is a bool, and when an admin
+    // writes statusUpdatedBy / statusUpdatedAt they are their own uid and the
+    // server time. The daily auto-activate / auto-close use the Admin SDK.
+    function validEventStatus(data, changed) {
+      return (!(('pausedManually') in data) || data.pausedManually is bool)
+        && (!changed.hasAny(['statusUpdatedBy']) || data.statusUpdatedBy == request.auth.uid)
+        && (!changed.hasAny(['statusUpdatedAt']) || data.statusUpdatedAt == request.time);
+    }
+
     function partnerReceiptUpdate() {
       return isPartnerOps()
         && sameCompany(resource.data.companySlug)
@@ -101,7 +111,11 @@ service cloud.firestore {
       allow list: if isAdmin()
         || (isAnonymous() && resource.data.isActive == true)
         || sameCompany(resource.data.companySlug);
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin()
+        && validEventStatus(request.resource.data, request.resource.data.keys());
+      allow update: if isAdmin()
+        && validEventStatus(request.resource.data, request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isAdmin();
 
       match /sharded_counters/{counterId} {
         allow read: if isAdmin() || sameCompany(eventData(eventId).companySlug);

@@ -7,6 +7,7 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../data/campaign_content_repository.dart';
 import '../domain/event_model.dart';
+import '../domain/campaign_status_toggle.dart';
 import 'create_event_screen.dart';
 import 'widgets/campaign_content_builder.dart';
 import 'widgets/campaign_drafts_sheet.dart';
@@ -203,7 +204,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       SnackBar(
         content: Text(
           isAr
-              ? 'تم نسخ رابط العميل والبروموتر الموحد للشركة ($slug): $url'
+              ? 'تم نسخ رابط العميل والمندوب الموحد للشركة ($slug): $url'
               : '${strings.promoterLinkCopied}: $url',
         ),
         backgroundColor: colorScheme.onTertiaryFixedVariant,
@@ -1445,7 +1446,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
     Future<void> toggleActive(bool value) async {
       if (firestore != null) {
-        await firestore.collection('events').doc(event.id).update({'isActive': value});
+        // TAG-18: an admin "off" is a manual pause, so the daily auto-activate
+        // leaves it alone; "on" clears it. Who and when are recorded.
+        final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
+        await firestore
+            .collection('events')
+            .doc(event.id)
+            .update(CampaignStatusToggle.patch(active: value, uid: uid));
       }
       if (event.companySlug.isNotEmpty) {
         await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
@@ -1733,7 +1740,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 // 1. Copy Promoter / Client Link (Unified Company Master Link)
                 Tooltip(
                   message: isAr
-                      ? 'نسخ رابط العميل والبروموتر الموحد الدائم لكافة عروض الشركة (كود: $companySlug)'
+                      ? 'نسخ رابط العميل والمندوب الموحد الدائم لكافة عروض الشركة (كود: $companySlug)'
                       : strings.promoterPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
@@ -1933,7 +1940,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     M3ActionMenu.item(
                       context: context,
-                      label: isAr ? 'سجل وإعادة تعيين كروت الفواتشرات' : 'Voucher Cards Registry & Reset',
+                      label: isAr ? 'سجل وإعادة تعيين كروت المشتريات' : 'Voucher Cards Registry & Reset',
                       icon: Icons.confirmation_number_rounded,
                       onPressed: () => VoucherSerialsManagementDialog.show(context, event),
                     ),

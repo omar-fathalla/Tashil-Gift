@@ -12,6 +12,7 @@ import '../../../core/utils/arabic_numbers_utils.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/services/company_gifts_service.dart';
+import '../domain/campaign_wording.dart';
 import '../domain/company_gift_model.dart';
 
 /// Master Company Gifts & Prizes Catalog Screen (كتالوج هدايا وجوائز الشركات المعتمدة)
@@ -292,7 +293,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
     final valStr = val == val.roundToDouble() ? val.toInt().toString() : val.toString();
     _voucherUnitValueController.text = valStr;
     if (_giftNameController.text.isEmpty || _giftNameController.text.startsWith('فواتشر') || _giftNameController.text.startsWith('قسيمة')) {
-      _giftNameController.text = 'فواتشر $valStr جنيه';
+      _giftNameController.text = 'فواتشر $valStr جنيه'; // C-06: stored value (server detects vouchers by this word)
     }
     setState(() {});
   }
@@ -323,7 +324,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
           SnackBar(
             content: Text(
               isAr
-                  ? 'يرجى تحديد القيمة المالية للكارت الواحد (فئة الفواتشر مثل 25، 50، 100 ج.م)'
+                  ? 'يرجى تحديد القيمة المالية للكارت الواحد (فئة كارت المشتريات مثل 25، 50، 100 ج.م)'
                   : 'Please specify the voucher face value (e.g. 25, 50, 100 EGP)',
               style: GoogleFonts.cairo(),
             ),
@@ -334,7 +335,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
       }
       if (name.isEmpty) {
         final valFormatted = unitVal == unitVal.roundToDouble() ? unitVal.toInt().toString() : unitVal.toString();
-        name = isAr ? 'فواتشر $valFormatted جنيه' : 'Voucher $valFormatted EGP';
+        name = isAr ? 'فواتشر $valFormatted جنيه' : 'Voucher $valFormatted EGP'; // C-06: stored value
       }
     } else {
       if (name.isEmpty) {
@@ -622,7 +623,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                         inputFormatters: [const ArabicToEnglishDigitsFormatter.digitsOnly()],
                         style: GoogleFonts.cairo(),
                         decoration: InputDecoration(
-                          labelText: isAr ? 'قيمة الكارت الواحد (فئة الفواتشر)' : 'Voucher Face Value',
+                          labelText: isAr ? 'قيمة الكارت الواحد (فئة كارت المشتريات)' : 'Voucher Face Value',
                           hintText: 'مثال: 50',
                           prefixText: 'ج.م ',
                           labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
@@ -1094,7 +1095,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                               ),
                               Text(
                                 isAr
-                                    ? 'قم بتعريف هدية مادية أو فواتشر نقدي (Voucher) لكتالوج الشركة المعتمد'
+                                    ? 'قم بتعريف هدية مادية أو كارت مشتريات نقدي لكتالوج الشركة المعتمد'
                                     : 'Define a physical gift or cash voucher for the master catalog',
                                 style: GoogleFonts.cairo(
                                   fontSize: 12,
@@ -1123,7 +1124,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                             ButtonSegment<String>(
                               value: 'voucher',
                               label: Text(
-                                isAr ? '💳 فواتشر نقدي (Cash Voucher)' : '💳 Cash Voucher',
+                                isAr ? '💳 كارت مشتريات نقدي' : '💳 Cash Voucher',
                                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -1190,7 +1191,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                 onChanged: (val) {
                                   if (_giftNameController.text.isEmpty || _giftNameController.text.startsWith('فواتشر')) {
                                     if (val.trim().isNotEmpty) {
-                                      _giftNameController.text = 'فواتشر ${val.trim()} جنيه';
+                                      _giftNameController.text = 'فواتشر ${val.trim()} جنيه'; // C-06: stored value
                                     }
                                   }
                                   setState(() {});
@@ -1220,8 +1221,8 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                 onSubmitted: (_) => _isLoading ? null : _addGiftToCatalog(),
                                 style: GoogleFonts.cairo(),
                                 decoration: InputDecoration(
-                                  labelText: isAr ? 'اسم الفواتشر المعتمد' : 'Voucher Display Name',
-                                  hintText: isAr ? 'مثال: فواتشر 50 جنيه' : 'e.g. Voucher 50 EGP',
+                                  labelText: isAr ? 'اسم كارت المشتريات المعتمد' : 'Voucher Display Name',
+                                  hintText: isAr ? 'مثال: فواتشر 50 جنيه' : 'e.g. Voucher 50 EGP', // C-06: stored value (the saved name)
                                   labelStyle: GoogleFonts.cairo(color: colorScheme.onSurfaceVariant),
                                   filled: true,
                                   fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -1243,7 +1244,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                                     )
                                   : const Icon(Icons.add_card_rounded, size: 20),
                               label: Text(
-                                _isLoading ? (isAr ? 'جاري...' : 'Saving...') : (isAr ? 'إضافة الفواتشر للكتالوج' : 'Add to Catalog'),
+                                _isLoading ? (isAr ? 'جاري...' : 'Saving...') : (isAr ? 'إضافة كارت المشتريات للكتالوج' : 'Add to Catalog'),
                                 style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
                               ),
                               style: FilledButton.styleFrom(
@@ -1470,7 +1471,7 @@ class _CompanyGiftsScreenState extends ConsumerState<CompanyGiftsScreen> {
                             },
                             itemBuilder: (context, index) {
                               final gift = gifts[index];
-                              final giftTitle = gift.giftName.isNotEmpty ? gift.giftName : 'بدون اسم';
+                              final giftTitle = gift.giftName.isNotEmpty ? CampaignWording.giftLabel(gift.giftName) : 'بدون اسم';
                               final rawUnitVal = gift.unitValue;
                               final isVoucher = gift.isVoucher;
 

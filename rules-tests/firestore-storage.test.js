@@ -209,6 +209,39 @@ describe("staff and partner claims", () => {
     await assertFails(setDoc(doc(admin(), "admins/new@example.com"), { role: "admin" }));
   });
 
+  test("TAG-18: the dashboard switch status fields are written by admins only, with their own uid and server time", async () => {
+    const sw = (db, active, uid) => updateDoc(doc(db, "events/camp-off"), {
+      isActive: active,
+      pausedManually: !active,
+      statusUpdatedAt: serverTimestamp(),
+      statusUpdatedBy: uid,
+    });
+    await assertSucceeds(sw(admin(), true, "admin-1"));
+    await assertSucceeds(sw(admin(), false, "admin-1"));
+    // Someone else's uid, a system actor name, or a client clock are refused.
+    await assertFails(sw(admin(), true, "super-1"));
+    await assertFails(sw(admin(), true, "system:auto-activate"));
+    await assertFails(updateDoc(doc(admin(), "events/camp-off"), {
+      isActive: true, pausedManually: false, statusUpdatedAt: new Date(), statusUpdatedBy: "admin-1",
+    }));
+    await assertSucceeds(sw(superAdmin(), true, "super-1"));
+    await assertFails(updateDoc(doc(admin(), "events/camp-off"), { pausedManually: "yes" }));
+    // Nobody but staff writes campaigns.
+    await assertFails(sw(partnerOps(), true, "partner-ops"));
+    await assertFails(sw(partner(), true, "partner-1"));
+    await assertFails(sw(anon(), true, "rep-1"));
+    // An edit that does not touch the status fields keeps working after a system write.
+    await testEnv.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "events/camp-1"), {
+      statusUpdatedBy: "system:auto-activate", statusUpdatedAt: new Date(),
+    }));
+    await assertSucceeds(updateDoc(doc(admin(), "events/camp-1"), { eventName: "Renamed again", updatedBy: "admin-1" }));
+    // Creating a campaign without the status fields is unchanged.
+    await assertSucceeds(setDoc(doc(admin(), "events/new-camp"), { eventName: "New", companySlug: "acme", isActive: true }));
+    await assertFails(setDoc(doc(admin(), "events/new-camp-2"), {
+      eventName: "New", companySlug: "acme", isActive: true, statusUpdatedBy: "someone-else",
+    }));
+  });
+
   test("super_admin can read and write admins and portal credentials", async () => {
     await assertSucceeds(getDoc(doc(superAdmin(), "portal_credentials/acme")));
     await assertSucceeds(setDoc(doc(superAdmin(), "admins/ops@example.com"), {

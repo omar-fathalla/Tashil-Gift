@@ -155,7 +155,9 @@ void main() {
       expect(find.text('Omar Fathalla'), findsNothing);
     });
 
-    testWidgets('Renders M3SupportingPaneLayout with dual-pane layout on Desktop (1200x800)', (tester) async {
+    // TAG-73: the side pane was dropped in 2.0.130 (54da2b7); its guide and
+    // minimum spend moved to the campaign brief dialog. Desktop is one pane.
+    testWidgets('Desktop (1200x800) is a single pane with no side pane', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -163,21 +165,15 @@ void main() {
       await tester.pumpWidget(createTestWidget(screenSize: const Size(1200, 800)));
       await tester.pumpAndSettle();
 
-      // Verify M3SupportingPaneLayout is present
-      expect(find.byType(M3SupportingPaneLayout), findsOneWidget);
-
-      // Verify supporting pane content: Campaign Guide & Quick actions
-      expect(find.text('دليل وقواعد الحملة'), findsNothing); // merged into brief dialog
+      expect(find.byType(M3SupportingPaneLayout), findsNothing);
+      expect(find.text('دليل وقواعد الحملة'), findsNothing);
       expect(find.text('مرجع سريع للبروموتر والمبيعات'), findsNothing);
-      expect(find.text('الشروط'), findsNothing);
-      expect(find.text('الهدايا'), findsNothing);
-      expect(find.text('الفواتير'), findsNothing);
-
-      // Verify Minimum Spend in supporting pane
-      expect(find.text('الحد الأدنى للشراء:'), findsOneWidget);
+      expect(find.text('أهلاً بكم في مهرجان الصيف'), findsOneWidget);
+      expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Renders M3SupportingPaneLayout in English LTR without overflow on Desktop (1200x800)', (tester) async {
+    testWidgets('Desktop (1200x800) in English LTR renders without overflow', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -190,13 +186,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify English supporting pane headers
-      expect(find.text('Campaign Guide'), findsNothing); // merged into brief dialog
+      expect(find.byType(M3SupportingPaneLayout), findsNothing);
+      expect(find.text('Campaign Guide'), findsNothing);
       expect(find.text('Promoter Quick Reference'), findsNothing);
-      expect(find.text('Rules'), findsNothing);
-      expect(find.text('Prizes'), findsNothing);
-      expect(find.text('Invoices'), findsNothing);
-      expect(find.text('Minimum Spend:'), findsOneWidget);
+      expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

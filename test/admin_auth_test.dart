@@ -7,6 +7,9 @@ import 'package:al_mraay/core/services/firebase_service.dart';
 import 'package:al_mraay/features/auth/presentation/auth_screen.dart';
 import 'package:al_mraay/features/admin/presentation/admin_dashboard_screen.dart';
 import 'package:al_mraay/main.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:al_mraay/core/services/ai_product_discovery_service.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -126,6 +129,10 @@ void main() {
           overrides: [
             adminSessionEmailProvider.overrideWith((ref) => 'support@switchpoint.com'),
             isAdminProvider.overrideWithValue(true),
+            // TAG-73: the dashboard reads Firestore on build; use fakes.
+            firestoreProvider.overrideWithValue(FakeFirebaseFirestore()),
+            firebaseAuthProvider.overrideWithValue(MockFirebaseAuth()),
+            aiProductDiscoveryServiceProvider.overrideWithValue(_FakeDiscovery()),
             authStateStreamProvider.overrideWith((ref) => Stream.value(null)),
           ],
           child: const MaterialApp(
@@ -149,6 +156,10 @@ void main() {
           overrides: [
             adminSessionEmailProvider.overrideWith((ref) => 'support@switchpoint.com'),
             isAdminProvider.overrideWithValue(true),
+            // TAG-73: the dashboard reads Firestore on build; use fakes.
+            firestoreProvider.overrideWithValue(FakeFirebaseFirestore()),
+            firebaseAuthProvider.overrideWithValue(MockFirebaseAuth()),
+            aiProductDiscoveryServiceProvider.overrideWithValue(_FakeDiscovery()),
           ],
           child: const MaterialApp(
             home: AdminDashboardScreen(),
@@ -243,4 +254,13 @@ void main() {
       expect(find.text('تسجيل الدخول للنظام'), findsOneWidget);
     });
   });
+}
+
+/// TAG-73: the real service builds a Gemini model, which needs Firebase.
+class _FakeDiscovery implements AiProductDiscoveryService {
+  @override
+  Stream<int> streamPendingCount() => Stream.value(0);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
