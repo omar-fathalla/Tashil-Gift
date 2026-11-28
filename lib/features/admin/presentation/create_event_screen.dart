@@ -23,7 +23,6 @@ import '../../../core/services/partner_portal_auth_service.dart';
 import '../data/campaign_content_repository.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
-import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
 import '../domain/campaign_activation_review.dart';
@@ -4433,14 +4432,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    // TG-2 / TAG-43: a tier gift without a stock row of the same gift is a
-    // warning in the review below, not a block (Mohamed, 25 Nov): saving
-    // behaves as before 2.0.185. Server-side claim checks are unchanged.
-    final stockIssues = CampaignStockIntegrity.tierOptionStockIssues(
-      rules: preview.promotionalRules,
-      prizes: [...preview.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
-    );
-
+    // TAG-45: no stock check on save (TG-2/TAG-43 tier-gift check removed);
+    // the server still decides every claim.
     // C-05: review data, conditions, stock per branch, links and risky
     // settings before anything is written (replaces the missing-dates prompt,
     // which is now one of the review warnings).
@@ -4450,7 +4443,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         preview,
         isNew: widget.eventToEdit == null,
         willBeActive: widget.eventToEdit?.isActive ?? true,
-        tierStockIssues: stockIssues,
       ),
     );
     if (!confirmed || !mounted) return;
