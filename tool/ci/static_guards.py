@@ -42,6 +42,11 @@ SCRIPT_GLOBS = [
     "package.json",
     "*.sh",
     "firebase*.json",
+    # End-to-end flows: a flow that opens tashil-gift.web.app would test prod.
+    "patrol_test/**",
+    "integration_test/**",
+    "maestro/**",
+    ".maestro/**",
 ]
 SCRIPT_EXTS = {".yml", ".yaml", ".sh", ".bash", ".js", ".mjs", ".cjs", ".ts", ".py", ".json", ".dart", ""}
 SKIP_GLOBS = ["**/node_modules/**", "**/package-lock.json", "**/*.md", "backups/**", "build/**"]
