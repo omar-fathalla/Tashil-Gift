@@ -198,6 +198,8 @@ npx -y firebase-tools@15.37.0 emulators:exec --project demo-tashil-dev --only fi
 
 PR على `dev` ← معاينة على dev ← دمج في `dev` ← تجربة على https://tashil-gift-dev.web.app ← موافقة محمد ← PR من `dev` لـ `main` ← `deploy-production.yml` ينشر على الإنتاج.
 
+ملف «خطوات التيست» لكل إصدار بيتعمل من [templates/test-steps.md](templates/test-steps.md) (TAG-26): التيست كله على dev، والإنتاج بياخد فحص سريع بس من غير بيانات.
+
 | الحالة | معناها |
 |---|---|
 | In Progress | الشغل بدأ |

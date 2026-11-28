@@ -24,7 +24,7 @@ fvm flutter pub get              # أو flutter pub get
 
 ## التشغيل
 
-> **تحذير:** التشغيل العادي (`flutter run`) بيتوصّل بمشروع الإنتاج `tashil-gift` مباشرة (Firestore و Functions و Storage حقيقيين). لحد ما بيئة `tashil-gift-dev` تخلص (مشروع Linear `P-TAG-16`)، اشتغل على الـ emulators أو على حملات تجربة بس (`test-21xx`)، وما تكتبش على بيانات حقيقية.
+> **تحذير:** التشغيل العادي (`flutter run`) بيتوصّل بمشروع الإنتاج `tashil-gift` مباشرة (Firestore و Functions و Storage حقيقيين). اشتغل على الـ emulators أو على بيئة `tashil-gift-dev` (`--dart-define=APP_ENV=dev`، شوف [DEV_ENVIRONMENT.md](DEV_ENVIRONMENT.md))، وما تعملش حملات تجربة على الإنتاج. خطوات التيست لكل إصدار: [templates/test-steps.md](templates/test-steps.md) (TAG-26).
 
 ### على الـ emulators (الأأمن)
 
