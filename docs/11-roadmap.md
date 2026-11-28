@@ -16,7 +16,7 @@
 
 | التيكت | الموضوع |
 |---|---|
-| TAG-33 | إلغاء مفاتيح الدخول لصور الفواتير المكشوفة في `tool/run_12_receipts_benchmark.py` |
+| TAG-33 | إلغاء مفاتيح الدخول لصور الفواتير المكشوفة في `tool/run_12_receipts_benchmark.py` (السكربت اتشال في TAG-83، والمفاتيح لسه في تاريخ git: [النسخة القديمة](https://github.com/omar-fathalla/Tashil-Gift/blob/2a018e3f191b30e2297198f4ed3ca1d282e923b9/tool/run_12_receipts_benchmark.py)) |
 | TAG-20 | Required reviewer على environment `production` |
 | TAG-21 | Branch protection على `main` و `dev` |
 | TAG-10 | شيل المفاتيح المكتوبة في خدمات الـ AI (In Review) |
