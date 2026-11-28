@@ -22,6 +22,8 @@ import '../../../core/services/partner_portal_auth_service.dart';
 import 'widgets/ai_discovered_products_dialog.dart';
 import 'widgets/portal_credentials_dialog.dart';
 import '../domain/company_model.dart';
+import '../../../core/utils/confirmed_write.dart';
+import '../../../core/widgets/unconfirmed_write_snack.dart';
 
 enum CatalogInputMode {
   manual,
@@ -185,7 +187,8 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
 
     try {
       final companyRef = firestore.collection('companies').doc(companyCode);
-      await companyRef.set({
+      // TAG-35 (N-01b): success only after the server confirmed the write.
+      await confirmedWrite(companyRef.set({
         'name': companyName,
         'slug': companyCode,
         'productsCount': 0,
@@ -197,12 +200,7 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
         'agencyCredentialVersion': 1,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)).timeout(
-        const Duration(seconds: 4),
-        onTimeout: () {
-          // Firestore cache completes the write locally and syncs to server in background
-        },
-      );
+      }, SetOptions(merge: true)), companyRef.path);
 
       if (mounted) {
         setState(() {
@@ -230,6 +228,16 @@ class _CompanyCatalogScreenState extends ConsumerState<CompanyCatalogScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
+      }
+    } on WriteNotConfirmedException catch (e) {
+      if (mounted) {
+        showUnconfirmedWriteSnack(messenger, firestore, e, onConfirmed: () {
+          if (!mounted) return;
+          setState(() {
+            _selectedProductCompanySlug = companyCode;
+            _selectedGlobalFilter = companyCode;
+          });
+        });
       }
     } catch (e) {
       if (mounted) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+export '../../../core/utils/confirmed_write.dart' show WriteNotConfirmedException;
 
 /// N-01: a campaign save counts as done only after the server confirmed it.
 ///
@@ -220,12 +221,6 @@ class CampaignSaveFlow {
 
 /// N-01: a chain/branch write that was not confirmed in time. [path] is the
 /// document to read from the server before treating it as saved.
-class WriteNotConfirmedException implements Exception {
-  final String path;
-  const WriteNotConfirmedException(this.path);
-  @override
-  String toString() => CampaignSaveTexts.chainBranchUnconfirmed;
-}
 
 /// Reads [ref] from the server only (never the cache).
 Future<Map<String, dynamic>?> readCampaignDocFromServer(DocumentReference<Map<String, dynamic>> ref) async {
