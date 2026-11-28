@@ -59,7 +59,31 @@ bool _allowed(String line, String text) {
   return false;
 }
 
+/// C-06b (TAG-34): admin dashboard and the gift catalog, checked for the
+/// promoter and voucher words only.
+const _c06bFiles = [
+  'lib/features/admin/presentation/admin_dashboard_screen.dart',
+  'lib/features/admin/presentation/company_gifts_screen.dart',
+];
+final _c06bForbidden = <RegExp, String>{
+  RegExp('بروموتر'): 'use «مندوب»',
+  RegExp('فواتشر|فوتشر|فاوتشر'): 'use «كارت مشتريات» (stored names go through CampaignWording.giftLabel)',
+};
+
 void main() {
+  test('C-06b: admin dashboard and gift catalog say «مندوب» and «كارت مشتريات»', () {
+    final problems = <String>[];
+    for (final path in _c06bFiles) {
+      for (final (lineNo, line, text) in _arabicLiterals(path)) {
+        if (_allowed(line, text)) continue;
+        _c06bForbidden.forEach((re, why) {
+          if (re.hasMatch(text)) problems.add('$path:$lineNo «${re.firstMatch(text)![0]}» ($why): $text');
+        });
+      }
+    }
+    expect(problems, isEmpty, reason: problems.join('\n'));
+  });
+
   test('the campaign page shows no forbidden words', () {
     final problems = <String>[];
     for (final path in _pageFiles) {

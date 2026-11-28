@@ -203,7 +203,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       SnackBar(
         content: Text(
           isAr
-              ? 'تم نسخ رابط العميل والبروموتر الموحد للشركة ($slug): $url'
+              ? 'تم نسخ رابط العميل والمندوب الموحد للشركة ($slug): $url'
               : '${strings.promoterLinkCopied}: $url',
         ),
         backgroundColor: colorScheme.onTertiaryFixedVariant,
@@ -1733,7 +1733,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 // 1. Copy Promoter / Client Link (Unified Company Master Link)
                 Tooltip(
                   message: isAr
-                      ? 'نسخ رابط العميل والبروموتر الموحد الدائم لكافة عروض الشركة (كود: $companySlug)'
+                      ? 'نسخ رابط العميل والمندوب الموحد الدائم لكافة عروض الشركة (كود: $companySlug)'
                       : strings.promoterPortalTooltip,
                   waitDuration: const Duration(milliseconds: 400),
                   child: FilledButton.tonalIcon(
@@ -1933,7 +1933,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     M3ActionMenu.item(
                       context: context,
-                      label: isAr ? 'سجل وإعادة تعيين كروت الفواتشرات' : 'Voucher Cards Registry & Reset',
+                      label: isAr ? 'سجل وإعادة تعيين كروت المشتريات' : 'Voucher Cards Registry & Reset',
                       icon: Icons.confirmation_number_rounded,
                       onPressed: () => VoucherSerialsManagementDialog.show(context, event),
                     ),
