@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../../core/config/app_env.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/services/partner_portal_auth_service.dart';
 import '../../domain/event_model.dart';
@@ -116,7 +117,7 @@ class _PortalCredentialsDialogState extends ConsumerState<PortalCredentialsDialo
   String _baseOrigin() {
     final base = Uri.base.origin;
     if (base.isEmpty || base == 'null' || base.startsWith('file:')) {
-      return 'https://tashil-gift.web.app';
+      return kDefaultHostingOrigin;
     }
     return base;
   }

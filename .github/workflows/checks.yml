@@ -14,7 +14,14 @@ on:
         description: Run Flutter and functions tests (analyze and build always run).
         type: boolean
         default: true
+      app_env:
+        description: "prod (default, tashil-gift: the exact same build as before) or dev (--dart-define=APP_ENV=dev, tashil-gift-dev)."
+        type: string
+        default: prod
     outputs:
+      artifact:
+        description: Name of the uploaded web build artifact.
+        value: ${{ jobs.checks.outputs.artifact }}
       sha:
         description: Full commit SHA that was checked and built.
         value: ${{ jobs.checks.outputs.sha }}
@@ -30,9 +37,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
+      artifact: ${{ steps.sha.outputs.artifact }}
       sha: ${{ steps.sha.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
+    env:
+      APP_ENV: ${{ inputs.app_env }}
     steps:
+      - name: APP_ENV must be prod or dev
+        run: |
+          case "$APP_ENV" in prod|dev) echo "APP_ENV=$APP_ENV" ;; *) echo "::error::app_env must be prod or dev, got '$APP_ENV'"; exit 1 ;; esac
+
       - name: Checkout ${{ inputs.ref }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,7 +70,11 @@ jobs:
 
       - name: Resolve SHA
         id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # prod keeps the old artifact name; dev builds get their own.
+          if [ "$APP_ENV" = "dev" ]; then echo "artifact=web-build-dev-$sha"; else echo "artifact=web-build-$sha"; fi >> "$GITHUB_OUTPUT"
 
       - name: Flutter version from .fvmrc
         id: flutter
@@ -105,17 +123,31 @@ jobs:
           npm ci
           npm test
 
-      - name: flutter build web --release
+      # prod: exactly the same command as before the env split (no defines).
+      - name: flutter build web --release (prod)
+        if: env.APP_ENV == 'prod'
         run: flutter build web --release
+
+      # dev: tashil-gift-dev options + the dev App Check site key (repository
+      # variable DEV_APP_CHECK_RECAPTCHA_SITE_KEY; empty disables web App Check).
+      - name: flutter build web --release (APP_ENV=dev)
+        if: env.APP_ENV == 'dev'
+        env:
+          DEV_APP_CHECK_KEY: ${{ vars.DEV_APP_CHECK_RECAPTCHA_SITE_KEY }}
+        run: |
+          flutter build web --release \
+            --dart-define=APP_ENV=dev \
+            --dart-define=APP_CHECK_RECAPTCHA_SITE_KEY="$DEV_APP_CHECK_KEY"
+          python3 _ci/tool/ci/stamp_env.py build/web dev
 
       - name: Version check on the build
         id: version
-        run: python3 _ci/tool/ci/check_version.py --built build/web | tee /dev/stderr | grep '^version=' >> "$GITHUB_OUTPUT"
+        run: python3 _ci/tool/ci/check_version.py --built build/web --env "$APP_ENV" | tee /dev/stderr | grep '^version=' >> "$GITHUB_OUTPUT"
 
       - name: Upload web build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: web-build-${{ steps.sha.outputs.sha }}
+          name: ${{ steps.sha.outputs.artifact }}
           path: build/web
           if-no-files-found: error
           retention-days: 7

@@ -135,17 +135,14 @@ const { updateBranchAllocationsHandler } = require("./branch_allocations");
 exports.updateBranchAllocations = onCall(callableOptions, (request) =>
   updateBranchAllocationsHandler(db, request));
 
-const WAHA_PROXY_ALLOWED_ORIGINS = new Set([
-  "https://tashil-gift.web.app",
-  "https://tashil-gift.firebaseapp.com",
-  "https://gift.sw-point.com",
-  "https://www.gift.sw-point.com",
-]);
+// prod: tashil-gift hosts + gift.sw-point.com (unchanged); dev: the
+// tashil-gift-dev site and its preview channels only (functions/env_config.js).
+const { isWahaProxyOriginAllowed } = require("./env_config");
 const WAHA_PROXY_ALLOWED_ROLES = new Set(["super_admin", "admin", "partner"]);
 
 function applyWahaProxyCors(req, res) {
   const origin = req.headers.origin;
-  if (origin && WAHA_PROXY_ALLOWED_ORIGINS.has(origin)) {
+  if (isWahaProxyOriginAllowed(origin)) {
     res.set("Access-Control-Allow-Origin", origin);
     res.set("Vary", "Origin");
   }

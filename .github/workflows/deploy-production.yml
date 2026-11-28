@@ -2,6 +2,10 @@
 # Runs the same checks, then deploys hosting + functions + Firestore rules to
 # tashil-gift. Never Firestore indexes, never --force. The "production"
 # environment lets the owner require his own approval before the deploy job.
+# PRODUCTION ONLY: builds with APP_ENV=prod (the default), refuses a build whose
+# version.json env is not prod, and refuses credentials of any project other
+# than tashil-gift. It knows no dev secret; dev lives in dev-preview.yml and
+# dev-deploy.yml (tashil-gift-dev).
 #
 # Rollback: Actions -> deploy-production -> Run workflow, ref = a previous SHA
 # or tag (e.g. 8a57c48), allow_older_version = true.
@@ -38,6 +42,7 @@ jobs:
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
       run_tests: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
+      app_env: prod
 
   deploy:
     needs: checks
@@ -50,6 +55,12 @@ jobs:
       FIREBASE_TOOLS_VERSION: 15.37.0
       ALLOW_OLDER: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_older_version }}
     steps:
+      - name: Guard - this workflow only deploys tashil-gift
+        run: |
+          if [ "${{ github.repository }}" != "omar-fathalla/Tashil-Gift" ]; then
+            echo "::error::production deploys run only in omar-fathalla/Tashil-Gift"; exit 1
+          fi
+
       - name: Checkout ${{ needs.checks.outputs.sha }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,16 +80,18 @@ jobs:
       - name: Download web build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: web-build-${{ needs.checks.outputs.sha }}
+          name: ${{ needs.checks.outputs.artifact }}
           path: build/web
 
+      # --env prod: a build whose version.json says env "dev" is refused
+      # (a missing env means prod, so older rollback refs still deploy).
       - name: Version must be newer than the live site (unless rollback)
         run: |
           if [ "$ALLOW_OLDER" = "true" ]; then
             echo "::warning::Rollback: deploying ${{ needs.checks.outputs.version }} without the newer-than-live check."
-            python3 _ci/tool/ci/check_version.py --built build/web
+            python3 _ci/tool/ci/check_version.py --built build/web --env prod
           else
-            python3 _ci/tool/ci/check_version.py --built build/web --newer-than https://tashil-gift.web.app/version.json
+            python3 _ci/tool/ci/check_version.py --built build/web --env prod --newer-than https://tashil-gift.web.app/version.json
           fi
 
       - name: Set up Node 22
@@ -99,6 +112,13 @@ jobs:
           umask 077
           printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+          # Guard: never run the production deploy with the dev project's key.
+          sa_project=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('project_id',''))" "$RUNNER_TEMP/gcp-sa.json")
+          if [ "$sa_project" = "tashil-gift-dev" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT holds a tashil-gift-dev key. Refusing to deploy."
+            exit 1
+          fi
+          [ "$sa_project" = "tashil-gift" ] || echo "::warning::deploy service account lives in '$sa_project' (expected tashil-gift)"
 
       - name: Record the release being replaced (rollback info)
         run: |

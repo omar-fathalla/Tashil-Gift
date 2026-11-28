@@ -1,3 +1,5 @@
+import '../config/app_env.dart';
+
 /// Application Version & Build Tracking Configuration
 ///
 /// This file is automatically maintained and incremented upon each authorized
@@ -10,16 +12,23 @@ class AppVersionConfig {
   static const int minor = 0;
 
   /// Patch / Iteration version (Feature additions, enhancements, bugfixes)
-  static const int patch = 189;
+  static const int patch = 195;
 
   /// Global sequential build counter (Increments on every deployment)
-  static const int buildNumber = 249;
+  static const int buildNumber = 255;
 
   /// Release date of the current build
-  static const String releaseDate = '2026-11-25';
+  static const String releaseDate = '2026-11-28';
 
-  /// Environment tag
-  static const String environment = 'Production (Firebase)';
+  /// Environment tag: 'Production (Firebase)' for prod (the default build),
+  /// 'Development (tashil-gift-dev)' for --dart-define=APP_ENV=dev.
+  static const String environment = kEnvironmentDisplayName;
+
+  /// Short environment label, same as web/version.json `env` ('prod' | 'dev').
+  static const String envLabel = kIsDevEnv ? 'dev' : 'prod';
+
+  /// True for an APP_ENV=dev build (shows the DEV badge).
+  static const bool isDevBuild = kIsDevEnv;
 
   /// Clean display string for headers and badges (e.g. "v2.0.1")
   static const String versionDisplay = 'v$major.$minor.$patch';

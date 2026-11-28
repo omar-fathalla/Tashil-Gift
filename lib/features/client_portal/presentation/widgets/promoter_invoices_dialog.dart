@@ -23,6 +23,7 @@ import '../../../../core/utils/canonical_branch_resolver.dart';
 import '../../../../core/utils/error_handler.dart';
 import '../../../../core/widgets/interactive_receipt_viewer_dialog.dart';
 import '../../../../core/services/multi_campaign_receipt_evaluator.dart';
+import '../../../admin/data/campaign_content_repository.dart';
 import '../../../admin/domain/event_model.dart';
 import '../../../admin/domain/retail_chain_model.dart';
 import '../../../games/presentation/choose_gift_screen.dart';
@@ -2991,6 +2992,10 @@ class _PromoterInvoicesDialogState extends ConsumerState<PromoterInvoicesDialog>
     final currentUser = ref.read(firebaseAuthProvider).currentUser;
     final aiService = ref.read(aiReceiptServiceProvider);
     final productsService = ref.read(companyProductsServiceProvider);
+    // TAG-62: products/prompt may be in events/{id}/content (no read when inline).
+    final contentRepo = CampaignContentRepository(firestore);
+    activeEvent = await contentRepo.hydrate(activeEvent);
+    companyEvents = await contentRepo.hydrateAll(companyEvents);
     final retailChainsService = ref.read(retailChainsServiceProvider);
 
     // Collect all image URLs & storage paths (supporting multi-part receipts)

@@ -1,0 +1,81 @@
+# Deploys the BACKEND config (Firestore rules + indexes, Storage rules) to the
+# DEV project tashil-gift-dev ONLY (TAG-12). Never production, never --force,
+# never Hosting. Functions only when include_functions is true (default false;
+# they need the dev Secret Manager secrets first, TAG-4).
+#
+# Triggers:
+#   - workflow_dispatch (usable once this file is on the default branch)
+#   - push to feat/dev-environment that changes this file (workflow_dispatch
+#     cannot target a branch whose workflow is not on main yet)
+# Uses only FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV; tool/dev/deploy_dev.sh
+# hard-codes tashil-gift-dev, refuses non-dev credentials and renders
+# firebase.dev.json with the dev Storage bucket.
+name: deploy-dev-backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_functions:
+        description: Also deploy Cloud Functions to tashil-gift-dev
+        type: boolean
+        default: false
+  push:
+    branches: [feat/dev-environment]
+    paths:
+      - .github/workflows/deploy-dev-backend.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: dev
+    env:
+      PROJECT: tashil-gift-dev
+      FIREBASE_TOOLS_VERSION: 15.37.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Write dev deploy credentials to $RUNNER_TEMP
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV }}
+        run: |
+          [ -n "$SA_JSON" ] || { echo "::error::Secret FIREBASE_SERVICE_ACCOUNT_TASHIL_GIFT_DEV is missing."; exit 1; }
+          umask 077
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/gcp-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy Firestore rules + indexes and Storage rules to tashil-gift-dev
+        run: bash tool/dev/deploy_dev.sh rules
+
+      - name: Deploy functions to tashil-gift-dev
+        if: ${{ inputs.include_functions == true }}
+        run: bash tool/dev/deploy_dev.sh functions
+
+      - name: Summary
+        run: |
+          {
+            echo "### Backend deployed to tashil-gift-dev"
+            echo "- firestore:rules, firestore:indexes, storage"
+            echo "- functions: ${{ inputs.include_functions == true && 'yes' || 'no' }}"
+            echo "- Commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove deploy credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-sa.json"

@@ -8,7 +8,7 @@ description: Mandatory standard for canonical campaign branch resolution, geogra
 ## 1. Core Architectural Principle: Strict Canonical Scoping
 
 1. **Zero Rogue Branch Invariant**:
-   - In all screens (`InvoicesLogScreen`, `CampaignReportsScreen`, `CompanyPrizesStockReportScreen`, `ValidationScreen`), branch dropdown filters, selection chips, and analytics tables MUST strictly derive their available branch lists (`availableBranches`) from the **official canonical branches configured in the campaign** (`event.branchNames`).
+   - In all screens (`InvoicesLogScreen`, `CampaignReportsScreen`, `CompanyPrizesStockReportScreen`), branch dropdown filters, selection chips, and analytics tables MUST strictly derive their available branch lists (`availableBranches`) from the **official canonical branches configured in the campaign** (`event.branchNames`).
    - **NEVER** collect or dump raw `branch_detected` strings from receipts into the UI filters or available branch lists.
 
 2. **Scoped Campaign Hierarchy**:

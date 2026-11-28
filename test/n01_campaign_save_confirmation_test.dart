@@ -173,7 +173,12 @@ void main() {
       expect(src.contains("onTimeout: () => firestore.collection('events').doc()"), isFalse);
       expect(RegExp(r"collection\('events'\)\.add\(").hasMatch(src), isFalse);
       expect(RegExp(r'onTimeout:\s*\(\)\s*\{\s*\}').hasMatch(src), isFalse);
-      expect(src.contains("collection('events').doc(eventId).set("), isTrue);
+      // TAG-62: the create is a batch (campaign + content docs) on the same id.
+      expect(
+        src.contains("collection('events').doc(eventId).set(") ||
+            RegExp(r'createWithContent\(\s*eventId: eventId,').hasMatch(src),
+        isTrue,
+      );
     });
 
     test('links dialog is opened only from the confirmed path', () {

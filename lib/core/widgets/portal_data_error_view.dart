@@ -7,7 +7,20 @@ class PortalDataErrorView extends StatelessWidget {
   final Object? error;
   final VoidCallback? onRetry;
 
-  const PortalDataErrorView({super.key, this.error, this.onRetry});
+  /// Optional text that replaces the default message (TAG-81: the rep link
+  /// must not tell an anonymous rep to sign out and in again).
+  final String? message;
+
+  /// Optional small technical code shown under the message.
+  final String? detail;
+
+  const PortalDataErrorView({
+    super.key,
+    this.error,
+    this.onRetry,
+    this.message,
+    this.detail,
+  });
 
   static bool isPermissionDenied(Object? e) =>
       e is FirebaseException && e.code == 'permission-denied' ||
@@ -31,12 +44,24 @@ class PortalDataErrorView extends StatelessWidget {
                 Icon(denied ? Icons.lock_outline_rounded : Icons.cloud_off_rounded, color: cs.onErrorContainer, size: 36),
                 const SizedBox(height: 12),
                 Text(
-                  denied
-                      ? 'لا توجد صلاحية لعرض بيانات هذه الشركة. يرجى تسجيل الخروج ثم الدخول مرة أخرى.'
-                      : 'تعذر تحميل البيانات. تحقق من الاتصال ثم حاول مرة أخرى.',
+                  message ??
+                      (denied
+                          ? 'لا توجد صلاحية لعرض بيانات هذه الشركة. يرجى تسجيل الخروج ثم الدخول مرة أخرى.'
+                          : 'تعذر تحميل البيانات. تحقق من الاتصال ثم حاول مرة أخرى.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600),
                 ),
+                if (detail != null && detail!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      detail!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: cs.onErrorContainer, fontSize: 11),
+                    ),
+                  ),
+                ],
                 if (onRetry != null) ...[
                   const SizedBox(height: 12),
                   FilledButton.tonal(onPressed: onRetry, child: const Text('إعادة المحاولة')),
