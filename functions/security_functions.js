@@ -107,6 +107,9 @@ function findBestPrizeMatchIndex(prizes, prizeIdentifier, options) {
     : (extractNumbers(prizeIdentifier)[0] || 0);
   let bestIndex = -1;
   let highestScore = -1;
+  // TAG-48: the requested gift id, when some row carries it, pins the gift.
+  const targetId = String(prizeIdentifier).trim();
+  const giftIdKnown = prizes.some((p) => String((p && p.giftId) || "").trim() === targetId);
 
   prizes.forEach((p, i) => {
     const pGiftId = String(p.giftId || "").trim();
@@ -133,18 +136,29 @@ function findBestPrizeMatchIndex(prizes, prizeIdentifier, options) {
     else if (isGeneralBranch) score += 60;
     else if (branchId && (pBranchId || pBranchName)) score -= 80;
 
-    if (pGiftId && (pGiftId === prizeIdentifier || pGiftId === cleanTarget)) score += 200;
-    else if (pName === prizeIdentifier) score += 160;
+    // TAG-48: a row of another gift must never win on branch + stock alone
+    // (a «فواتشر 25» claim took a spice-bag row of the same branch).
+    if (giftIdKnown && pGiftId && pGiftId !== targetId) return;
+    if (isVoucher === true && pType === "product") return;
+    if (isVoucher === true && pIsVoucher && targetVal > 0 && pUnitVal > 0 &&
+        Math.abs(targetVal - pUnitVal) >= 0.01) return;
 
-    if (cleanPName && cleanPName === cleanTarget) score += 140;
-    else if (cleanTarget && (cleanPName.includes(cleanTarget) || cleanTarget.includes(cleanPName))) score += 95;
+    let giftScore = 0;
+    if (pGiftId && (pGiftId === prizeIdentifier || pGiftId === cleanTarget)) giftScore += 200;
+    else if (pName === prizeIdentifier) giftScore += 160;
+
+    if (cleanPName && cleanPName === cleanTarget) giftScore += 140;
+    else if (cleanTarget && cleanPName && (cleanPName.includes(cleanTarget) || cleanTarget.includes(cleanPName))) giftScore += 95;
 
     if ((isVoucher === true || pIsVoucher) && targetVal > 0 && pUnitVal > 0 && Math.abs(targetVal - pUnitVal) < 0.01) {
-      score += 110;
+      giftScore += 110;
     }
 
+    // A shared number alone («25 جرام» vs «فواتشر 25») is not the same gift.
+    if (giftScore === 0) return;
     const pNums = extractNumbers(pName);
-    if (targetNums.length && pNums.some((n) => targetNums.includes(n))) score += 50;
+    if (targetNums.length && pNums.some((n) => targetNums.includes(n))) giftScore += 50;
+    score += giftScore;
     if (pRemaining > 0) score += 15;
 
     if (score > highestScore && score > 30) {
