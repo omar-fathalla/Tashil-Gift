@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_service.dart';
+import '../utils/confirmed_write.dart';
 
 class CompanyProductItem {
   final String id;
@@ -327,10 +328,8 @@ class CompanyProductsService {
         }
       }
 
-      await batch.commit().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {},
-      );
+      // TAG-35 (N-01b): a chunk counts as saved only once the server confirmed it.
+      await confirmedWrite(batch.commit(), '');
 
       // Notify progress after committing current chunk
       onProgress?.call(totalSaved, uniqueProductsToSave.length);
@@ -339,14 +338,14 @@ class CompanyProductsService {
     // Update company product count
     if (totalSaved > 0) {
       final companyRef = _firestore.collection('companies').doc(slug);
-      await companyRef.set({
-        'name': companyName,
-        'slug': slug,
-        'productsCount': FieldValue.increment(totalSaved),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)).timeout(
-        const Duration(seconds: 4),
-        onTimeout: () {},
+      await confirmedWrite(
+        companyRef.set({
+          'name': companyName,
+          'slug': slug,
+          'productsCount': FieldValue.increment(totalSaved),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)),
+        companyRef.path,
       );
     }
 
@@ -433,7 +432,7 @@ class CompanyProductsService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
-    await batch.commit().timeout(const Duration(seconds: 4), onTimeout: () {});
+    await confirmedWrite(batch.commit(), '');
   }
 
   /// Deletes ALL products registered for a specific company from Firestore in chunks
@@ -459,17 +458,20 @@ class CompanyProductsService {
       for (final doc in query.docs) {
         batch.delete(doc.reference);
       }
-      await batch.commit().timeout(const Duration(seconds: 8), onTimeout: () {});
+      await confirmedWrite(batch.commit(), '');
       totalDeleted += query.docs.length;
       onProgress?.call(totalDeleted, totalDeleted);
     }
 
     // Reset company product count to 0 in companies collection
     final companyRef = _firestore.collection('companies').doc(slug);
-    await companyRef.set({
-      'productsCount': 0,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true)).timeout(const Duration(seconds: 4), onTimeout: () {});
+    await confirmedWrite(
+      companyRef.set({
+        'productsCount': 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+      companyRef.path,
+    );
 
     return totalDeleted;
   }
