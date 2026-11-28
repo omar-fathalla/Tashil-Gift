@@ -10,6 +10,7 @@ import 'package:al_mraay/features/admin/domain/retail_chain_model.dart';
 import '../config/ai_config.dart';
 import 'gemini_cloud_model.dart';
 import '../utils/arabic_numbers_utils.dart';
+import '../utils/barcode_match.dart';
 import '../utils/receipt_date_window.dart';
 import '../utils/canonical_branch_resolver.dart';
 import '../utils/store_code_branch_resolver.dart';
@@ -3746,10 +3747,7 @@ class PromotionalRuleMatcher {
     final barcode = product.barcode.trim();
     if (barcode.isNotEmpty && rule.selectedBarcodes.isNotEmpty) {
       if (rule.selectedBarcodes.any((b) => b.trim() == barcode)) return true;
-      if (barcode.length >= 10 &&
-          rule.selectedBarcodes.any(
-            (b) => b.startsWith(barcode) || barcode.startsWith(b.trim()),
-          )) {
+      if (rule.selectedBarcodes.any((b) => barcodePrefixVariant(barcode, b))) {
         return true;
       }
     }
@@ -4898,8 +4896,7 @@ class PromotionalRuleMatcher {
         .toList();
     if (catalog.isEmpty) return false;
     if (catalog.contains(barcode)) return false;
-    if (barcode.length >= 10 &&
-        catalog.any((b) => b.startsWith(barcode) || barcode.startsWith(b))) {
+    if (catalog.any((b) => barcodePrefixVariant(barcode, b))) {
       return false;
     }
     return true;
@@ -4979,10 +4976,7 @@ class PromotionalRuleMatcher {
           rule != null &&
           rule.selectedBarcodes.isNotEmpty &&
           (rule.selectedBarcodes.contains(cleanBarcode) ||
-              (cleanBarcode.length >= 10 &&
-                  rule.selectedBarcodes.any((b) =>
-                      b.startsWith(cleanBarcode) ||
-                      cleanBarcode.startsWith(b))));
+              rule.selectedBarcodes.any((b) => barcodePrefixVariant(cleanBarcode, b)));
 
       final bool isExplicitNameMatch = rule != null &&
           rule.selectedProductNames.isNotEmpty &&
@@ -5043,13 +5037,10 @@ class PromotionalRuleMatcher {
         if (rule.selectedBarcodes.contains(cleanBarcode)) {
           return true;
         }
-        // Handle 12-digit vs 13-digit retail POS variations (e.g. 622300066001 vs 6223000660010 in Hyper One)
-        if (cleanBarcode.length >= 10) {
-          final matchesCatalogPrefix = rule.selectedBarcodes.any((b) =>
-              b.startsWith(cleanBarcode) || cleanBarcode.startsWith(b));
-          if (matchesCatalogPrefix) {
-            return true;
-          }
+        // 12-digit vs 13-digit retail POS variations (e.g. 622300066001 vs
+        // 6223000660010 in Hyper One). TAG-86: never a short catalog code.
+        if (rule.selectedBarcodes.any((b) => barcodePrefixVariant(cleanBarcode, b))) {
+          return true;
         }
       }
       if (cleanBarcode.length >= 6 && triggerProduct.contains(cleanBarcode)) {
