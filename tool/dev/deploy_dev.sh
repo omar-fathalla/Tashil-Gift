@@ -54,9 +54,22 @@ if [[ ",$only," == *",functions,"* ]] && [ ! -d functions/node_modules ]; then
 fi
 
 echo "Deploying --only $only to $PROJECT"
+log="$(mktemp)"
+set +e
 npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" deploy \
   --project "$PROJECT" \
   --config firebase.dev.json \
   --only "$only" \
   --non-interactive \
-  --message "dev deploy ${GITHUB_SHA:-local} ${GITHUB_RUN_ID:-}"
+  --message "dev deploy ${GITHUB_SHA:-local} ${GITHUB_RUN_ID:-}" 2>&1 | tee "$log"
+status=${PIPESTATUS[0]}
+set -e
+# The functions are live even when only the Artifact Registry cleanup policy
+# could not be set (firebase-tools then exits 1 and suggests --force, which we
+# never use). That one case is a warning, not a failed deploy.
+if [ "$status" -ne 0 ] && grep -q "Functions successfully deployed but could not set up cleanup policy" "$log"; then
+  echo "::warning::Functions deployed to $PROJECT; the artifact cleanup policy is not set ; set it once with: firebase functions:artifacts:setpolicy --project tashil-gift-dev"
+  status=0
+fi
+rm -f "$log"
+exit "$status"
