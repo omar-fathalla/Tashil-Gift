@@ -16,7 +16,12 @@ void main() {
     final r = ReceiptBranchResolver.resolve(ev(['a', 'b'], ['A', 'B']), '');
     expect(r.id, isNull);
   });
-  test('single-branch campaign resolves to that branch', () {
-    expect(ReceiptBranchResolver.resolve(ev(['a'], ['A']), '').id, 'a');
+  // 2.0.173 (c67358d): one campaign branch is not a reason to assign it;
+  // an empty detection stays unresolved, a matching name still resolves.
+  test('single-branch campaign with no detected branch stays unresolved', () {
+    expect(ReceiptBranchResolver.resolve(ev(['a'], ['A']), '').id, isNull);
+  });
+  test('single-branch campaign resolves when the detected name matches', () {
+    expect(ReceiptBranchResolver.resolve(ev(['a'], ['فرع مدينة الرحاب']), 'فرع مدينة الرحاب').id, 'a');
   });
 }

@@ -12,7 +12,12 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: WhatsAppLiveOutboxView(
-              gatewayConfig: const WhatsAppGatewayConfigModel(customEndpointUrl: ''),
+              // TAG-73: WAHA (the default) is always configured via the Cloud proxy;
+              // an empty custom endpoint is the unconfigured case.
+              gatewayConfig: const WhatsAppGatewayConfigModel(
+                provider: WhatsAppGatewayProvider.custom,
+                customEndpointUrl: '',
+              ),
               strings: AppStrings('ar'),
               isAr: true,
               onOpenSettings: () {},

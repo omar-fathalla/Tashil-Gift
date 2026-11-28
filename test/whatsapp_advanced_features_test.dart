@@ -48,7 +48,11 @@ void main() {
       },
     );
       final mockClient = MockClient((request) async {
-        expect(request.url.path, equals('/api/sendImage'));
+        // TAG-73: the service resolves the chatId first (WAHA check-exists).
+        if (request.url.path.endsWith('/api/contacts/check-exists')) {
+          return http.Response(json.encode({'numberExists': true}), 200);
+        }
+        expect(request.url.path, endsWith('/api/sendImage'));
         expect(request.headers['Authorization'], equals('Bearer test-id-token'));
           expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
           expect(request.headers.containsKey('X-Api-Key'), isFalse);
@@ -120,7 +124,11 @@ void main() {
       },
     );
       final mockClient = MockClient((request) async {
-        expect(request.url.path, equals('/api/sendPoll'));
+        // TAG-73: the service resolves the chatId first (WAHA check-exists).
+        if (request.url.path.endsWith('/api/contacts/check-exists')) {
+          return http.Response(json.encode({'numberExists': true}), 200);
+        }
+        expect(request.url.path, endsWith('/api/sendPoll'));
         expect(request.headers['Authorization'], equals('Bearer test-id-token'));
           expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
           expect(request.headers.containsKey('X-Api-Key'), isFalse);
@@ -161,12 +169,12 @@ void main() {
       bool stopped = false;
 
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/startTyping') {
+        if (request.url.path.endsWith('/api/startTyping')) {
           started = true;
           final body = json.decode(request.body);
           expect(body['chatId'], equals('201555555555@c.us'));
           return http.Response(json.encode({'success': true}), 200);
-        } else if (request.url.path == '/api/stopTyping') {
+        } else if (request.url.path.endsWith('/api/stopTyping')) {
           stopped = true;
           final body = json.decode(request.body);
           expect(body['chatId'], equals('201555555555@c.us'));
@@ -191,7 +199,7 @@ void main() {
       },
     );
       final mockClient = MockClient((request) async {
-        expect(request.url.path, equals('/api/contacts/check-exists'));
+        expect(request.url.path, endsWith('/api/contacts/check-exists'));
         final phone = request.url.queryParameters['phone'];
         if (phone == '201012345678') {
           return http.Response(json.encode({'numberExists': true}), 200);
@@ -246,7 +254,7 @@ void main() {
       final dummyPngBytes = Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
 
       final mockClient = MockClient((request) async {
-        expect(request.url.path, equals('/api/screenshot'));
+        expect(request.url.path, endsWith('/api/screenshot'));
         expect(request.headers['Authorization'], equals('Bearer test-id-token'));
           expect(request.headers['X-Firebase-AppCheck'], equals('test-app-check'));
           expect(request.headers.containsKey('X-Api-Key'), isFalse);

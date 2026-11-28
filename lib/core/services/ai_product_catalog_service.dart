@@ -64,16 +64,17 @@ class AiCatalogAnalysisResult {
 }
 
 class AiProductCatalogService {
-  final CloudGenerativeModel _model;
+  // TAG-73: built on first AI call, so the parsing helpers work (and the
+  // service can be created) before Firebase is initialised.
+  late final CloudGenerativeModel _model = CloudGenerativeModel(
+    model: AiModels.helperServices,
+    generationConfig: GenerationConfig(
+      responseMimeType: 'application/json',
+      temperature: 0.1,
+    ),
+  );
 
-  AiProductCatalogService()
-      : _model = CloudGenerativeModel(
-          model: AiModels.helperServices,
-      generationConfig: GenerationConfig(
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-          ),
-        );
+  AiProductCatalogService();
 
   /// Main entrypoint: Takes file bytes and file name (.xlsx, .xls, .csv, .txt),
   /// extracts data, analyzes schema using Gemini AI, and returns structured products.
