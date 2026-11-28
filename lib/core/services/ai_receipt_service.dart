@@ -4886,6 +4886,18 @@ class PromotionalRuleMatcher {
     return !isCompanyWideSpendRule(rule);
   }
 
+  /// TAG-87: a company-wide spend rule (see [isCompanyWideSpendRule]) that lists
+  /// many products (20 or more barcodes or catalog names), so one deodorant form
+  /// named in its text is a sample of the catalog, not a restriction.
+  static bool isBroadCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    final listed = math.max(
+      rule.selectedBarcodes.where((b) => b.trim().isNotEmpty).length,
+      rule.selectedProductNames.where((n) => n.trim().isNotEmpty).length,
+    );
+    return listed >= 20;
+  }
+
   static bool _barcodeOutsideRuleCatalog(
     ExtractedProductItem product,
     PromotionalRuleItem rule,
