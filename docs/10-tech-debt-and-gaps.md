@@ -30,8 +30,8 @@
 ## نظافة الريبو (TAG-75)
 
 * `README.md` لسه قالب Flutter الافتراضي، و`pubspec.yaml` اسمه `al_mraay` ووصفه «A new Flutter project.» (تغيير الاسم بيغيّر كل الـ imports، فالأسهل نسيبه ونوثّقه).
-* `get_it` في الـ dependencies ومش مستخدم.
-* ملفات خطط في الجذر: `M3_LAYOUT_SPACING_DENSITY_PLAN.txt`, `M3_LISTS_SPEC_AND_PLAN.txt`, `M3_MENUS_SPEC_AND_PLAN.txt`، و`rtl_dashboard_screenshot.png`، و`backups/` — مكانهم `docs/`.
+* ~~`get_it` في الـ dependencies ومش مستخدم~~: اتشال (TAG-75).
+* ~~ملفات خطط في الجذر~~: اتنقلت لـ `docs/plans/` و`docs/backups/` (TAG-75).
 * `AGENTS.md` و `GEMINI.md` نسختين متطابقتين يدوي (أي تعديل لازم يتعمل في الاتنين)، وفيهم مسارات محلية `file:///Users/fathalla/...`.
 * `AGENTS.md` القاعدة 5 بتقول المفتاح في `AiConfig.geminiApiKey`، بينما الكود الحالي بيمنع أي مفتاح في العميل وبيعدّي كله على `geminiGenerate`. القاعدة محتاجة تتصحّح.
 * `firestore.indexes.json` فيه index لمجموعة `validation_transactions` مش مستخدمة.
