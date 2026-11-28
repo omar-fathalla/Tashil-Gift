@@ -767,6 +767,29 @@ class AiReceiptService {
   static String withPosLinePairingRule(String prompt) =>
       prompt.contains('TAG-84') ? prompt : '$prompt$posLinePairingRule';
 
+  /// TAG-87: printed discounts only. On receipt 62/12/224/27112026 the model
+  /// invented a discount under two lines that have none (Dove soap 45 read as
+  /// 38, Dove roll-on 77 read as 43), which cut 41 EGP from the Unilever spend
+  /// and pushed the receipt under the 200 tier. This is a prompt rule only:
+  /// the app has no raw receipt text to check a discount against. Appended to
+  /// every receipt prompt.
+  static const String posPrintedDiscountRule = '''
+
+🛑 قاعدة الخصم المطبوع فقط (Printed Discount Only - TAG-87):
+- الخصم بيتحسب بس لو في سطر "خصم" مطبوع **تحت سطر الصنف مباشرة** (مبلغ بعلامة ناقص زي 12.00-)، وقبل سطر الصنف اللي بعده.
+- لو مفيش سطر خصم مطبوع تحت الصنف: discountAmount = 0 و discountPercent = 0 و originalPrice = price = السعر المطبوع للقطعة (القيمة ÷ الكمية). ممنوع تخترع خصم.
+- ممنوع تاخد خصم مطبوع تحت صنف تاني، وممنوع تحسب خصم من كلمة العرض أو النسبة المكتوبة في اسم الصنف (زي "خصم 20%") لو مفيش سطر خصم تحته.
+- لو الخصم مطبوع، اكتب القيمة المطبوعة بالظبط: price = السعر - الخصم، originalPrice = السعر المطبوع.
+- مثال (بون فتح الله 62/12/224/27112026):
+  "دوف روول اون براي" 77.00 وتحتها "12.00-" خصم ← price 65 و originalPrice 77 و discountAmount 12.
+  "دوف صابون 90جم رو" 45.00 والسطر اللي بعده صنف تاني من غير سطر خصم ← price 45 و originalPrice 45 و discountAmount 0 (مش 38).
+  "دوف روول اون 50 م" 77.00 من غير سطر خصم تحتها ← price 77 و discountAmount 0 (مش 43).
+''';
+
+  /// Adds [posPrintedDiscountRule] once to a receipt prompt.
+  static String withPosPrintedDiscountRule(String prompt) =>
+      prompt.contains('TAG-87') ? prompt : '$prompt$posPrintedDiscountRule';
+
   CloudGenerativeModel? _modelCache;
   CloudGenerativeModel? _fastModelCache;
   CloudGenerativeModel? _deepAuditModelCache;
@@ -1962,6 +1985,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       }
 
       finalPromptText = AiReceiptService.withPosLinePairingRule(finalPromptText);
+      finalPromptText = AiReceiptService.withPosPrintedDiscountRule(finalPromptText);
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
@@ -4839,6 +4863,18 @@ class PromotionalRuleMatcher {
     return _umbrellaCompanyNames.any((n) => text.contains(_normalize(n)));
   }
 
+  /// TAG-87: a company-wide spend rule (see [isCompanyWideSpendRule]) that lists
+  /// many products (20 or more barcodes or catalog names), so one deodorant form
+  /// named in its text is a sample of the catalog, not a restriction.
+  static bool isBroadCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    final listed = math.max(
+      rule.selectedBarcodes.where((b) => b.trim().isNotEmpty).length,
+      rule.selectedProductNames.where((n) => n.trim().isNotEmpty).length,
+    );
+    return listed >= 20;
+  }
+
   static bool _barcodeOutsideRuleCatalog(
     ExtractedProductItem product,
     PromotionalRuleItem rule,
@@ -5055,7 +5091,8 @@ class PromotionalRuleMatcher {
     // Disallows matching spray rules against roll-on products, coffee against confectionery, etc.
     final bool isProductRollOn =
         pNorm.contains('رول اون') ||
-        pNorm.contains('رول') ||
+        // TAG-87: «البتروليم» (Vaseline petroleum jelly) contains «رول».
+        (pNorm.contains('رول') && !pNorm.contains('بترول')) ||
         pNorm.contains('روول') ||
         pNorm.contains('ستيك') ||
         pNorm.contains('roll on') ||
@@ -5114,15 +5151,29 @@ class PromotionalRuleMatcher {
         pNorm.contains('بروميل') ||
         pNorm.contains('حليب اطفال');
 
-    final bool isTriggerRollOn =
+    final bool triggerNamesRollOn =
         fullRuleContext.contains('رول') ||
         fullRuleContext.contains('roll') ||
         fullRuleContext.contains('ستيك');
-    final bool isTriggerSpray =
+    final bool triggerNamesSpray =
         fullRuleContext.contains('اسبراي') ||
         fullRuleContext.contains('بخاخ') ||
         fullRuleContext.contains('spray') ||
-        (fullRuleContext.contains('150 مل') && !isTriggerRollOn);
+        (fullRuleContext.contains('150 مل') && !triggerNamesRollOn);
+    // TAG-87: a company-wide spend rule that lists many products covers both
+    // deodorant forms. Naming one of them in the rule text («اسبراي» among the
+    // brands) describes the catalog, it does not exclude the other form, so a
+    // roll-on line (e.g. a Dove roll-on with no readable barcode) must not be
+    // rejected by the spray / roll-on guards. A narrow rule that names one
+    // form keeps both guards.
+    final bool formWordsAreDescriptive = rule != null &&
+        (rule.isSpendBased || rule.conditionType == 'by_spend') &&
+        !rule.isCombo &&
+        isBroadCompanyWideSpendRule(rule);
+    final bool isTriggerRollOn =
+        triggerNamesRollOn || (formWordsAreDescriptive && triggerNamesSpray);
+    final bool isTriggerSpray =
+        triggerNamesSpray || (formWordsAreDescriptive && triggerNamesRollOn);
     final bool isTriggerShampoo =
         fullRuleContext.contains('شامبو') ||
         fullRuleContext.contains('shampoo') ||
