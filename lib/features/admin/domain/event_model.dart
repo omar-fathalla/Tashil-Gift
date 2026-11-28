@@ -727,6 +727,15 @@ class EventModel {
   final String customAgencyPassword;
   final int customAgencyCredentialVersion;
 
+  /// TAG-62: where requiredProducts / customPrompt live (inline on this
+  /// document or in events/{id}/content). Read with CampaignContentRepository.
+  final CampaignContentInfo contentInfo;
+
+  /// Number of target products, also when the list is not loaded yet.
+  int get requiredProductsCount => contentInfo.productsInline
+      ? requiredProducts.length
+      : (contentInfo.productsCount ?? requiredProducts.length);
+
   EventModel({
     required this.id,
     required this.eventName,
@@ -769,6 +778,7 @@ class EventModel {
     this.customAgencyUsername = '',
     this.customAgencyPassword = '',
     this.customAgencyCredentialVersion = 1,
+    this.contentInfo = const CampaignContentInfo(),
   });
 
   /// 2.0.162: the end day is inclusive in Cairo time; the campaign closes at
@@ -1099,6 +1109,7 @@ class EventModel {
       customAgencyUsername: (data['customAgencyUsername'] ?? '').toString(),
       customAgencyPassword: (data['customAgencyPassword'] ?? '').toString(),
       customAgencyCredentialVersion: (data['customAgencyCredentialVersion'] as num?)?.toInt() ?? 1,
+      contentInfo: CampaignContentInfo.fromEventData(data),
     );
   }
 
@@ -1273,6 +1284,7 @@ class EventModel {
     String? customAgencyUsername,
     String? customAgencyPassword,
     int? customAgencyCredentialVersion,
+    CampaignContentInfo? contentInfo,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -1316,7 +1328,63 @@ class EventModel {
       customAgencyUsername: customAgencyUsername ?? this.customAgencyUsername,
       customAgencyPassword: customAgencyPassword ?? this.customAgencyPassword,
       customAgencyCredentialVersion: customAgencyCredentialVersion ?? this.customAgencyCredentialVersion,
+      contentInfo: contentInfo ?? this.contentInfo,
     );
   }
 }
 
+
+/// TAG-62: where a campaign's product list and AI prompt are stored.
+///
+/// A key present on the campaign document always wins: older app versions
+/// still edit `requiredProducts` / `customPrompt` there, so for a small
+/// campaign (written in both places) the inline value is the current one.
+/// Large campaigns have no inline keys; their content is read from
+/// `events/{id}/content/products` (+ `products_N` chunks) and `.../prompt`.
+class CampaignContentInfo {
+  /// `hasExternalContent` on the campaign: content docs were written.
+  final bool external;
+
+  /// `contentVersion`: bumped on every content write (0 = never).
+  final int version;
+
+  /// `contentChunks`: number of `products_N` docs (0 = list inside `products`).
+  final int chunks;
+
+  /// `requiredProductsCount`, for lists that are not loaded yet.
+  final int? productsCount;
+
+  /// The model's requiredProducts / customPrompt hold the real values
+  /// (the key was on the document, or the content was loaded).
+  final bool productsInline;
+  final bool promptInline;
+
+  const CampaignContentInfo({
+    this.external = false,
+    this.version = 0,
+    this.chunks = 0,
+    this.productsCount,
+    this.productsInline = true,
+    this.promptInline = true,
+  });
+
+  factory CampaignContentInfo.fromEventData(Map<String, dynamic> data) => CampaignContentInfo(
+        external: data['hasExternalContent'] == true,
+        version: (data['contentVersion'] as num?)?.toInt() ?? 0,
+        chunks: (data['contentChunks'] as num?)?.toInt() ?? 0,
+        productsCount: (data['requiredProductsCount'] as num?)?.toInt(),
+        productsInline: data.containsKey('requiredProducts'),
+        promptInline: data.containsKey('customPrompt'),
+      );
+
+  /// Content has to be fetched before requiredProducts / customPrompt are used.
+  bool get needsLoad => external && (!productsInline || !promptInline);
+
+  /// After the content was loaded into the model.
+  CampaignContentInfo loaded() => CampaignContentInfo(
+        external: external,
+        version: version,
+        chunks: chunks,
+        productsCount: productsCount,
+      );
+}

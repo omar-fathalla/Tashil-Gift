@@ -741,6 +741,55 @@ class AiReceiptService {
   static const String branchSourceRule =
       '- مصدر الفرع (branchDetected): خذ الفرع من كود المتجر المطبوع (ضمن رقم الفاتورة أو Store/POS) أو من رأس الفاتورة فقط، ولا تأخذه أبداً من الإعلانات أو السطور الدعائية في تذييل الفاتورة (مثل "تم افتتاح فرع ...").';
 
+  /// TAG-84: receipt line pairing. Some POS receipts (e.g. Gomla Market,
+  /// store 418) print each product name on its own line ABOVE its numbers
+  /// line (value, price, qty, barcode). Pairing the name with the numbers line
+  /// above it shifts every item by one line (36/13/418/271126: Knorr 130 EGP
+  /// read as 18 EGP). Appended to every receipt prompt.
+  static const String posLinePairingRule = '''
+
+🛑 قاعدة ربط اسم الصنف بسطر أرقامه (POS Name/Numbers Line Pairing - TAG-84):
+- بعض البونات (مثل جملة ماركت، ومنها فرع 418) بتطبع كل صنف في سطرين: سطر الأرقام [القيمة] [السعر] [الكمية] [الباركود]، واسم الصنف مطبوع في سطر لوحده.
+- حدد أولاً اتجاه الربط في البون نفسه قبل استخراج أي صنف:
+  * لو أول سطر أرقام في قائمة الأصناف مسبوق باسم صنف فوقه، أو آخر سطر أرقام قبل الإجمالي ("عدد القطع" / "الإجمالي") مش متبوع باسم تحته، يبقى الاسم مطبوع **فوق** سطر أرقامه: اربط كل اسم بسطر الأرقام اللي **تحته مباشرة**، وإياك تربطه بسطر الأرقام اللي فوقه.
+  * لو الاسم والأرقام على نفس السطر الأفقي، خد الاسم والأرقام من نفس السطر.
+- اختبار التطابق الإلزامي بالأصناف الموزونة: سطر كميته كسر عشري (مثل 0.250 أو 0.492) لازم يتحقق فيه السعر × الكمية = القيمة (مثلاً 390.00 × 0.250 = 97.50)، ولازم اسمه يكون صنف بيتباع بالوزن (جبن، مخلل، لحوم، فاكهة...). لو الاسم اللي ربطته بالسطر الموزون صنف معبأ بالقطعة، يبقى الربط مزاح بسطر: صحح الاتجاه لكل الأصناف.
+- الباركود والسعر والكمية للصنف هما اللي في سطر الأرقام المرتبط بيه بالظبط. لا تاخد باركود أو سعر من سطر صنف مجاور.
+- مثال (بون جملة ماركت 36/13/418/271126، الاسم فوق الأرقام):
+  "ايزيس ليمون 12 فتلة" ← 18.00 / 18.00 / 1 / 6223000470015
+  "كنور تتبيلة البطاطس 6 جم علبه × 40 قطعه" ← 130.00 / 130.00 / 1 / 6221155141507
+  "روز جاردن زيت ذرة 1.5 لتر" ← 195.00 / 195.00 / 1 / 6223006115798
+  "شيدر طبيعي اصفر ايرلاندي" ← 97.50 / 390.00 / 0.250 / 2303005000005 (موزون: 390 × 0.250 = 97.50 ✔)
+  يعني صنف كنور هنا سعره 130 وباركوده 6221155141507، مش 18.
+''';
+
+  /// Adds [posLinePairingRule] once to a receipt prompt.
+  static String withPosLinePairingRule(String prompt) =>
+      prompt.contains('TAG-84') ? prompt : '$prompt$posLinePairingRule';
+
+  /// TAG-87: printed discounts only. On receipt 62/12/224/27112026 the model
+  /// invented a discount under two lines that have none (Dove soap 45 read as
+  /// 38, Dove roll-on 77 read as 43), which cut 41 EGP from the Unilever spend
+  /// and pushed the receipt under the 200 tier. This is a prompt rule only:
+  /// the app has no raw receipt text to check a discount against. Appended to
+  /// every receipt prompt.
+  static const String posPrintedDiscountRule = '''
+
+🛑 قاعدة الخصم المطبوع فقط (Printed Discount Only - TAG-87):
+- الخصم بيتحسب بس لو في سطر "خصم" مطبوع **تحت سطر الصنف مباشرة** (مبلغ بعلامة ناقص زي 12.00-)، وقبل سطر الصنف اللي بعده.
+- لو مفيش سطر خصم مطبوع تحت الصنف: discountAmount = 0 و discountPercent = 0 و originalPrice = price = السعر المطبوع للقطعة (القيمة ÷ الكمية). ممنوع تخترع خصم.
+- ممنوع تاخد خصم مطبوع تحت صنف تاني، وممنوع تحسب خصم من كلمة العرض أو النسبة المكتوبة في اسم الصنف (زي "خصم 20%") لو مفيش سطر خصم تحته.
+- لو الخصم مطبوع، اكتب القيمة المطبوعة بالظبط: price = السعر - الخصم، originalPrice = السعر المطبوع.
+- مثال (بون فتح الله 62/12/224/27112026):
+  "دوف روول اون براي" 77.00 وتحتها "12.00-" خصم ← price 65 و originalPrice 77 و discountAmount 12.
+  "دوف صابون 90جم رو" 45.00 والسطر اللي بعده صنف تاني من غير سطر خصم ← price 45 و originalPrice 45 و discountAmount 0 (مش 38).
+  "دوف روول اون 50 م" 77.00 من غير سطر خصم تحتها ← price 77 و discountAmount 0 (مش 43).
+''';
+
+  /// Adds [posPrintedDiscountRule] once to a receipt prompt.
+  static String withPosPrintedDiscountRule(String prompt) =>
+      prompt.contains('TAG-87') ? prompt : '$prompt$posPrintedDiscountRule';
+
   CloudGenerativeModel? _modelCache;
   CloudGenerativeModel? _fastModelCache;
   CloudGenerativeModel? _deepAuditModelCache;
@@ -1428,6 +1477,67 @@ class AiReceiptService {
     bool forceDeepAudit = false,
     bool forceRefresh = false,
     bool reuseStoredAnalysis = false,
+  }) {
+    // TAG-77: one scan = one matcher memo (see PromotionalMatchScope).
+    return PromotionalMatchScope.run(() => _analyzeReceiptImageInScope(
+          imageBytes,
+          mimeType,
+          additionalImagesBytes: additionalImagesBytes,
+          additionalMimeTypes: additionalMimeTypes,
+          targetCompany: targetCompany,
+          minimumSpend: minimumSpend,
+          requiredProducts: requiredProducts,
+          registeredBarcodes: registeredBarcodes,
+          catalogBarcodeMap: catalogBarcodeMap,
+          retailChainName: retailChainName,
+          allowedBranches: allowedBranches,
+          isAllBranches: isAllBranches,
+          registeredBranches: registeredBranches,
+          campaignBranchIds: campaignBranchIds,
+          campaignBranchNames: campaignBranchNames,
+          startDate: startDate,
+          endDate: endDate,
+          customPrompt: customPrompt,
+          allowMultipleChances: allowMultipleChances,
+          multiplierBasis: multiplierBasis,
+          maxChancesPerReceipt: maxChancesPerReceipt,
+          promotionalRules: promotionalRules,
+          spendLadderMode: spendLadderMode,
+          allowComplementaryReceipts: allowComplementaryReceipts,
+          forceDeepAudit: forceDeepAudit,
+          forceRefresh: forceRefresh,
+          reuseStoredAnalysis: reuseStoredAnalysis,
+        ));
+  }
+
+  Future<AiReceiptAnalysisResult> _analyzeReceiptImageInScope(
+    Uint8List imageBytes,
+    String mimeType, {
+    List<Uint8List> additionalImagesBytes = const [],
+    List<String> additionalMimeTypes = const [],
+    required String targetCompany,
+    required double minimumSpend,
+    List<String> requiredProducts = const [],
+    List<String> registeredBarcodes = const [],
+    Map<String, String> catalogBarcodeMap = const {},
+    String retailChainName = '',
+    List<String> allowedBranches = const [],
+    bool isAllBranches = true,
+    List<BranchModel> registeredBranches = const [],
+    List<String> campaignBranchIds = const [],
+    List<String> campaignBranchNames = const [],
+    DateTime? startDate,
+    DateTime? endDate,
+    String customPrompt = '',
+    bool allowMultipleChances = false,
+    String multiplierBasis = 'both',
+    int maxChancesPerReceipt = 0,
+    List<PromotionalRuleItem> promotionalRules = const [],
+    String spendLadderMode = 'exclusive',
+    bool allowComplementaryReceipts = false,
+    bool forceDeepAudit = false,
+    bool forceRefresh = false,
+    bool reuseStoredAnalysis = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -1804,7 +1914,7 @@ $antiFraudMultiReceiptRule
 ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
 - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
 - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+  * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود في سطر أرقام الصنف: [القيمة] [السعر] [الكمية] [الباركود]، إما على نفس سطر الاسم أو في السطر اللي تحت الاسم مباشرة لو الاسم مطبوع في سطر لوحده (راجع قاعدة ربط اسم الصنف بسطر أرقامه - TAG-84).
   * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
   * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
 - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب وضع سعر القطعة الصافي في (price) = 99.0 ج.م، وسعر القطعة الأصلي في (originalPrice) = 115.0 ج.م، وقيمة الخصم للقطعة الواحدة في (discountAmount) = 16.0 ج.م، وإجمالي السطر في (totalLinePrice) = 198.0 ج.م.
@@ -1853,7 +1963,7 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
         ⚠️ تعليمات استخراج أسعار الأصناف والكميات والخصومات بدقة (Strict Unit Price & Discount Rules):
         - يجب أن يحتوي حقل (price) دائماً على سعر بيع القطعة الواحدة فقط (Unit Price).
         - [محاذاة السطور والباركود والكمية الحسابية - POS Row Alignment & AIR-26]:
-          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود على نفس السطر الأفقي للصنف تماماً: [القيمة] [السعر] [الكمية] [الصنف والباركود].
+          * في بونات السوبرماركت (خاصة جملة ماركت وفتح الله وكارفور)، تقع الكمية وسعر الوحدة والباركود في سطر أرقام الصنف: [القيمة] [السعر] [الكمية] [الباركود]، إما على نفس سطر الاسم أو في السطر اللي تحت الاسم مباشرة لو الاسم مطبوع في سطر لوحده (راجع قاعدة ربط اسم الصنف بسطر أرقامه - TAG-84).
           * احذر بشدة من قراءة كمية من السطر الذي يعلو أو يلي سطر الصنف! (مثلاً: إذا كان السطر السابق يحتوي على كمية 3 وسعر 3.33 وإجمالي 10.00، والسطر الحالي هو "(كلير شامبو رجالى 360مل (وفر JR)" بسعر 134.00 وإجمالي 134.00 وكمية 1 وباركود 6221155210517، فالكمية حتماً 1 قطعة فقط).
           * تحقق دائماً من المعادلة: الكمية = إجمالي السطر ÷ سعر الوحدة. إذا كان الإجمالي 134.00 والسعر 134.00 فالكمية = 1 وتمنح 1 هدية كلير 90 مل.
         - إذا اشترى العميل كمية (quantity = 2 أو أكثر)، وكان المطبوع في الفاتورة هو إجمالي السطر (مثل 2 × 115 = 230 أو 198 بعد الخصم)، فيجب:
@@ -1874,6 +1984,8 @@ isValid (boolean), receiptNumber (string), targetCompanyTotal (number), receiptD
       ''';
       }
 
+      finalPromptText = AiReceiptService.withPosLinePairingRule(finalPromptText);
+      finalPromptText = AiReceiptService.withPosPrintedDiscountRule(finalPromptText);
       final prompt = TextPart(finalPromptText);
 
       final aiStopwatch = Stopwatch()..start();
@@ -3580,7 +3692,7 @@ class PromotionalRuleMatcher {
     int? maxUnitsPerReceipt,
     String spendLadderMode = 'exclusive',
   }) {
-    final raw = _matchAllUncapped(
+    final raw = _matchAllUncappedInScope(
       result: result,
       extractedProducts: extractedProducts,
       promotionalRules: promotionalRules,
@@ -3768,6 +3880,92 @@ class PromotionalRuleMatcher {
       remaining -= newCount;
     }
     return out;
+  }
+
+  /// TAG-77: [_matchAllUncapped] with a per-scan memo. Inside a
+  /// [PromotionalMatchScope] (one receipt scan) a call with exactly the same
+  /// inputs returns a copy of the earlier answer instead of re-running the
+  /// matcher. Outside a scope it always computes. The key holds every input
+  /// the matcher reads: the identity of each rule object (so a combined
+  /// multi-scan rule list and one campaign's list never share an entry), every
+  /// field of every receipt line, the AI total and rule ids, and the flags.
+  static List<MatchedPromotionalRuleResult> _matchAllUncappedInScope({
+    AiReceiptAnalysisResult? result,
+    List<ExtractedProductItem> extractedProducts = const [],
+    required List<PromotionalRuleItem> promotionalRules,
+    bool allowCampaignMultipliers = true,
+    bool capSpendToAiTotal = true,
+    String spendLadderMode = 'exclusive',
+  }) {
+    List<MatchedPromotionalRuleResult> compute() => _matchAllUncapped(
+          result: result,
+          extractedProducts: extractedProducts,
+          promotionalRules: promotionalRules,
+          allowCampaignMultipliers: allowCampaignMultipliers,
+          capSpendToAiTotal: capSpendToAiTotal,
+          spendLadderMode: spendLadderMode,
+        );
+    final scope = PromotionalMatchScope.current;
+    if (scope == null || promotionalRules.isEmpty) return compute();
+    final effectiveProducts =
+        (result != null && result.extractedProducts.isNotEmpty)
+        ? result.extractedProducts
+        : extractedProducts;
+    // The no-lines path reads more of the AI result and is cheap: no memo.
+    if (effectiveProducts.isEmpty) return compute();
+    final key = matchMemoKey(
+      result: result,
+      effectiveProducts: effectiveProducts,
+      allowCampaignMultipliers: allowCampaignMultipliers,
+      capSpendToAiTotal: capSpendToAiTotal,
+      spendLadderMode: spendLadderMode,
+    );
+    return scope._lookup(key, promotionalRules, compute);
+  }
+
+  @visibleForTesting
+  static String matchMemoKey({
+    required AiReceiptAnalysisResult? result,
+    required List<ExtractedProductItem> effectiveProducts,
+    required bool allowCampaignMultipliers,
+    required bool capSpendToAiTotal,
+    required String spendLadderMode,
+  }) {
+    final b = StringBuffer()
+      ..write(allowCampaignMultipliers ? 'M1' : 'M0')
+      ..write(capSpendToAiTotal ? 'C1' : 'C0')
+      ..write('|')
+      ..write(spendLadderMode);
+    if (result == null) {
+      b.write('|R-');
+    } else {
+      b
+        ..write('|R')
+        ..write(result.targetCompanyTotal)
+        ..write('|')
+        ..write(jsonEncode(result.matchedRuleId))
+        ..write(jsonEncode(result.matchedRuleIds));
+    }
+    for (final p in effectiveProducts) {
+      b
+        ..write('|P')
+        ..write(jsonEncode(p.name))
+        ..write(',')
+        ..write(p.price)
+        ..write(',')
+        ..write(p.quantity)
+        ..write(',')
+        ..write(p.isTargetCompany ? 1 : 0)
+        ..write(',')
+        ..write(jsonEncode(p.barcode))
+        ..write(',')
+        ..write(p.originalPrice)
+        ..write(',')
+        ..write(p.discountAmount)
+        ..write(',')
+        ..write(p.discountPercent);
+    }
+    return b.toString();
   }
 
   static List<MatchedPromotionalRuleResult> _matchAllUncapped({
@@ -4645,6 +4843,78 @@ class PromotionalRuleMatcher {
     return brands;
   }
 
+  static const List<String> _companyWideMarkers = [
+    'شركه',
+    'شركة',
+    'company',
+    'كل منتجات',
+    'جميع منتجات',
+    'all products',
+  ];
+
+  /// True when a spend rule covers all of the company's products rather than
+  /// a single brand: it has no item scope at all, or its title or trigger
+  /// names the company (e.g. «من منتجات شركه يونيلفر»), or an umbrella
+  /// company name such as يونيليفر / نستله.
+  static bool isCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!_ruleHasItemScope(rule)) return true;
+    final text = '${_normalize(rule.ruleTitle)} ${_normalize(rule.triggerProduct)}';
+    if (_companyWideMarkers.any((m) => text.contains(_normalize(m)))) return true;
+    return _umbrellaCompanyNames.any((n) => text.contains(_normalize(n)));
+  }
+
+  /// TAG-87: a company-wide spend rule (see [isCompanyWideSpendRule]) that lists
+  /// many products (20 or more barcodes or catalog names), so one deodorant form
+  /// named in its text is a sample of the catalog, not a restriction.
+  static bool isBroadCompanyWideSpendRule(PromotionalRuleItem rule) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    final listed = math.max(
+      rule.selectedBarcodes.where((b) => b.trim().isNotEmpty).length,
+      rule.selectedProductNames.where((n) => n.trim().isNotEmpty).length,
+    );
+    return listed >= 20;
+  }
+
+  /// TAG-85: a spend rule with its own barcode list that does not cover the
+  /// whole company (see [isCompanyWideSpendRule]). It does not take lines that
+  /// a company-wide rule of the campaign lists by barcode. Combo rules keep
+  /// their own logic.
+  static bool isBarcodeScopedSpendRule(PromotionalRuleItem rule) {
+    if (rule.isCombo) return false;
+    if (!(rule.isSpendBased || rule.conditionType == 'by_spend')) return false;
+    if (!rule.selectedBarcodes.any((b) => b.trim().isNotEmpty)) return false;
+    return !isCompanyWideSpendRule(rule);
+  }
+
+  static bool _barcodeOutsideRuleCatalog(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    final barcode = product.barcode.trim();
+    if (barcode.isEmpty) return false;
+    final catalog = rule.selectedBarcodes
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (catalog.isEmpty) return false;
+    if (catalog.contains(barcode)) return false;
+    if (barcode.length >= 10 &&
+        catalog.any((b) => b.startsWith(barcode) || barcode.startsWith(b))) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Whether a company-flagged product may count toward [rule] without
+  /// matching the rule's brands (TAG-67).
+  static bool companySpendBypassAllowed(
+    ExtractedProductItem product,
+    PromotionalRuleItem rule,
+  ) {
+    if (!isCompanyWideSpendRule(rule)) return false;
+    return !_barcodeOutsideRuleCatalog(product, rule);
+  }
+
   static bool _ruleHasItemScope(PromotionalRuleItem? rule) =>
       rule != null &&
       (rule.selectedBarcodes.any((b) => b.trim().isNotEmpty) ||
@@ -4665,10 +4935,15 @@ class PromotionalRuleMatcher {
     // and the product strictly belongs to ANOTHER scoped spend rule of the same
     // campaign, it must not leak into this rule (e.g. Dairy Milk products being
     // counted on the Oreo rules). Strict = matched without the bypass.
+    // TAG-67: the company flag only stands in for brand membership on a rule
+    // that covers all of the company's products. A brand-scoped rule (e.g.
+    // Knorr only) must not count other products of the same company, and a
+    // product whose barcode is outside the rule's catalog never gets the bypass.
     bool isCompanySpendRule = allowCompanySpendBypass &&
         rule != null &&
         (rule.isSpendBased || rule.conditionType == 'by_spend') &&
-        product.isTargetCompany;
+        product.isTargetCompany &&
+        companySpendBypassAllowed(product, rule);
     if (isCompanySpendRule &&
         _ruleHasItemScope(rule) &&
         siblingRules != null &&
@@ -4725,9 +5000,34 @@ class PromotionalRuleMatcher {
       if (rule != null) ...rule.requiredBrands,
     };
 
+    // TAG-85: a spend rule scoped to its own barcode list (it does not cover the
+    // whole company, e.g. «from the following items only») must not count a
+    // line whose barcode is outside that list but inside the barcode list of a
+    // company-wide spend rule of the same campaign. That line belongs to the
+    // company-wide rule / ladder; the name / brand match would otherwise let
+    // the narrow rule swallow it (Unilever «300 -> 50» on its own 250 items took
+    // a whole receipt that the 200 / 400 / 700 ladder pays). A line with no
+    // barcode, or with a barcode no rule lists, still uses the name / brand
+    // match, so an incomplete catalog never loses a legit line. Rules of equal
+    // scope (a Knorr ladder whose tiers list slightly different barcodes) are
+    // not affected, which keeps TAG-67 / TAG-78 behaviour.
+    final bool barcodeScopedOut = rule != null &&
+        siblingRules != null &&
+        isBarcodeScopedSpendRule(rule) &&
+        _barcodeOutsideRuleCatalog(product, rule) &&
+        siblingRules.any((other) =>
+            other.id != rule.id &&
+            !other.isCombo &&
+            (other.isSpendBased || other.conditionType == 'by_spend') &&
+            other.selectedBarcodes.any((b) => b.trim().isNotEmpty) &&
+            isCompanyWideSpendRule(other) &&
+            !_barcodeOutsideRuleCatalog(product, other));
+
     // 0. Exact catalog-name match: a product whose name equals one of the
     // rule's selected product names belongs to the rule's item scope.
-    if (rule != null && rule.selectedProductNames.isNotEmpty) {
+    if (!barcodeScopedOut &&
+        rule != null &&
+        rule.selectedProductNames.isNotEmpty) {
       final nameNorm = _normalize(product.name);
       if (nameNorm.isNotEmpty &&
           rule.selectedProductNames.any((sel) => _normalize(sel) == nameNorm)) {
@@ -4767,6 +5067,10 @@ class PromotionalRuleMatcher {
         return true;
       }
     }
+
+    // TAG-85: the line belongs to a company-wide rule's list (no twin-bundle /
+    // trigger-barcode exception above): not a member of this narrow rule.
+    if (barcodeScopedOut) return false;
 
     final pNorm = _normalize(product.name);
     final triggerNorm = _normalize(triggerProduct);
@@ -4827,7 +5131,8 @@ class PromotionalRuleMatcher {
     // Disallows matching spray rules against roll-on products, coffee against confectionery, etc.
     final bool isProductRollOn =
         pNorm.contains('رول اون') ||
-        pNorm.contains('رول') ||
+        // TAG-87: «البتروليم» (Vaseline petroleum jelly) contains «رول».
+        (pNorm.contains('رول') && !pNorm.contains('بترول')) ||
         pNorm.contains('روول') ||
         pNorm.contains('ستيك') ||
         pNorm.contains('roll on') ||
@@ -4886,15 +5191,29 @@ class PromotionalRuleMatcher {
         pNorm.contains('بروميل') ||
         pNorm.contains('حليب اطفال');
 
-    final bool isTriggerRollOn =
+    final bool triggerNamesRollOn =
         fullRuleContext.contains('رول') ||
         fullRuleContext.contains('roll') ||
         fullRuleContext.contains('ستيك');
-    final bool isTriggerSpray =
+    final bool triggerNamesSpray =
         fullRuleContext.contains('اسبراي') ||
         fullRuleContext.contains('بخاخ') ||
         fullRuleContext.contains('spray') ||
-        (fullRuleContext.contains('150 مل') && !isTriggerRollOn);
+        (fullRuleContext.contains('150 مل') && !triggerNamesRollOn);
+    // TAG-87: a company-wide spend rule that lists many products covers both
+    // deodorant forms. Naming one of them in the rule text («اسبراي» among the
+    // brands) describes the catalog, it does not exclude the other form, so a
+    // roll-on line (e.g. a Dove roll-on with no readable barcode) must not be
+    // rejected by the spray / roll-on guards. A narrow rule that names one
+    // form keeps both guards.
+    final bool formWordsAreDescriptive = rule != null &&
+        (rule.isSpendBased || rule.conditionType == 'by_spend') &&
+        !rule.isCombo &&
+        isBroadCompanyWideSpendRule(rule);
+    final bool isTriggerRollOn =
+        triggerNamesRollOn || (formWordsAreDescriptive && triggerNamesSpray);
+    final bool isTriggerSpray =
+        triggerNamesSpray || (formWordsAreDescriptive && triggerNamesRollOn);
     final bool isTriggerShampoo =
         fullRuleContext.contains('شامبو') ||
         fullRuleContext.contains('shampoo') ||
@@ -5016,7 +5335,18 @@ class PromotionalRuleMatcher {
     }
 
     // 0.06 Selected Product Names from catalog match:
+    // TAG-77: same checks as before, in the same order. The receipt-line words
+    // are computed once (they do not depend on the catalog name) and each
+    // catalog name's normalized form and core words come from a pure cache.
     if (rule != null && rule.selectedProductNames.isNotEmpty) {
+      final pWords = pNorm
+          .split(' ')
+          .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+          .toList();
+      final pCoreWords = pWords
+          .where((w) => !_optionalNameDescriptors.contains(w))
+          .toList();
+      final bool pCoreAllInSel = pWords.length >= 2 && pCoreWords.length >= 2;
       for (final selName in rule.selectedProductNames) {
         final selNorm = _normalize(selName);
         if (pNorm == selNorm ||
@@ -5027,43 +5357,9 @@ class PromotionalRuleMatcher {
 
         // Token-based matching: handles supermarket POS descriptor omissions / additions
         // (e.g. POS prints "الضحى أرز 1كجم" while catalog has "الضحى ارز مصرى 1ك")
-        final pWords = pNorm
-            .split(' ')
-            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
-            .toList();
-        final selWords = selNorm
-            .split(' ')
-            .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
-            .toSet();
-
         if (pWords.length >= 2) {
-          const optionalDescriptors = {
-            'مصري',
-            'مصرى',
-            'فاخر',
-            'ممتاز',
-            'سادة',
-            'ساده',
-            'طبيعي',
-            'طبيعى',
-            'اصلي',
-            'اصلى',
-            'نقي',
-            'نقى',
-            'عادي',
-            'عادى',
-            'ابيض',
-            'بلدي',
-            'بلدى',
-          };
-          final pCoreWords = pWords
-              .where((w) => !optionalDescriptors.contains(w))
-              .toList();
-          final selCoreWords = selWords
-              .where((w) => !optionalDescriptors.contains(w))
-              .toSet();
-
-          if (pCoreWords.length >= 2 &&
+          final selCoreWords = _selectedNameCoreWords(selNorm);
+          if (pCoreAllInSel &&
               pCoreWords.every((w) => selCoreWords.contains(w))) {
             return true;
           }
@@ -5294,7 +5590,73 @@ class PromotionalRuleMatcher {
     return v1[t.length];
   }
 
+  // TAG-77: _normalize is a pure String -> String function (~45 regex
+  // passes). The matcher used to re-run it on every catalog name of a rule
+  // for every receipt line and every rule (3 x 3,331 names on Unilever), so
+  // it is memoized by its input. Same input -> same output, so results are
+  // unchanged and nothing can leak between campaigns.
+  static const int _normalizeCacheLimit = 20000;
+  static final Map<String, String> _normalizeCache = <String, String>{};
+
   static String _normalize(String s) {
+    final cached = _normalizeCache[s];
+    if (cached != null) return cached;
+    final out = _normalizeUncached(s);
+    if (_normalizeCache.length >= _normalizeCacheLimit) _normalizeCache.clear();
+    _normalizeCache[s] = out;
+    return out;
+  }
+
+  /// Words of a normalized catalog name used by the 0.06 token match, minus
+  /// noise words and optional descriptors. Pure function of [selNorm].
+  static const int _coreWordsCacheLimit = 20000;
+  static final Map<String, Set<String>> _selCoreWordsCache = <String, Set<String>>{};
+
+  static Set<String> _selectedNameCoreWords(String selNorm) {
+    final cached = _selCoreWordsCache[selNorm];
+    if (cached != null) return cached;
+    final words = Set<String>.unmodifiable(selNorm
+        .split(' ')
+        .where((w) => w.isNotEmpty && !_noiseWords.contains(w))
+        .where((w) => !_optionalNameDescriptors.contains(w)));
+    if (_selCoreWordsCache.length >= _coreWordsCacheLimit) _selCoreWordsCache.clear();
+    _selCoreWordsCache[selNorm] = words;
+    return words;
+  }
+
+  static const Set<String> _optionalNameDescriptors = {
+    'مصري',
+    'مصرى',
+    'فاخر',
+    'ممتاز',
+    'سادة',
+    'ساده',
+    'طبيعي',
+    'طبيعى',
+    'اصلي',
+    'اصلى',
+    'نقي',
+    'نقى',
+    'عادي',
+    'عادى',
+    'ابيض',
+    'بلدي',
+    'بلدى',
+  };
+
+  @visibleForTesting
+  static void clearNormalizeCachesForTest() {
+    _normalizeCache.clear();
+    _selCoreWordsCache.clear();
+  }
+
+  @visibleForTesting
+  static int get normalizeCacheSizeForTest => _normalizeCache.length;
+
+  @visibleForTesting
+  static String normalizeUncachedForTest(String s) => _normalizeUncached(s);
+
+  static String _normalizeUncached(String s) {
     var str = s.toEnglishDigits(convertDecimal: false).toLowerCase().trim();
     // Normalize Arabic diacritics / tatweel
     str = str.replaceAll(RegExp(r'[\u064B-\u0652\u0640]'), '');
@@ -5983,5 +6345,80 @@ class CompositePromotionalBundle {
       baseLinkedGifts: consolidateLinkedGifts(baseGifts),
       rewardChoiceGroups: choiceGroups,
     );
+  }
+}
+
+/// TAG-77: memo for the promotional matcher during ONE receipt scan.
+///
+/// Run the scan inside [run]; every [PromotionalRuleMatcher.matchAllWithMultipliers]
+/// call (and [PromotionalRuleMatcher.getUnfulfilledPromotionReasons], which
+/// calls it) with exactly the same inputs is then computed once. An entry is
+/// only reused when the rule list holds the very same rule objects in the same
+/// order, so a multi-scan's combined rules and each campaign's own (TAG-67
+/// scoped) rules never share an answer. The memo stops serving when the scan
+/// ends, and callers always get a fresh list.
+class PromotionalMatchScope {
+  PromotionalMatchScope._();
+
+  static final Object _zoneKey = Object();
+  final Map<String, List<_PromotionalMatchMemoEntry>> _memo = {};
+  bool _open = true;
+  int _hits = 0;
+  int _misses = 0;
+
+  /// Scope of the current zone, or null (no memo) outside a scan.
+  static PromotionalMatchScope? get current {
+    final s = Zone.current[_zoneKey];
+    return (s is PromotionalMatchScope && s._open) ? s : null;
+  }
+
+  /// Runs [body] as one scan. A nested call reuses the outer scan's memo.
+  static Future<T> run<T>(Future<T> Function() body) {
+    if (current != null) return body();
+    final scope = PromotionalMatchScope._();
+    return runZoned(
+      () => body().whenComplete(scope._close),
+      zoneValues: {_zoneKey: scope},
+    );
+  }
+
+  @visibleForTesting
+  static ({int hits, int misses}) statsOf(PromotionalMatchScope s) => (hits: s._hits, misses: s._misses);
+
+  void _close() {
+    _open = false;
+    _memo.clear();
+  }
+
+  List<MatchedPromotionalRuleResult> _lookup(
+    String key,
+    List<PromotionalRuleItem> rules,
+    List<MatchedPromotionalRuleResult> Function() compute,
+  ) {
+    final bucket = _memo.putIfAbsent(key, () => <_PromotionalMatchMemoEntry>[]);
+    for (final e in bucket) {
+      if (e.sameRules(rules)) {
+        _hits++;
+        return List<MatchedPromotionalRuleResult>.of(e.value);
+      }
+    }
+    _misses++;
+    final value = compute();
+    bucket.add(_PromotionalMatchMemoEntry(List<PromotionalRuleItem>.of(rules), List<MatchedPromotionalRuleResult>.of(value)));
+    return value;
+  }
+}
+
+class _PromotionalMatchMemoEntry {
+  _PromotionalMatchMemoEntry(this.rules, this.value);
+  final List<PromotionalRuleItem> rules;
+  final List<MatchedPromotionalRuleResult> value;
+
+  bool sameRules(List<PromotionalRuleItem> other) {
+    if (other.length != rules.length) return false;
+    for (var i = 0; i < rules.length; i++) {
+      if (!identical(rules[i], other[i])) return false;
+    }
+    return true;
   }
 }

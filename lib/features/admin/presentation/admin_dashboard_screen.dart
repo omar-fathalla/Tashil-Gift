@@ -5,9 +5,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
+import '../data/campaign_content_repository.dart';
 import '../domain/event_model.dart';
 import '../domain/campaign_status_toggle.dart';
 import 'create_event_screen.dart';
+import 'widgets/campaign_content_builder.dart';
 import 'widgets/campaign_drafts_sheet.dart';
 import 'campaign_reports_screen.dart';
 import '../../validation/presentation/invoices_log_screen.dart';
@@ -379,6 +381,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     if (confirmed == true && firestore != null) {
       try {
         await firestore.collection('events').doc(event.id).delete();
+        // TAG-62: its products/prompt docs too (best effort: the campaign is gone).
+        try {
+          await CampaignContentRepository(firestore).deleteContent(event.id);
+        } catch (e) {
+          debugPrint('TAG-62: content of deleted campaign ${event.id} not removed: $e');
+        }
         if (event.companySlug.isNotEmpty) {
           await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(event.companySlug);
         }
@@ -1569,14 +1577,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     colorScheme: colorScheme,
                     tooltip: isAr ? 'تاريخ بداية ونهاية سريان الحملة (يوم النهاية محسوب بتوقيت القاهرة)' : 'Campaign validity (end day inclusive, Cairo time)',
                   ),
-                if (event.requiredProducts.isNotEmpty)
+                // TAG-62: the count is on the campaign doc; the list itself
+                // may be in events/{id}/content and is not loaded for the list.
+                if (event.requiredProductsCount > 0)
                   _buildMetadataPill(
                     icon: Icons.inventory_2_outlined,
-                    label: '${isAr ? "الأصناف المستهدفة: " : "Target items: "}${amountFmt.format(event.requiredProducts.length)} ${isAr ? "صنفاً" : "items"}',
+                    label: '${isAr ? "الأصناف المستهدفة: " : "Target items: "}${amountFmt.format(event.requiredProductsCount)} ${isAr ? "صنفاً" : "items"}',
                     colorScheme: colorScheme,
-                    tooltip: isAr
-                        ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
-                        : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
+                    tooltip: !event.contentInfo.productsInline
+                        ? (isAr
+                            ? 'الأصناف المستهدفة (${event.requiredProductsCount} صنف) — القائمة كاملة في شاشة تعديل الحملة'
+                            : 'Target Products (${event.requiredProductsCount} items) — full list in the campaign editor')
+                        : isAr
+                            ? 'الأصناف المستهدفة (${event.requiredProducts.length} صنف):\n${event.requiredProducts.join(" • ")}'
+                            : 'Target Products (${event.requiredProducts.length} items):\n${event.requiredProducts.join(" • ")}',
                   ),
               ],
             ),
@@ -1587,14 +1601,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               context,
               icon: Icons.auto_awesome_outlined,
               title: isAr ? 'برومبت الذكاء الاصطناعي' : 'AI verification prompt',
-              subtitle: event.customPrompt.isNotEmpty
+              subtitle: event.customPrompt.isNotEmpty || !event.contentInfo.promptInline
                   ? (isAr ? 'برومبت مخصص' : 'Custom prompt')
                   : (isAr ? 'البرومبت الافتراضي للنظام' : 'System default prompt'),
               children: [
+                // TAG-62: a prompt in events/{id}/content loads when opened.
+                CampaignContentBuilder(
+                  event: event,
+                  builder: (context, content) => Column(children: [
                 Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: SelectableText(
-                    event.customPrompt.isNotEmpty ? event.customPrompt : (isAr ? 'يستخدم البرومبت الافتراضي الذكي للنظام' : 'Using smart system default prompt'),
+                    content.prompt.isNotEmpty ? content.prompt : (isAr ? 'يستخدم البرومبت الافتراضي الذكي للنظام' : 'Using smart system default prompt'),
                     style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
                   ),
                 ),
@@ -1604,7 +1622,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   child: TextButton.icon(
                     style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: event.customPrompt));
+                      Clipboard.setData(ClipboardData(text: content.prompt));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(isAr ? 'تم نسخ البرومبت بنجاح!' : 'AI Prompt copied to clipboard!'),
@@ -1615,6 +1633,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     icon: const Icon(Icons.copy_rounded, size: 18),
                     label: Text(isAr ? 'نسخ البرومبت' : 'Copy prompt'),
                   ),
+                ),
+                  ]),
                 ),
               ],
             ),

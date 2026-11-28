@@ -20,9 +20,9 @@ import '../../../core/localization/locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/services/campaign_ai_assistant_service.dart';
 import '../../../core/services/partner_portal_auth_service.dart';
+import '../data/campaign_content_repository.dart';
 import '../domain/company_model.dart';
 import '../domain/event_model.dart';
-import '../domain/campaign_stock_integrity.dart';
 import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
 import '../domain/campaign_activation_review.dart';
@@ -331,6 +331,59 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         _branchAllocationQuantities.putIfAbsent(bKey, () => {})[key] = p.allocatedQuantity;
       }
     }
+    _loadEditContent();
+  }
+
+  // TAG-62: the edited campaign with its products/prompt loaded from
+  // events/{id}/content (same instance when they are on the campaign doc).
+  EventModel? _openedEvent;
+  bool _contentLoading = false;
+  String? _contentError;
+
+  Future<void> _loadEditContent() async {
+    final edited = widget.eventToEdit;
+    if (edited == null) return;
+    if (!edited.contentInfo.needsLoad) {
+      _openedEvent = edited;
+      return;
+    }
+    setState(() {
+      _contentLoading = true;
+      _contentError = null;
+    });
+    try {
+      final loaded = await CampaignContentRepository(ref.read(firestoreProvider)).hydrate(edited);
+      if (!mounted) return;
+      setState(() {
+        _openedEvent = loaded;
+        _contentLoading = false;
+        // A resumed draft keeps its own products and prompt.
+        if (widget.resumeDraft == null) {
+          _requiredProductsController.text = loaded.requiredProducts.join(', ');
+          _customPromptController.text = loaded.customPrompt;
+        }
+      });
+    } catch (e) {
+      debugPrint('TAG-62: campaign content not loaded: $e');
+      if (!mounted) return;
+      setState(() {
+        _contentLoading = false;
+        _contentError = 'تعذر تحميل منتجات الحملة وتعليمات الذكاء الاصطناعي. اقفل الصفحة وافتحها تاني قبل الحفظ.';
+      });
+    }
+  }
+
+  /// TAG-62: no save while the products/prompt of the edited campaign are
+  /// not loaded (saving would replace them with an empty list).
+  bool _contentBlocksSave() {
+    if (!_contentLoading && _contentError == null) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_contentError ?? 'لسه بنحمّل منتجات الحملة، استنى ثواني وجرّب تاني.', style: GoogleFonts.cairo()),
+        backgroundColor: _contentError != null ? Theme.of(context).colorScheme.error : null,
+      ),
+    );
+    return true;
   }
 
   Future<void> _loadBranchesForChain(String chainId) async {
@@ -4287,6 +4340,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   /// C-05: saves the form to event_drafts only. Reps, branches, the portals,
   /// claims, stats and auto-close never read that collection.
   Future<void> _saveDraft() async {
+    if (_contentBlocksSave()) return;
     if (_eventNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('اكتب اسم الحملة الأول عشان تحفظ المسودة.', style: GoogleFonts.cairo())),
@@ -4345,6 +4399,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   }
 
   Future<void> _saveEvent() async {
+    if (_contentBlocksSave()) return;
     if (!_formKey.currentState!.validate()) return;
 
     // 2.0.162 (issue #3): block an end day before the start day.
@@ -4377,23 +4432,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    // TG-2: a tier option must point at a stock row of the same gift and
-    // value, otherwise every claim of it fails as "no stock".
-    final stockError = CampaignStockIntegrity.tierOptionStockError(
-      rules: preview.promotionalRules,
-      prizes: [...preview.allocatedPrizes, ...?widget.eventToEdit?.allocatedPrizes],
-    );
-    if (stockError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(stockError, style: GoogleFonts.cairo()),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          duration: const Duration(seconds: 10),
-        ),
-      );
-      return;
-    }
-
+    // TAG-45: no stock check on save (TG-2/TAG-43 tier-gift check removed);
+    // the server still decides every claim.
     // C-05: review data, conditions, stock per branch, links and risky
     // settings before anything is written (replaces the missing-dates prompt,
     // which is now one of the review warnings).
@@ -4435,13 +4475,19 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       final outcome = await _saveFlow.run(
         target: target,
         write: isNew
-            ? () => firestore.collection('events').doc(eventId).set(event.toFirestore())
+            // TAG-62: campaign + events/{id}/content docs in one batch.
+            ? () => CampaignContentRepository(firestore).createWithContent(
+                  eventId: eventId,
+                  payload: event.toFirestore(),
+                  products: event.requiredProducts,
+                  prompt: event.customPrompt,
+                )
             // C-02: transaction on the stored campaign; only changed fields
             // are written and stock rows are merged from fresh data.
             : () => CampaignEditSave.save(
                   firestore: firestore,
                   draft: event,
-                  opened: widget.eventToEdit!,
+                  opened: _openedEvent ?? widget.eventToEdit!,
                   updatedBy: uid,
                 ),
       );
@@ -4467,11 +4513,14 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            // TAG-50: show the real Firebase code/message, not only a generic text.
             content: Text(e is CampaignEditRejected
                 ? e.message
-                : AppErrorHandler.getFriendlyMessage(e, defaultMessage: 'حدث خطأ أثناء حفظ الحملة')),
+                : e is CampaignContentTooLarge
+                    ? e.message
+                    : AppErrorHandler.getMessageWithCode(e, defaultMessage: 'حدث خطأ أثناء حفظ الحملة')),
             backgroundColor: Theme.of(context).colorScheme.error,
-            duration: e is CampaignEditRejected ? const Duration(seconds: 10) : const Duration(seconds: 4),
+            duration: e is CampaignEditRejected ? const Duration(seconds: 10) : const Duration(seconds: 8),
           ),
         );
       }
@@ -4525,6 +4574,16 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       } else if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
+    }
+  }
+
+  /// TAG-62: removes events/{id}/content of a deleted campaign. The campaign
+  /// is already gone, so a failure here only leaves unused docs behind.
+  Future<void> _deleteContentBestEffort(String eventId) async {
+    try {
+      await CampaignContentRepository(ref.read(firestoreProvider)).deleteContent(eventId);
+    } catch (e) {
+      debugPrint('TAG-62: content of deleted campaign $eventId not removed: $e');
     }
   }
 
@@ -4658,6 +4717,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       try {
         final firestore = ref.read(firestoreProvider);
         await firestore.collection('events').doc(widget.eventToEdit!.id).delete();
+        await _deleteContentBestEffort(widget.eventToEdit!.id);
         if (widget.eventToEdit!.companySlug.isNotEmpty) {
           await ref.read(companyGiftsServiceProvider).syncCompanyGiftsAvailableQuantities(widget.eventToEdit!.companySlug);
         }

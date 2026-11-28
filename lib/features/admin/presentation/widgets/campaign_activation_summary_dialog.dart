@@ -131,8 +131,10 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
                         child: Text('• ${CampaignActivationReview.describeRule(r)}', style: tt.bodyMedium),
                       ),
                   ]),
+                  // TAG-45: stock is shown as plain info only (no red, no
+                  // "no stock" line); the section is hidden when empty.
+                  if (review.stockByBranch.isNotEmpty)
                   section('الهدايا والرصيد لكل فرع', Icons.inventory_2_outlined, [
-                    if (review.stockByBranch.isEmpty) Text('لا يوجد رصيد', style: tt.bodyMedium?.copyWith(color: cs.error)),
                     for (final entry in review.stockByBranch.entries) ...[
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -141,7 +143,7 @@ class CampaignActivationSummaryDialog extends StatelessWidget {
                       for (final AllocatedPrize p in entry.value)
                         Text(
                           '   ${CampaignWording.giftLabel(p.name)}: ${p.allocatedQuantity}${review.isNew ? '' : ' (المتبقي ${p.remainingQuantity})'}',
-                          style: tt.bodyMedium?.copyWith(color: p.remainingQuantity <= 0 ? cs.error : null),
+                          style: tt.bodyMedium,
                         ),
                     ],
                     if (review.stockByBranch.isNotEmpty)

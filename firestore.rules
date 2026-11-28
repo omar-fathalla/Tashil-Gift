@@ -126,6 +126,16 @@ service cloud.firestore {
           allow write: if isAdmin();
         }
       }
+
+      // TAG-62: campaign products / AI prompt (products, products_N, prompt).
+      // Read like the campaign itself; only admins write (Cloud Functions use
+      // the Admin SDK).
+      match /content/{docId} {
+        allow read: if isAdmin()
+          || (isAnonymous() && eventData(eventId).isActive == true)
+          || sameCompany(eventData(eventId).companySlug);
+        allow write: if isAdmin();
+      }
     }
 
     match /receipts_transactions/{txId} {
