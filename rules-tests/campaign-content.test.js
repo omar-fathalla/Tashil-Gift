@@ -80,3 +80,26 @@ describe("TAG-62 campaign content rules", () => {
     await assertSucceeds(deleteDoc(doc(a, "events/big/content/products_1")));
   });
 });
+
+describe("TAG-65 large draft content rules", () => {
+  test("admin writes a draft with chunked content in one batch; nobody else reads or writes it", async () => {
+    const a = admin();
+    const list = products(10000);
+    const half = Math.ceil(list.length / 2);
+    const batch = writeBatch(a);
+    batch.set(doc(a, "event_drafts/d1"), { eventName: "Big", companySlug: "acme", event: { eventName: "Big" }, base: null,
+      externalContent: { version: 7, event: { chunks: 2, count: list.length }, base: null } });
+    batch.set(doc(a, "event_drafts/d1/content/event_products_0"), { items: list.slice(0, half), index: 0, version: 7 });
+    batch.set(doc(a, "event_drafts/d1/content/event_products_1"), { items: list.slice(half), index: 1, version: 7 });
+    batch.set(doc(a, "event_drafts/d1/content/event_prompt"), { text: PROMPT, version: 7 });
+    await assertSucceeds(batch.commit());
+    const all = await assertSucceeds(getDocs(collection(a, "event_drafts/d1/content")));
+    expect(all.size).toBe(3);
+
+    for (const ctx of [partner(), partnerOps(), anon(), testEnv.unauthenticatedContext().firestore()]) {
+      await assertFails(getDoc(doc(ctx, "event_drafts/d1/content/event_prompt")));
+      await assertFails(setDoc(doc(ctx, "event_drafts/d1/content/event_products_0"), { items: [], index: 0, version: 8 }));
+    }
+    await assertSucceeds(deleteDoc(doc(a, "event_drafts/d1/content/event_products_1")));
+  });
+});
