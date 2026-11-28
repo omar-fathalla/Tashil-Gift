@@ -6,7 +6,7 @@ import 'firebase_service.dart';
 import 'chain_products_intelligence_service.dart';
 import '../utils/arabic_numbers_utils.dart';
 import '../../features/admin/domain/retail_chain_model.dart';
-import '../../features/admin/domain/campaign_save_confirmation.dart' show WriteNotConfirmedException;
+import '../utils/confirmed_write.dart';
 
 final retailChainsServiceProvider = Provider<RetailChainsService>((ref) {
   final firestore = ref.watch(firestoreProvider);
@@ -145,37 +145,23 @@ class RetailChainsService {
     );
 
     final write = docRef.set(toSave.toFirestore(), SetOptions(merge: true));
-    if (confirmWrite) {
-      await _confirmedWrite(write, docRef.path);
-    } else {
-      await write.timeout(
-        const Duration(seconds: 4),
-        onTimeout: () {},
-      );
-    }
+    // TAG-35 (N-01b): every save waits for the server; [confirmWrite] is kept
+    // for callers but no longer allows an unconfirmed «success».
+    await _confirmedWrite(write, docRef.path);
 
     return false;
   }
 
   /// N-01: waits for the server; a write still pending after the wait throws
   /// [WriteNotConfirmedException] instead of counting as saved.
-  Future<void> _confirmedWrite(Future<void> write, String path) async {
-    unawaited(write.then((_) {}, onError: (Object _) {}));
-    try {
-      await write.timeout(const Duration(seconds: 15));
-    } on TimeoutException {
-      throw WriteNotConfirmedException(path);
-    }
-  }
+  Future<void> _confirmedWrite(Future<void> write, String path) => confirmedWrite(write, path);
 
   Future<void> updateRetailChain(RetailChainModel chain) async {
     final cleanSlug = chain.slug.toLowerCase().trim().toEnglishDigits();
-    await _chainsCollection.doc(chain.id).set(
-      chain.copyWith(slug: cleanSlug).toFirestore(),
-      SetOptions(merge: true),
-    ).timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
+    final ref = _chainsCollection.doc(chain.id);
+    await confirmedWrite(
+      ref.set(chain.copyWith(slug: cleanSlug).toFirestore(), SetOptions(merge: true)),
+      ref.path,
     );
   }
 
@@ -189,10 +175,7 @@ class RetailChainsService {
     }
     batch.delete(_chainsCollection.doc(chainId));
 
-    await batch.commit().timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
-    );
+    await confirmedWrite(batch.commit(), _chainsCollection.doc(chainId).path, isDelete: true);
   }
 
   // --- BRANCHES STREAMS & QUERIES ---
@@ -372,14 +355,9 @@ class RetailChainsService {
     );
 
     final write = docRef.set(toSave.toFirestore(), SetOptions(merge: true));
-    if (confirmWrite) {
-      await _confirmedWrite(write, docRef.path);
-    } else {
-      await write.timeout(
-        const Duration(seconds: 4),
-        onTimeout: () {},
-      );
-    }
+    // TAG-35 (N-01b): every save waits for the server; [confirmWrite] is kept
+    // for callers but no longer allows an unconfirmed «success».
+    await _confirmedWrite(write, docRef.path);
 
     // Update branches count in parent chain
     await _recalculateChainBranchesCount(branch.retailChainId);
@@ -456,10 +434,11 @@ class RetailChainsService {
         city: branch.city.isNotEmpty ? branch.city : (existingData['city']?.toString() ?? ''),
         address: branch.address.isNotEmpty ? branch.address : (existingData['address']?.toString() ?? ''),
       );
-      await _branchesCollection.doc(existingDoc.id).set(
-        mergedBranch.toFirestore(),
-        SetOptions(merge: true),
-      ).timeout(const Duration(seconds: 4), onTimeout: () {});
+      final existingRef = _branchesCollection.doc(existingDoc.id);
+      await confirmedWrite(
+        existingRef.set(mergedBranch.toFirestore(), SetOptions(merge: true)),
+        existingRef.path,
+      );
       await _recalculateChainBranchesCount(branch.retailChainId);
       return true; // updated
     }
@@ -476,10 +455,7 @@ class RetailChainsService {
       createdAt: branch.createdAt ?? DateTime.now(),
     );
 
-    await docRef.set(toSave.toFirestore(), SetOptions(merge: true)).timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
-    );
+    await confirmedWrite(docRef.set(toSave.toFirestore(), SetOptions(merge: true)), docRef.path);
 
     await _recalculateChainBranchesCount(branch.retailChainId);
     return false; // newly created
@@ -487,20 +463,16 @@ class RetailChainsService {
 
   Future<void> updateBranch(BranchModel branch) async {
     final cleanCode = branch.branchCode.trim().toUpperCase().toEnglishDigits();
-    await _branchesCollection.doc(branch.id).set(
-      branch.copyWith(branchCode: cleanCode).toFirestore(),
-      SetOptions(merge: true),
-    ).timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
+    final ref = _branchesCollection.doc(branch.id);
+    await confirmedWrite(
+      ref.set(branch.copyWith(branchCode: cleanCode).toFirestore(), SetOptions(merge: true)),
+      ref.path,
     );
   }
 
   Future<void> deleteBranch(String branchId, String retailChainId) async {
-    await _branchesCollection.doc(branchId).delete().timeout(
-      const Duration(seconds: 4),
-      onTimeout: () {},
-    );
+    final ref = _branchesCollection.doc(branchId);
+    await confirmedWrite(ref.delete(), ref.path, isDelete: true);
 
     await _recalculateChainBranchesCount(retailChainId);
   }

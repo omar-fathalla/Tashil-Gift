@@ -1,12 +1,17 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'confirmed_write.dart';
+
 /// AppErrorHandler provides centralized, user-friendly Arabic error messaging
 /// tailored for an Online-Only (أونلاين فقط) system architecture.
 class AppErrorHandler {
   /// Converts any error/exception into a clear, actionable Arabic message.
   static String getFriendlyMessage(dynamic error, {String? defaultMessage}) {
     if (error == null) return defaultMessage ?? 'حدث خطأ أثناء معالجة البيانات، يرجى المحاولة ثانية';
+
+    // TAG-35 (N-01b): a write the server has not confirmed yet.
+    if (error is WriteNotConfirmedException) return WriteNotConfirmedException.message;
 
     final str = error.toString().toLowerCase();
 
