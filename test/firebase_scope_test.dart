@@ -48,7 +48,10 @@ void main() {
       if (!f.path.endsWith('.dart')) continue;
       if (f.path.endsWith('firebase_scope.dart') ||
           f.path.endsWith('main.dart') ||
-          f.path.endsWith('app_check_bootstrap.dart')) {
+          f.path.endsWith('app_check_bootstrap.dart') ||
+          // Emulator-only wiring (FIREBASE_EMULATOR builds): it must attach
+          // the default app's singletons to localhost, like main.dart.
+          f.path.endsWith('firebase_emulator_config.dart')) {
         continue;
       }
       for (final line in f.readAsLinesSync()) {

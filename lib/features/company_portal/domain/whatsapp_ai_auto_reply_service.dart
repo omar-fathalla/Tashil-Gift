@@ -9,18 +9,23 @@ import 'whatsapp_gateway_service.dart';
 /// Service for Intelligent WhatsApp Customer Service & AI Auto-Reply
 /// Powered strictly by [AiModels.helperServices] at temperature 0.0 (Rule 5 & Rule 10)
 class WhatsAppAiAutoReplyService {
-  late final CloudGenerativeModel _primaryModel;
-  late final CloudGenerativeModel _fallbackModel;
+  // TAG-73: built on first use (inside generateReply's try), so creating the
+  // service never fails when Firebase is not ready; the reply then falls back.
+  late final CloudGenerativeModel _primaryModel =
+      _primaryOverride ?? _buildModel(AiModels.helperServices);
+  late final CloudGenerativeModel _fallbackModel =
+      _fallbackOverride ?? _buildModel(AiModels.helperServicesFallback);
+  final CloudGenerativeModel? _primaryOverride;
+  final CloudGenerativeModel? _fallbackOverride;
   final WhatsAppGatewayService _gatewayService;
 
   WhatsAppAiAutoReplyService({
     WhatsAppGatewayService? gatewayService,
     CloudGenerativeModel? primaryModel,
     CloudGenerativeModel? fallbackModel,
-  })  : _gatewayService = gatewayService ?? WhatsAppGatewayService() {
-    _primaryModel = primaryModel ?? _buildModel(AiModels.helperServices);
-    _fallbackModel = fallbackModel ?? _buildModel(AiModels.helperServicesFallback);
-  }
+  })  : _gatewayService = gatewayService ?? WhatsAppGatewayService(),
+        _primaryOverride = primaryModel,
+        _fallbackOverride = fallbackModel;
 
   static CloudGenerativeModel _buildModel(String modelName) {
     return CloudGenerativeModel(
