@@ -28,6 +28,7 @@ import '../domain/company_model.dart';
 import '../domain/event_model.dart';
 import '../domain/campaign_edit_save.dart';
 import '../domain/campaign_draft.dart';
+import '../domain/linked_gift_cleanup.dart';
 import '../domain/campaign_activation_review.dart';
 import '../domain/campaign_wording.dart';
 import '../domain/campaign_save_confirmation.dart';
@@ -1680,17 +1681,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             ..addAll(updatedMap);
         }
 
-        // Clean up promotional rules from deleted gifts
-        _promotionalRules = _promotionalRules.where((rule) {
-          if (rule.linkedGifts.isNotEmpty) {
-            rule.linkedGifts.removeWhere((lg) => !gifts.any((g) => g.id == lg.giftId || g.giftName == lg.giftName));
-          }
-          if (rule.linkedGiftId != null && rule.linkedGiftId!.isNotEmpty) {
-            final exists = gifts.any((g) => g.id == rule.linkedGiftId || g.giftName == rule.linkedGiftName);
-            if (!exists) return false;
-          }
-          return true;
-        }).toList();
+        // TAG-40: drop links to deleted gifts and re-point links found by
+        // name to the gift's current id, so the save leaves no dead refs.
+        _promotionalRules = LinkedGiftCleanup.reconcile(_promotionalRules, gifts);
       });
     }
   }
@@ -4332,7 +4325,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         maxChancesPerReceipt: _maxChancesController.text.trim().toIntOrNull() ?? 0,
         promotionalIdea: _promotionalIdeaController.text.trim(),
         aiValidationSummary: _aiValidationSummary.trim(),
-        promotionalRules: _promotionalRules.map((rule) {
+        // TAG-40: the saved rules never keep a link to a deleted gift.
+        promotionalRules: LinkedGiftCleanup.reconcile(_promotionalRules, _companyGifts).map((rule) {
           if (rule.conditionType == 'by_quantity' && (rule.minSpend > 0 || rule.maxSpend != null || rule.discountTolerance > 0)) {
             return rule.copyWith(minSpend: 0.0, maxSpend: null, discountTolerance: 0.0);
           }
