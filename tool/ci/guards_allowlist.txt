@@ -1,0 +1,33 @@
+# Intended findings of tool/ci/static_guards.py (TAG-82).
+# One rule per line:  check | path glob | substring of the line, or * for any line | reason
+# A rule that stops matching anything is reported so it can be removed.
+# Adding a rule here, or changing deploy-production.yml, is Mohamed's decision.
+
+# --- The production deploy workflow: its whole job is tashil-gift. ---
+prod-project     | .github/workflows/deploy-production.yml | * | production deploy and its live checks
+firebase-project | .github/workflows/deploy-production.yml | --project tashil-gift | production deploy (environment approval)
+
+# --- Text that names prod but runs nothing against it. ---
+prod-project | .github/workflows/checks.yml | description: "prod (default, tashil-gift | input description of app_env
+prod-project | firebase.json | "bucket": "tashil-gift.firebasestorage.app" | prod Storage rules target; tool/dev/render_firebase_dev_json.py swaps it for dev
+prod-project | firebase.json | us-central1-tashil-gift.cloudfunctions.net | prod CSP connect-src; dev adds its own host at render time
+
+# --- Legacy preview channel on tashil-gift (Hosting files only), off with DISABLE_PROD_PREVIEW_FALLBACK. ---
+prod-project     | .github/workflows/dev-preview.yml | --project tashil-gift --expires 7d | legacy pr-N channel on prod Hosting
+firebase-project | .github/workflows/dev-preview.yml | --project tashil-gift --expires 7d | legacy pr-N channel on prod Hosting
+
+# --- Guards that name prod in order to refuse it. ---
+prod-project | tool/seed_dev_lib.js | const PROD_PROJECT_ID = "tashil-gift"; | seed refuses prod
+prod-project | tool/seed_dev_lib.js | REFUSED: tashil-gift is PRODUCTION | seed refusal message
+prod-project | tool/seed_dev_lib.js | /tashil-gift\.(web\.app|firebasestorage\.app)|\/projects\/tashil-gift\// | seed refuses data that points at prod
+prod-project | tool/dev/deploy_dev.sh | grep -q '"tashil-gift.firebasestorage.app"' firebase.dev.json | dev deploy refuses the prod bucket
+prod-project | tool/dev/render_firebase_dev_json.py | PROD_BUCKET = "tashil-gift.firebasestorage.app" | the prod bucket it swaps for dev
+prod-project | tool/dev/render_firebase_dev_json.py | (tashil-gift.firebasestorage.app). Deploying `storage` with it | docstring explaining why it swaps the bucket
+prod-project | tool/dev/render_firebase_dev_json.py | "https://us-central1-tashil-gift.cloudfunctions.net | the prod functions host it swaps in the CSP
+prod-project | functions/scripts/run_hosting_cache_emulator.sh | *tashil-gift*) | emulator script refuses prod
+prod-project | functions/scripts/check_hosting_cache_emulator.js | if (PROJECT === "tashil-gift" | emulator check refuses prod
+
+# --- The guard and its self-tests describe and plant the cases they catch. ---
+prod-project     | tool/ci/static_guards.py | * | docstring describes the check
+prod-project     | tool/ci/test_gate_tools.py | * | planted test cases
+firebase-project | tool/ci/test_gate_tools.py | * | planted test cases

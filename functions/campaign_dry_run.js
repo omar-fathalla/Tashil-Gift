@@ -7,6 +7,7 @@
  */
 const { HttpsError } = require("firebase-functions/v2/https");
 const { evaluateClaimEligibility } = require("./campaign_eligibility");
+const { withCampaignContent, CampaignContentUnavailable } = require("./campaign_content");
 
 const STAFF_ROLES = new Set(["super_admin", "admin"]);
 const MAX_LINES = 200;
@@ -62,14 +63,30 @@ async function dryRunCampaignEligibilityHandler(db, request, nowMs = Date.now())
   }
 
   let campaign;
-  if (plainObject(data.campaign)) {
-    campaign = data.campaign;
-  } else if (typeof data.eventId === "string" && data.eventId.trim()) {
-    const snap = await db.collection("events").doc(data.eventId.trim()).get();
-    if (!snap.exists) throw new HttpsError("not-found", "الحملة غير موجودة.");
-    campaign = snap.data();
-  } else {
-    throw new HttpsError("invalid-argument", "لازم تبعت بيانات الحملة.");
+  try {
+    if (plainObject(data.campaign)) {
+      campaign = data.campaign;
+      // TAG-62: a large product list is not sent; use the stored one.
+      const contentEventId = typeof data.contentEventId === "string" ? data.contentEventId.trim() : "";
+      if (contentEventId && !Array.isArray(campaign.requiredProducts)) {
+        const snap = await db.collection("events").doc(contentEventId).get();
+        if (!snap.exists) throw new HttpsError("not-found", "الحملة غير موجودة.");
+        const stored = await withCampaignContent(db, contentEventId, snap.data() || {}, { prompt: false });
+        campaign = Object.assign({}, campaign, { requiredProducts: stored.requiredProducts || [] });
+      }
+    } else if (typeof data.eventId === "string" && data.eventId.trim()) {
+      const eventId = data.eventId.trim();
+      const snap = await db.collection("events").doc(eventId).get();
+      if (!snap.exists) throw new HttpsError("not-found", "الحملة غير موجودة.");
+      campaign = await withCampaignContent(db, eventId, snap.data() || {}, { prompt: false });
+    } else {
+      throw new HttpsError("invalid-argument", "لازم تبعت بيانات الحملة.");
+    }
+  } catch (e) {
+    if (e instanceof CampaignContentUnavailable) {
+      throw new HttpsError("failed-precondition", "تعذر قراءة منتجات الحملة المحفوظة.");
+    }
+    throw e;
   }
 
   let receipt;

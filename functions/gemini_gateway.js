@@ -1,5 +1,6 @@
 const LRU = require("lru-cache");
 const { consumeRateLimit } = require("./rate_limit");
+const { withCampaignContent } = require("./campaign_content");
 const crypto = require("node:crypto");
 
 /**
@@ -110,7 +111,8 @@ async function getCachedCampaignProducts(db, campaignId) {
 
   const doc = await db.collection("events").doc(campaignId).get();
   if (!doc.exists) return [];
-  const data = doc.data() || {};
+  // TAG-62: large campaigns keep the list in events/{id}/content.
+  const data = await withCampaignContent(db, campaignId, doc.data() || {}, { prompt: false });
   const products = data.requiredProducts || data.eligibleProducts || [];
   campaignProductsCache.set(campaignId, products);
   return products;

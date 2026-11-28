@@ -165,7 +165,13 @@ class CompanyGiftsService {
     return usage;
   }
 
-  /// Stream of all stock movements and audit logs for a company (or a specific gift).
+  /// Max movements read per stream (AGENTS.md rule 9: bounded reads).
+  static const int stockMovementsLimit = 200;
+
+  /// Stream of the latest stock movements and audit logs for a company (or a
+  /// specific gift), newest first, capped at [stockMovementsLimit].
+  /// Uses the existing composite indexes `companySlug + timestamp desc` and
+  /// `companySlug + giftId + timestamp desc` (firestore.indexes.json).
   Stream<List<GiftStockMovement>> stockMovementsStream(String companySlug, {String? giftId}) {
     final slug = companySlug.toLowerCase().trim();
     if (slug.isEmpty) return Stream.value([]);
@@ -177,6 +183,8 @@ class CompanyGiftsService {
     if (giftId != null && giftId.isNotEmpty) {
       query = query.where('giftId', isEqualTo: giftId);
     }
+
+    query = query.orderBy('timestamp', descending: true).limit(stockMovementsLimit);
 
     return query.snapshots().map((snap) {
       final list = snap.docs.map((d) => GiftStockMovement.fromFirestore(d)).toList();

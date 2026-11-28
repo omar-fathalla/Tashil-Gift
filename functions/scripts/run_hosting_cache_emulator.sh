@@ -37,7 +37,7 @@ write_if_missing "$FIXTURE_DIR/icons/keep.png" 'FIXTURE_ICON'
 write_if_missing "$FIXTURE_DIR/fonts/keep.ttf" 'FIXTURE_FONT'
 
 export CI=1
-exec npx -y firebase-tools@15.36.0 emulators:exec \
+exec npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION:-15.37.0}" emulators:exec \
   --project "$PROJECT" \
   --only hosting,functions,firestore \
   "node functions/scripts/check_hosting_cache_emulator.js"

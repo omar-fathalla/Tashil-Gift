@@ -55,6 +55,22 @@ class AppErrorHandler {
         default:
           break;
       }
+      // TAG-50: codes a campaign save can hit (Firestore only; Cloud
+      // Functions errors with these codes keep their own handling below).
+      if (error.plugin == 'cloud_firestore') {
+        switch (error.code) {
+          case 'invalid-argument':
+            return 'قاعدة البيانات رفضت البيانات المرسلة: غالباً حجم المستند أكبر من الحد المسموح (1 ميجابايت) أو فيه قيمة غير صالحة.';
+          case 'aborted':
+            return 'الحفظ اتلغى بسبب تعديل تاني على نفس البيانات في نفس الوقت. حاول تاني.';
+          case 'failed-precondition':
+            return 'العملية محتاجة شرط مش متوفر حالياً (البيانات اتغيرت أو فهرس ناقص). حدّث الصفحة وحاول تاني.';
+          case 'resource-exhausted':
+            return 'تم تجاوز حد الاستخدام أو حجم البيانات المسموح في قاعدة البيانات. استنى شوية أو قلّل حجم البيانات وحاول تاني.';
+          default:
+            break;
+        }
+      }
     }
 
     // JSON / Parsing / Format errors
@@ -133,6 +149,18 @@ class AppErrorHandler {
     }
 
     return 'حدث خطأ أثناء معالجة بيانات الفاتورة. يرجى التأكد من وضوح الصورة وإعادة المحاولة.';
+  }
+
+  /// TAG-50: the friendly message plus the raw Firebase code and message, so
+  /// the real cause of a failed save is visible (and can be reported).
+  static String getMessageWithCode(dynamic error, {String? defaultMessage}) {
+    final friendly = getFriendlyMessage(error, defaultMessage: defaultMessage);
+    if (error is FirebaseException) {
+      final raw = (error.message ?? '').trim();
+      final shortRaw = raw.length > 300 ? '${raw.substring(0, 300)}…' : raw;
+      return '$friendly\nالكود: ${error.code}${shortRaw.isEmpty ? '' : ' — $shortRaw'}';
+    }
+    return friendly;
   }
 
   /// True when the claim callable says the receipt's gift was already

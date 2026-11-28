@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../data/campaign_content_repository.dart';
 import 'event_model.dart';
 import 'campaign_save_confirmation.dart' show kCampaignSaveTokenField;
 
@@ -256,6 +257,11 @@ class CampaignEditSave {
       final snap = await tx.get(ref);
       final patch = attempt.plan(snap.exists ? snap.data() : null);
       if (patch != null) tx.update(ref, patch);
+      // TAG-62: products / prompt docs in the same transaction as the patch.
+      final content = attempt.contentWrite;
+      if (patch != null && content != null) {
+        CampaignContentRepository(firestore).writeInTransaction(tx, opened.id, content);
+      }
     }, timeout: const Duration(seconds: 30));
     attempt.throwIfRejected();
   }
@@ -270,6 +276,10 @@ class CampaignEditAttempt {
   final String updatedBy;
   final String? saveToken;
   String? _rejection;
+  CampaignContentWrite? _contentWrite;
+
+  /// TAG-62: content docs the latest planned patch goes with (null = none).
+  CampaignContentWrite? get contentWrite => _contentWrite;
 
   CampaignEditAttempt({required this.draft, required this.opened, required this.updatedBy, this.saveToken});
 
@@ -282,20 +292,33 @@ class CampaignEditAttempt {
   /// its last attempt.
   Map<String, dynamic>? plan(Map<String, dynamic>? currentData) {
     _rejection = null;
+    _contentWrite = null;
     if (currentData == null) {
       _rejection = 'الحملة غير موجودة أو تم حذفها، ولم يتم حفظ التعديل.';
       return null;
     }
     try {
-      return CampaignEditSave.buildEditPatch(
+      final patch = CampaignEditSave.buildEditPatch(
         draft: draft,
         opened: opened,
         currentData: currentData,
         updatedBy: updatedBy,
         saveToken: saveToken,
       );
+      // TAG-62: changed products/prompt (or a stored copy too large to keep
+      // inline) go to events/{id}/content; the patch gets the content fields.
+      final content = CampaignContentRepository.planForEdit(
+        patch: patch,
+        draft: draft,
+        currentData: currentData,
+      );
+      _contentWrite = content;
+      return content == null ? patch : content.applyToPatch(patch);
     } on CampaignEditRejected catch (e) {
       _rejection = e.message;
+      return null;
+    } on CampaignContentTooLarge catch (e) {
+      _rejection = '${e.message}\nلم يتغير أي شيء في الحملة.';
       return null;
     }
   }

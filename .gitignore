@@ -62,3 +62,10 @@ ui-debug.log
 
 # FVM Version Cache
 .fvm/
+# Dev environment (tool/dev/render_firebase_dev_json.py output)
+/firebase.dev.json
+
+# Patrol (TAG-82)
+**/test_bundle.dart
+.patrol.env
+functions/.secret.local
