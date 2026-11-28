@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import emulator_log_check  # noqa: E402
 import gate_buckets  # noqa: E402
 import static_guards  # noqa: E402
 
@@ -144,3 +145,26 @@ class BucketsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EmulatorLogCheckTest(unittest.TestCase):
+    def test_clean_log_passes(self):
+        log = 'i  functions: Beginning execution of "us-central1-checkReceiptDuplicate"\n'
+        self.assertEqual(emulator_log_check.scan(log), [])
+
+    def test_gemini_call_fails(self):
+        log = 'i  functions: Beginning execution of "us-central1-geminiGenerate"\n'
+        self.assertEqual(len(emulator_log_check.scan(log)), 1)
+
+    def test_whatsapp_call_fails(self):
+        for fn in ("sendWinnerWhatsApp", "wahaProxy", "analyzeReceipt"):
+            log = f'i  functions: Beginning execution of "us-central1-{fn}"\n'
+            self.assertEqual(len(emulator_log_check.scan(log)), 1, fn)
+
+    def test_forbidden_host_fails(self):
+        self.assertEqual(len(emulator_log_check.scan("POST https://waha.sw-point.com/api/sendText\n")), 1)
+        self.assertEqual(len(emulator_log_check.scan("generativelanguage.googleapis.com timeout\n")), 1)
+
+    def test_patrol_files_run_patrol(self):
+        for f in ("firebase.patrol.json", "functions/.env.demo-tashil-branch", "tool/ci/patrol_web.sh"):
+            self.assertIn("patrol", gate_buckets.classify([f])[1], f)

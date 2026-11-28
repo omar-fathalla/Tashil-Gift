@@ -8,9 +8,10 @@
 #   bash tool/ci/run_gate.sh --only rules,guards
 #   bash tool/ci/run_gate.sh --dry-run       # print the plan, run nothing
 #   bash tool/ci/run_gate.sh --ci            # in gate.yml: skip what checks.yml already runs
+#   bash tool/ci/run_gate.sh --ci --skip patrol   # a tool another CI job runs
 #
-# Tools 1-4 run here. Tool 6 (Patrol web) and 5 (Maestro, Mac only) are
-# listed when needed and arrive with TAG-82 PR 2 and PR 3.
+# Tools 1-4 and 6 (Patrol web, needs patrol_cli 4.10.0 and Chrome) run here.
+# Tool 5 (Maestro, Mac only) is listed when needed and arrives with TAG-82 PR 3.
 #
 # Safety: emulator tools only ever use demo-* projects and run with no
 # Google credentials. Nothing here deploys or writes to tashil-gift-dev or
@@ -21,7 +22,7 @@ ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 export FIREBASE_TOOLS_VERSION="${FIREBASE_TOOLS_VERSION:-15.37.0}"
 
-base="origin/dev"; all=0; only=""; dry=0; ci=0
+base="origin/dev"; all=0; only=""; dry=0; ci=0; skip=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base) base="$2"; shift 2 ;;
@@ -29,7 +30,8 @@ while [[ $# -gt 0 ]]; do
     --only) only="$2"; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --ci) ci=1; shift ;;
-    -h|--help) sed -n 2,18p "$0"; exit 0 ;;
+    --skip) skip=" ${2//,/ } "; shift 2 ;;
+    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
     *) echo "run_gate: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -97,13 +99,24 @@ t_functions() {
   if [[ $ci -eq 0 ]]; then (cd functions && npm test) || return 1; fi
   (cd functions && npm run test:emulator)
 }
-t_patrol()  { echo "Patrol web is not set up yet (TAG-82 PR 2)."; return 3; }
+t_patrol() {
+  emulator_safety || return 1
+  if ! command -v patrol >/dev/null; then
+    echo "patrol_cli is not installed: dart pub global activate patrol_cli 4.10.0"
+    return 3
+  fi
+  flutter pub get >/dev/null || return 1
+  bash tool/ci/patrol_web.sh
+}
 t_maestro() { echo "Maestro runs on the Mac only and is not set up yet (TAG-82 PR 3)."; return 3; }
 
 failed=0
 for t in $TOOLS; do
   if [[ $ci -eq 1 && "$skip_ci" == *" $t "* ]]; then
     echo "| $t | skipped (checks.yml runs it) | - | - |" >> "$summary"; continue
+  fi
+  if [[ "$skip" == *" $t "* ]]; then
+    echo "| $t | skipped (its own CI job runs it) | - | - |" >> "$summary"; continue
   fi
   if ! declare -F "t_$t" >/dev/null; then echo "run_gate: unknown tool $t" >&2; exit 2; fi
   log="$OUT/$t.log"
@@ -115,7 +128,7 @@ for t in $TOOLS; do
   echo "::endgroup::"
   case $rc in
     0) res="PASS" ;;
-    3) res="not set up yet" ;;
+    3) res="not set up here" ;;
     *) res="FAIL ($rc)"; failed=1 ;;
   esac
   echo "$t: $res (${secs}s)"

@@ -56,7 +56,8 @@ BUCKETS: list[tuple[str, list[str], list[str]]] = [
         "pubspec.yaml", "pubspec.lock", ".fvmrc", "analysis_options.yaml", "devtools_options.yaml",
         "tool/ci/known_failing_tests.txt", "tool/ci/analyze_baseline.txt",
     ], ["analyze", "flutter_test"]),
-    ("e2e", ["maestro/**", "patrol_test/**", "integration_test/**"], ["analyze", "patrol", "maestro"]),
+    ("e2e", ["maestro/**", "patrol_test/**", "integration_test/**", "firebase.patrol.json",
+             "functions/.env.demo-tashil-branch", "tool/ci/patrol_web.sh", "tool/ci/emulator_log_check.py"], ["analyze", "patrol", "maestro"]),
     ("scripts", [
         "tool/**", ".github/**", "firebase*.json", ".firebaserc", "*.sh", "functions/scripts/**",
         ".claude/**", "skills-lock.json",
