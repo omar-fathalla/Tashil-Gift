@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/config/firebase_env_options.dart';
 import 'core/services/app_check_bootstrap.dart';
+import 'core/services/e2e_semantics.dart';
 import 'core/services/emulator_auth_persistence.dart'
     if (dart.library.html) 'core/services/emulator_auth_persistence_web.dart';
 import 'core/services/firebase_emulator_config.dart';
@@ -28,6 +29,8 @@ import 'features/company_portal/presentation/company_manager_portal_screen.dart'
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Only with --dart-define=E2E_SEMANTICS=true (Maestro web, TAG-82 PR 3).
+  enableE2eSemanticsIfRequested();
   configureAppPathUrlStrategy();
   
   // Filter out harmless Flutter Web engine Hot-Restart / disposed view assertions

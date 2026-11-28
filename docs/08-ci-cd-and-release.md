@@ -18,6 +18,7 @@ feature / fix branch  ──PR──►  dev  ──release PR──►  main  �
 |---|---|---|---|
 | PR على `dev` | `dev-preview.yml` | `checks.yml` | Hosting preview `pr-<N>` (7 أيام) |
 | push على `dev` | `dev-preview.yml` | `checks.yml` | Hosting preview قناة `dev` |
+| PR أو push على `dev` | `gate.yml` (TAG-82) | `tool/ci/run_gate.sh --ci`: الـ static guards و rules/functions على الـ emulator، و Patrol web (job `patrol`) لو الـ UI أو الـ rules أو `patrol_test/` اتغيروا، حسب الملفات اللي اتغيرت. عشان يوقف الدمج، `gate` و `patrol` الاتنين يتعملوا required checks على `dev` (`patrol` بيعدّي لوحده لما التغيير مش محتاجه) | ولا حاجة |
 | push على `main` | `deploy-production.yml` | `checks.yml` ثم موافقة environment `production` | `hosting,functions,firestore:rules` على `tashil-gift` |
 | يدوي (rollback) | `deploy-production.yml` بـ `ref` و`allow_older_version` | `checks.yml` على الـ ref | نفس اللي فوق |
 

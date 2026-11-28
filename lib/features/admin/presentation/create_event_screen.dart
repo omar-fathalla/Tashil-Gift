@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/services/e2e_semantics.dart';
 import '../../../core/services/firebase_service.dart';
 import '../../../core/services/company_products_service.dart';
 import '../../../core/services/company_gifts_service.dart';
@@ -5163,7 +5164,10 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: Text(title, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+        title: Semantics(
+          identifier: E2eIds.campaignEditorTitle,
+          child: Text(title, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+        ),
         centerTitle: true,
       ),
       body: _buildFormBody(isEditing),

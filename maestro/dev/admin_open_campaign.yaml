@@ -1,0 +1,55 @@
+# Small read-only smoke on the hosted dev site (TAG-82 PR 3). Mac only,
+# run by hand through tool/ci/maestro_web.sh dev. Never in CI.
+#
+# - Only signs in and opens a campaign's edit screen. It never uploads a
+#   receipt, never picks or hands over a gift, never presses save.
+# - The account comes from the Mac's local environment
+#   (MAESTRO_DEV_ADMIN_EMAIL, MAESTRO_DEV_ADMIN_PASSWORD). Never write it
+#   here, never print it, never commit it.
+# - The script deletes Maestro's screenshots and logs after the run: they
+#   show the login screen. Do not add takeScreenshot or startRecording here.
+url: https://tashil-gift-dev.web.app/
+name: "dev: admin signs in and opens a campaign"
+tags:
+  - hosted-dev
+---
+- launchApp:
+    clearState: true
+# The hosted dev build is a normal build (no E2E_SEMANTICS), so Flutter
+# builds its accessibility tree only after its "Enable accessibility" button
+# is pressed.
+- runFlow:
+    when:
+      visible: "Enable accessibility"
+    commands:
+      - tapOn: "Enable accessibility"
+- extendedWaitUntil:
+    visible:
+      id: e2e-login-email
+    timeout: 60000
+- assertVisible: "دخول الحساب"
+- tapOn:
+    id: e2e-login-email
+- inputText:
+    text: ${MAESTRO_DEV_ADMIN_EMAIL}
+    label: Type the dev admin email
+- tapOn:
+    id: e2e-login-password
+- inputText:
+    text: ${MAESTRO_DEV_ADMIN_PASSWORD}
+    label: Type the dev admin password
+- tapOn:
+    id: e2e-login-submit
+- extendedWaitUntil:
+    visible:
+      id: e2e-campaign-card
+    timeout: 60000
+- tapOn:
+    id: e2e-campaign-actions
+    index: 0
+- tapOn:
+    id: e2e-campaign-edit
+- extendedWaitUntil:
+    visible:
+      id: e2e-campaign-editor-title
+    timeout: 30000

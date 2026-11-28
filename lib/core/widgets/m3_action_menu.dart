@@ -145,6 +145,7 @@ class M3ActionMenu extends StatelessWidget {
     bool enabled = true,
     Widget? leading,
     Widget? trailing,
+    String? semanticsIdentifier,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -199,7 +200,7 @@ class M3ActionMenu extends StatelessWidget {
       );
     }
 
-    return MenuItemButton(
+    final button = MenuItemButton(
       onPressed: enabled ? onPressed : null,
       style: MenuItemButton.styleFrom(
         minimumSize: Size(
@@ -254,6 +255,9 @@ class M3ActionMenu extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
     );
+    // A stable id for e2e flows (E2eIds); the item looks and acts the same.
+    if (semanticsIdentifier == null) return button;
+    return Semantics(identifier: semanticsIdentifier, child: button);
   }
 
   /// Builds a Cascading Submenu ([SubmenuButton]) with automatic RTL / LTR
