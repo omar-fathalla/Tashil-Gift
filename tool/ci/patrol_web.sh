@@ -8,17 +8,24 @@
 #   PATROL_VERBOSE=1 ...
 #   PATROL_WEB_LOCALE=ar-EG ...                    # browser locale (default en-US;
 #                                                  # the app still opens in Arabic). CI's
-#                                                  # LANG=C.UTF-8 is not a valid Intl locale.                              # Playwright stderr and Flutter logs
+#                                                  # LANG=C.UTF-8 is not a valid Intl locale.
 #   PATROL_BROWSER_ARGS='["--no-sandbox",...]'       # override the Chromium flags
 #
 # Safety: the app is built with FIREBASE_EMULATOR=true (project
 # demo-tashil-branch, 127.0.0.1 only) and SYNTHETIC_RECEIPT_FIXTURE=true, so
-# no request reaches tashil-gift, tashil-gift-dev, Gemini or WhatsApp. The
-# emulators run with no Google credentials. The functions emulator skips token
-# verification (FIREBASE_DEBUG_MODE) because callables are called by the
-# emulator-signed fixture admin; never set that on a deployed function.
-# As a second lock, Chrome cannot resolve the Gemini hosts at all (see
-# BLOCK_HOSTS); keep that rule when you override PATROL_BROWSER_ARGS.
+# it reaches neither tashil-gift nor tashil-gift-dev. The emulators run with no
+# Google credentials. The functions emulator skips token verification
+# (FIREBASE_DEBUG_MODE) because callables are called by the emulator-signed
+# fixture admin; never set that on a deployed function.
+#
+# Gemini and WhatsApp are called only from Cloud Functions, so they are locked
+# on the server side, not in the browser:
+#   - functions/.env.demo-tashil-branch points WAHA_BACKEND_URL at 127.0.0.1:9.
+#   - The script refuses to run if functions/.secret.local exists, because the
+#     functions emulator would load real keys from it.
+#   - After the run, tool/ci/emulator_log_check.py fails the job if the
+#     emulator log shows geminiGenerate, analyzeReceipt, sendWinnerWhatsApp,
+#     wahaProxy (or the other WAHA functions) running, or a Gemini/WAHA host.
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -31,11 +38,18 @@ OUT="$(cd "$ROOT" && mkdir -p "${GATE_OUT:-build/gate}/patrol" && cd "${GATE_OUT
 # Release by default: every test loads the app in a fresh page, and a debug
 # (DDC) build is too slow to load more than once.
 MODE="${PATROL_MODE:-release}"
-BLOCK_HOSTS='MAP generativelanguage.googleapis.com ~NOTFOUND, MAP firebasevertexai.googleapis.com ~NOTFOUND, MAP aiplatform.googleapis.com ~NOTFOUND'
 mkdir -p "$OUT"
+LOG="$OUT/emulators.log"
 
 unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT GCLOUD_PROJECT FIREBASE_TOKEN
 [[ "$PROJECT" == demo-* ]] || { echo "patrol_web: project must be demo-*" >&2; exit 1; }
+if [[ -e functions/.secret.local ]]; then
+  echo "patrol_web: functions/.secret.local exists; the functions emulator would load real Gemini/WAHA keys from it." >&2
+  echo "patrol_web: move it away for the run (it is never needed for Patrol)." >&2
+  exit 1
+fi
+grep -q '^WAHA_BACKEND_URL=http://127.0.0.1:' "functions/.env.$PROJECT" 2>/dev/null \
+  || { echo "patrol_web: functions/.env.$PROJECT must point WAHA_BACKEND_URL at 127.0.0.1" >&2; exit 1; }
 
 targets=()
 if [[ $# -gt 0 ]]; then
@@ -56,12 +70,21 @@ if [[ ! -d functions/node_modules ]]; then (cd functions && npm ci --no-audit --
 cmd=$(printf '%q ' patrol test "${verbose[@]}" "--$MODE" --device chrome "$headless" --web-port "$WEB_PORT" \
   --web-locale "${PATROL_WEB_LOCALE:-en-US}" \
   --web-results-dir "$OUT/results" --web-report-dir "$OUT/report" \
-  --web-browser-args "${PATROL_BROWSER_ARGS:-[\"--no-sandbox\",\"--disable-dev-shm-usage\",\"--host-resolver-rules=$BLOCK_HOSTS\"]}" \
+  --web-browser-args "${PATROL_BROWSER_ARGS:-[\"--no-sandbox\",\"--disable-dev-shm-usage\"]}" \
   --dart-define=FIREBASE_EMULATOR=true \
   --dart-define=SYNTHETIC_RECEIPT_FIXTURE=true \
   "${targets[@]}")
 
+# firebase.patrol.json: firebase.json's Storage target names the prod bucket,
+# so the emulators get their own config with storage.rules on the app's
+# demo bucket.
+set +e
 FIREBASE_DEBUG_MODE=true FIREBASE_DEBUG_FEATURES='{"skipTokenVerification":true}' \
   npx -y "firebase-tools@${FIREBASE_TOOLS_VERSION}" emulators:exec \
-  --project "$PROJECT" --only auth,firestore,functions \
-  "$cmd"
+  --config firebase.patrol.json --project "$PROJECT" --only auth,firestore,functions,storage \
+  "$cmd" 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+set -e
+
+python3 tool/ci/emulator_log_check.py "$LOG" || rc=1
+exit "$rc"

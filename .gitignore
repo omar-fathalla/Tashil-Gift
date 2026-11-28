@@ -68,3 +68,4 @@ ui-debug.log
 # Patrol (TAG-82)
 **/test_bundle.dart
 .patrol.env
+functions/.secret.local

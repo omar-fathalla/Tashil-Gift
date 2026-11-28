@@ -8,7 +8,9 @@
 # Separate on purpose: checks.yml is also called by deploy-production.yml
 # (deploys and rollbacks), so nothing from the gate may live there.
 # No secrets, no Google credentials, demo-* emulator projects only. Never
-# deploys. To make it block merges, add "gate" as a required check on dev.
+# deploys. To make it block merges, add BOTH "gate" and "patrol" as required
+# checks on dev. "patrol" passes (skips its steps) when a change does not need
+# Patrol, so requiring it never blocks an unrelated PR.
 name: gate
 
 on:

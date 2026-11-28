@@ -170,3 +170,17 @@ Future<int> receiptClaimedUnits() async {
   final values = (gifts?['arrayValue'] as Map<String, dynamic>?)?['values'] as List?;
   return values?.length ?? 0;
 }
+
+/// Receipt images the upload stored in the Storage emulator for the test
+/// fixture company (receipts/fixture-co/..., either <eventId>/ or multi_bundles/). The upload falls back to
+/// an inline data: URL when Storage fails, so this is the only proof that the
+/// image really went through storage.rules.
+Future<List<String>> receiptImagePaths() async {
+  final bucket = kFirebaseEmulatorOptions.storageBucket;
+  final prefix = Uri.encodeQueryComponent('receipts/fixture-co/');
+  final url = Uri.parse('http://$host:9199/v0/b/$bucket/o?prefix=$prefix');
+  final res = await http.get(url, headers: {'authorization': 'Bearer owner'});
+  if (res.statusCode >= 300) throw StateError('${res.statusCode} $url\n${res.body}');
+  final items = (jsonDecode(res.body) as Map<String, dynamic>)['items'] as List? ?? const [];
+  return [for (final i in items) (i as Map<String, dynamic>)['name'] as String];
+}

@@ -23,5 +23,9 @@ void main() {
 
     final claimed = await receiptClaimedUnits();
     expect(claimed, rounds);
+
+    // The receipt image went to the Storage emulator through storage.rules.
+    final images = await receiptImagePaths();
+    expect(images, isNotEmpty, reason: 'no receipt image in the Storage emulator');
   });
 }
